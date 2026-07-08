@@ -16,7 +16,9 @@ export default function useWebSocket() {
   });
 
   useEffect(() => {
-    socket.current = new WebSocket("ws://127.0.0.1:8000/ws/finger");
+    socket.current = new WebSocket(
+      `${import.meta.env.VITE_WEBSOCKET_FASTAPI_URL}/ws/finger`,
+    );
 
     socket.current.onopen = () => {
       console.log("Connected");

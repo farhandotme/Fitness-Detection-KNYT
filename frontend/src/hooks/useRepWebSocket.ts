@@ -25,7 +25,7 @@ export default function useRepWebSocket(exercise: string) {
 
   useEffect(() => {
     socket.current = new WebSocket(
-      `ws://127.0.0.1:8000/ws/rep?exercise=${exercise}`,
+      `${import.meta.env.VITE_WEBSOCKET_FASTAPI_URL}/ws/rep?exercise=${exercise}`,
     );
 
     socket.current.onopen = () => {
