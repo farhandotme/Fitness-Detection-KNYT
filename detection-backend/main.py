@@ -7,7 +7,7 @@ import numpy as np
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
 from src.detector import HandDetector
-from src.pose_detector import RepCounter
+from src.detectors.bicep_curl import bicep_curl
 
 app = FastAPI()
 
@@ -66,7 +66,7 @@ async def rep_endpoint(websocket: WebSocket, exercise: str = "bicep_curl"):
     await websocket.accept()
 
     try:
-        counter = RepCounter(exercise=exercise)
+        counter = bicep_curl(exercise=exercise)
     except ValueError as e:
         await websocket.send_json({"error": str(e)})
         await websocket.close()

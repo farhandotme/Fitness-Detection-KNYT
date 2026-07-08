@@ -1,6 +1,5 @@
 import math
 import os
-import time
 from typing import Any, Optional
 
 import cv2
@@ -16,52 +15,23 @@ MIN_TRACKING_CONFIDENCE = 0.6
 MIN_LANDMARK_VISIBILITY = 0.5
 
 LEFT_SHOULDER = 11
-RIGHT_SHOULDER = 12
 LEFT_ELBOW = 13
-RIGHT_ELBOW = 14
 LEFT_WRIST = 15
-RIGHT_WRIST = 16
-LEFT_HIP = 23
-RIGHT_HIP = 24
-LEFT_KNEE = 25
-RIGHT_KNEE = 26
-LEFT_ANKLE = 27
-RIGHT_ANKLE = 28
-
-EXERCISES = {
-    "bicep_curl": {
-        "joints": (LEFT_SHOULDER, LEFT_ELBOW, LEFT_WRIST),
-        "down_angle": 160,
-        "up_angle": 50,
-        "min_angle_delta": 25,
-        "min_rep_duration": 0.25,
-    },
-    "pushup": {
-        "joints": (LEFT_SHOULDER, LEFT_ELBOW, LEFT_WRIST),
-        "down_angle": 165,
-        "up_angle": 95,
-        "min_angle_delta": 25,
-        "min_rep_duration": 0.35,
-    },
-    "squat": {
-        "joints": (LEFT_HIP, LEFT_KNEE, LEFT_ANKLE),
-        "down_angle": 160,
-        "up_angle": 90,
-        "min_angle_delta": 20,
-        "min_rep_duration": 0.5,
-    },
-}
 
 
-class RepCounter:
-    def __init__(self, exercise: str = "bicep_curl"):
+class bicep_curl:
+    def __init__(self):
         if not os.path.exists(MODEL_PATH):
             raise FileNotFoundError(f"{MODEL_PATH} not found.")
-        if exercise not in EXERCISES:
-            raise ValueError(f"Unknown exercise: {exercise}")
 
-        self.exercise = exercise
-        self.config = EXERCISES[exercise]
+        self.exercise = "bicep_curl"
+        self.config = {
+            "joints": (LEFT_SHOULDER, LEFT_ELBOW, LEFT_WRIST),
+            "down_angle": 160,
+            "up_angle": 50,
+            "min_angle_delta": 25,
+            "min_rep_duration": 0.25,
+        }
 
         base_options = mp_python.BaseOptions(model_asset_path=MODEL_PATH)
         options = vision.PoseLandmarkerOptions(
