@@ -7,7 +7,7 @@ import mediapipe as mp
 from mediapipe.tasks import python as mp_python
 from mediapipe.tasks.python import vision
 
-MODEL_PATH = "pose_landmarker.task"
+MODEL_PATH = "./src/landmark-packages/pose_landmarker.task"
 
 MIN_DETECTION_CONFIDENCE = 0.6
 MIN_PRESENCE_CONFIDENCE = 0.6
