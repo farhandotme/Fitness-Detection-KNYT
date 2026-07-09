@@ -1,26 +1,17 @@
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+
+router = APIRouter()
+
 import asyncio
 import base64
 import time
 
 import cv2
 import numpy as np
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
-from src.detector import HandDetector
-
-from src.routes.bicepRoutes import router as bicepRouter
-
-app = FastAPI()
+from src.detectors.bicep_curl import bicep_curl
 
 start_time = time.time()
-
-
-@app.get("/")
-async def home():
-    return {"status": "running"}
-
-
-app.include_router(bicepRouter, prefix="/ws", tags="bicep")
 
 
 def decode_frame(raw: str):
@@ -35,13 +26,20 @@ def decode_frame(raw: str):
     return cv2.imdecode(np_array, cv2.IMREAD_COLOR)
 
 
-@app.websocket("/ws/finger")
-async def finger_endpoint(websocket: WebSocket):
-
+@router.websocket("/bicep_curl")
+async def rep_endpoint(websocket: WebSocket):
+    print(websocket.headers)
     await websocket.accept()
-    print("Client connected: /ws/finger")
 
-    detector = HandDetector()
+    try:
+        counter = bicep_curl()
+    except ValueError as e:
+        await websocket.send_json({"error": str(e)})
+        await websocket.close()
+        return
+
+    print(f"Client connected: /bicep_curl")
+
     try:
 
         while True:
@@ -51,14 +49,14 @@ async def finger_endpoint(websocket: WebSocket):
 
             timestamp = int((time.time() - start_time) * 1000)
 
-            result = detector.detect(frame, timestamp)
+            result = counter.detect(frame, timestamp)
 
             await websocket.send_json(result)
 
             await asyncio.sleep(0.001)
 
     except WebSocketDisconnect:
-        print("Disconnected: /ws/finger")
+        print(f"Disconnected: /bicep_curl)")
 
     finally:
-        detector.close()
+        counter.close()

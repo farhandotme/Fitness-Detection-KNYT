@@ -24,7 +24,6 @@ class bicep_curl:
         if not os.path.exists(MODEL_PATH):
             raise FileNotFoundError(f"{MODEL_PATH} not found.")
 
-        self.exercise = "bicep_curl"
         self.config = {
             "joints": (LEFT_SHOULDER, LEFT_ELBOW, LEFT_WRIST),
             "down_angle": 160,
@@ -125,7 +124,6 @@ class bicep_curl:
             "feedback": None,
             "low_visibility": False,
             "landmarks": [],
-            "exercise": self.exercise,
         }
 
         if not result.pose_landmarks:

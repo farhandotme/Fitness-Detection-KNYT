@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import useRepWebSocket from "../hooks/useRepWebSocket";
+import useRepWebSocket from "../hooks/usebicepCurlSocket";
 import CameraSelector from "../conponents/CameraSelector";
 import VideoPreview from "../conponents/VideoPreview";
 import AngleGauge from "../conponents/AngleGauge";

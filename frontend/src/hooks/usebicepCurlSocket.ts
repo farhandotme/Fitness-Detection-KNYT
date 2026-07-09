@@ -59,11 +59,11 @@ export default function useRepWebSocket(exercise: string) {
 
   useEffect(() => {
     socket.current = new WebSocket(
-      `${import.meta.env.VITE_WEBSOCKET_FASTAPI_URL}/ws/rep?exercise=${exercise}`,
+      `${import.meta.env.VITE_WEBSOCKET_FASTAPI_URL}/ws/bicep_curl`,
     );
 
     socket.current.onopen = () => {
-      console.log("Rep socket connected");
+      console.log("bicep socket connected");
       setConnected(true);
     };
 
@@ -83,14 +83,14 @@ export default function useRepWebSocket(exercise: string) {
     };
 
     socket.current.onclose = () => {
-      console.log("Rep socket disconnected");
+      console.log("bicep socket disconnected");
       setConnected(false);
     };
 
     return () => {
       socket.current?.close();
     };
-  }, [exercise]); // reconnects whenever exercise changes — backend spins up a fresh RepCounter per connection
+  }, [exercise]);
 
   const sendFrame = (image: string) => {
     if (!socket.current) return;
