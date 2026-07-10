@@ -3,7 +3,6 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Layout from "./conponents/Layout";
 import FingerPage from "./pages/FingerPage";
 import BicepPage from "./pages/BicepPage";
-("./pages/BicepPage");
 
 function App() {
   return (
