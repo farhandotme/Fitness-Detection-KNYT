@@ -1,164 +1,270 @@
+"""
+Bicep curl rep counting + posture correction.
+
+Design
+------
+`ArmCurlAnalyzer` is a pure, stateful, per-arm analyzer. It knows nothing
+about the camera or the MediaPipe model — you feed it the 33-point pose
+landmark list (or None) each frame and it returns rep count, tempo, and
+form/posture feedback. Because it's decoupled from the model, "both arms"
+mode can run the (expensive) pose model exactly ONCE per frame via a single
+shared `PoseEngine` and feed the same landmarks into two analyzers, instead
+of the old approach of running the whole pose model twice per frame.
+
+Posture correction
+-------------------
+Three form issues are actively detected, each calibrated against the
+person's own relaxed starting posture (captured automatically during the
+first ~15 "arm extended" frames, so it works regardless of body type,
+distance from camera, or camera angle):
+
+  * elbow_flare    — the upper arm should stay pinned to the torso; if the
+                      elbow drifts forward/outward beyond the person's own
+                      baseline, that's a flare (a very common curl mistake).
+  * torso_sway     — leaning/rocking the torso to "help" the weight up
+                      (using back momentum instead of the biceps).
+  * shoulder_shrug — hiking the shoulder up toward the ear instead of
+                      isolating the elbow joint.
+
+A rep is still counted the moment it meets the range-of-motion and tempo
+requirements (a flawed-form rep still counts as a rep — "perfect or
+nothing" counting is discouraging), but it's tagged
+`rep_form_quality: "needs_improvement"` with the specific issue(s), and a
+running `good_reps` / `flawed_reps` split is kept for the session summary.
+
+A "partial rep" heuristic also fires live coaching ("curl higher") when the
+user visibly starts a curl but reverses direction before reaching a real
+contraction — this does NOT get counted (correctly — it never crosses the
+rep-completion threshold), it just adds an explanatory feedback message
+instead of silence.
+"""
+
 import math
-import os
 from typing import Any, Optional
+from src.engines.poseEngine import (  # type: ignore
+    LEFT_ELBOW,
+    LEFT_HIP,
+    LEFT_SHOULDER,
+    LEFT_WRIST,
+    PoseEngine,
+    RIGHT_ELBOW,
+    RIGHT_HIP,
+    RIGHT_SHOULDER,
+    RIGHT_WRIST,
+)
 
-import cv2
-import mediapipe as mp
-from mediapipe.tasks import python as mp_python
-from mediapipe.tasks.python import vision
+# -------------------------------------------------------------------------
+# Tunable constants
+# -------------------------------------------------------------------------
 
-MODEL_PATH = "./src/landmark-packages/pose_landmarker.task"
-
-MIN_DETECTION_CONFIDENCE = 0.5
-MIN_PRESENCE_CONFIDENCE = 0.5
-MIN_TRACKING_CONFIDENCE = 0.5
 MIN_LANDMARK_VISIBILITY = 0.5
 
-LEFT_SHOULDER = 11
-LEFT_ELBOW = 13
-LEFT_WRIST = 15
+# Elbow angle (shoulder-elbow-wrist) thresholds that drive the rep state
+# machine. These also act as the hysteresis band, so a noisy angle sitting
+# near one edge can't flicker the stage back and forth.
+DOWN_ANGLE = 160.0  # arm considered fully extended
+UP_ANGLE = 50.0  # arm considered fully contracted
+MIN_ANGLE_DELTA = 25.0  # total angle travel required for a rep to "count"
+MIN_REP_DURATION = 0.25  # seconds — faster than this = uncontrolled/momentum
+MAX_REP_DURATION = 10.0  # seconds — slower than this = probably a pause, not a rep
 
-RIGHT_SHOULDER = 12
-RIGHT_ELBOW = 14
-RIGHT_WRIST = 16
+# Posture calibration + thresholds. Deltas are measured against the
+# person's own relaxed baseline rather than a fixed number, since "normal"
+# elbow/torso angles vary a lot by body type and camera placement.
+CALIBRATION_FRAMES = 15
+ELBOW_FLARE_DELTA_DEG = 22.0  # allowed increase over personal baseline
+ELBOW_FLARE_HARD_MAX_DEG = 55.0  # hard ceiling regardless of calibration
+TORSO_LEAN_DELTA_DEG = 12.0
+SHOULDER_SHRUG_RATIO = 0.08  # fraction of torso length the shoulder may rise
+
+PARTIAL_REP_MARGIN_DEG = 15.0
+PARTIAL_REP_MIN_DESCENT_DEG = 20.0
+PARTIAL_REP_BOUNCE_DEG = 8.0
+
+JOINTS = {
+    "left": {
+        "shoulder": LEFT_SHOULDER,
+        "elbow": LEFT_ELBOW,
+        "wrist": LEFT_WRIST,
+        "hip": LEFT_HIP,
+        "opp_shoulder": RIGHT_SHOULDER,
+        "opp_hip": RIGHT_HIP,
+    },
+    "right": {
+        "shoulder": RIGHT_SHOULDER,
+        "elbow": RIGHT_ELBOW,
+        "wrist": RIGHT_WRIST,
+        "hip": RIGHT_HIP,
+        "opp_shoulder": LEFT_SHOULDER,
+        "opp_hip": LEFT_HIP,
+    },
+}
 
 
-class bicep_curl_left:
-    def __init__(self):
-        if not os.path.exists(MODEL_PATH):
-            raise FileNotFoundError(f"{MODEL_PATH} not found.")
+class _Point:
+    __slots__ = ("x", "y")
 
-        self.config = {
-            "joints": (LEFT_SHOULDER, LEFT_ELBOW, LEFT_WRIST),
-            "down_angle": 160,
-            "up_angle": 50,
-            "min_angle_delta": 25,
-            "min_rep_duration": 0.25,
-        }
+    def __init__(self, x: float, y: float):
+        self.x = x
+        self.y = y
 
-        base_options = mp_python.BaseOptions(model_asset_path=MODEL_PATH)
-        options = vision.PoseLandmarkerOptions(
-            base_options=base_options,
-            running_mode=vision.RunningMode.VIDEO,
-            num_poses=1,
-            min_pose_detection_confidence=MIN_DETECTION_CONFIDENCE,
-            min_pose_presence_confidence=MIN_PRESENCE_CONFIDENCE,
-            min_tracking_confidence=MIN_TRACKING_CONFIDENCE,
-        )
-        self.landmarker = vision.PoseLandmarker.create_from_options(options)
 
+def _midpoint(a, b) -> _Point:
+    return _Point((a.x + b.x) / 2.0, (a.y + b.y) / 2.0)
+
+
+def _visible(points) -> bool:
+    for p in points:
+        v = getattr(p, "visibility", None)
+        if v is not None and v < MIN_LANDMARK_VISIBILITY:
+            return False
+    return True
+
+
+def _angle_deg(a, b, c) -> float:
+    """Angle at vertex `b`, between rays b->a and b->c, in degrees."""
+    ang = math.degrees(
+        math.atan2(c.y - b.y, c.x - b.x) - math.atan2(a.y - b.y, a.x - b.x)
+    )
+    ang = abs(ang)
+    if ang > 180:
+        ang = 360 - ang
+    return ang
+
+
+class ArmCurlAnalyzer:
+    """Stateful bicep-curl rep counter + posture checker for ONE arm."""
+
+    def __init__(self, side: str, target_reps: Optional[int] = None):
+        if side not in ("left", "right"):
+            raise ValueError("side must be 'left' or 'right'")
+
+        self.side = side
+        cfg = JOINTS[side]
+        self.shoulder_idx = cfg["shoulder"]
+        self.elbow_idx = cfg["elbow"]
+        self.wrist_idx = cfg["wrist"]
+        self.hip_idx = cfg["hip"]
+        self.opp_shoulder_idx = cfg["opp_shoulder"]
+        self.opp_hip_idx = cfg["opp_hip"]
+
+        self.target_reps = target_reps
+
+        # Rep state machine
         self.stage = "down"
         self.rep_count = 0
-        self.current_angle: Optional[float] = None
-        self.last_timestamp_ms: Optional[int] = None
-        self.last_angle: Optional[float] = None
-        self.rep_start_time: Optional[float] = None
-        self.rep_end_time: Optional[float] = None
-        self.rep_durations: list[float] = []
-        self.rep_speeds: list[float] = []
-        self._rep_angle_acc: float = 0.0
-        self.frames_since_rep_start: int = 0
+        self.good_reps = 0
+        self.flawed_reps = 0
+        self.partial_rep_count = 0
 
-        self.thresholds = {
-            "too_slow": 2.5,
-            "slow": 1.5,
-            "good": 0.8,
-            "fast": 0.4,
-            "too_fast": 0.0,
-        }
-
-        self.angle_smooth_alpha = 0.6
         self.smoothed_angle: Optional[float] = None
+        self.last_angle: Optional[float] = None
+        self.last_timestamp_s: Optional[float] = None
+        self.rep_start_time: Optional[float] = None
+        self._rep_angle_acc = 0.0
+        self.angle_smooth_alpha = 0.6
 
-    def angle(self, a, b, c) -> float:
-        ang = math.degrees(
-            math.atan2(c.y - b.y, c.x - b.x) - math.atan2(a.y - b.y, a.x - b.x)
-        )
-        ang = abs(ang)
-        if ang > 180:
-            ang = 360 - ang
-        return ang
+        self.session_start_time: Optional[float] = None
 
-    def classify_rep_by_duration(self, duration: Optional[float]) -> Optional[str]:
+        # "Curl higher" partial-rep detection
+        self._attempt_min_angle: Optional[float] = None
+        self._attempt_flagged = False
+
+        # Personal posture baseline, captured at rest
+        self._calib_samples: list[tuple[float, float, float, float]] = []
+        self.calibrated = False
+        self._baseline_elbow_flare = 0.0
+        self._baseline_torso_lean = 0.0
+        self._baseline_shoulder_offset = 0.0
+        self._baseline_torso_length = 1.0
+
+        self._current_rep_issues: set[str] = set()
+
+    # ---------------------------------------------------------------
+    def _classify_tempo(self, duration: Optional[float]) -> Optional[str]:
         if duration is None:
             return None
-        th = self.thresholds
-        d = duration
-        if d >= th["too_slow"]:
+        if duration >= 2.5:
             return "too_slow"
-        if d >= th["slow"]:
+        if duration >= 1.5:
             return "slow"
-        if d >= th["good"]:
+        if duration >= 0.8:
             return "good"
-        if d >= th["fast"]:
+        if duration >= 0.4:
             return "fast"
         return "too_fast"
 
-    def update_rep_state(self, angle: float) -> bool:
-        rep_completed = False
-        down_angle = self.config["down_angle"]
-        up_angle = self.config["up_angle"]
+    def _is_complete(self) -> bool:
+        return self.target_reps is not None and self.rep_count >= self.target_reps
 
-        if self.stage == "down" and angle < up_angle:
-            self.stage = "up"
-        elif self.stage == "up" and angle > down_angle:
-            self.stage = "down"
-            if self._rep_angle_acc >= self.config.get("min_angle_delta", 0):
-                rep_completed = True
-                self.rep_count += 1
-        return rep_completed
+    def _finish_calibration(self):
+        n = len(self._calib_samples)
+        self._baseline_elbow_flare = sum(s[0] for s in self._calib_samples) / n
+        self._baseline_torso_lean = sum(s[1] for s in self._calib_samples) / n
+        self._baseline_shoulder_offset = sum(s[2] for s in self._calib_samples) / n
+        self._baseline_torso_length = max(
+            sum(s[3] for s in self._calib_samples) / n, 1e-6
+        )
+        self.calibrated = True
 
-    def detect(self, frame, timestamp_ms: int) -> dict[str, Any]:
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-        result = self.landmarker.detect_for_video(mp_image, timestamp_ms)
+    # ---------------------------------------------------------------
+    def update(self, landmarks, timestamp_ms: int) -> dict[str, Any]:
+        t = timestamp_ms / 1000.0
+        if self.session_start_time is None:
+            self.session_start_time = t
+        elapsed = max(0.0, t - self.session_start_time)
 
-        response = {
+        response: dict[str, Any] = {
+            "side": self.side,
             "pose_detected": False,
             "angle": None,
-            "angle_velocity": None,
             "smoothed_angle": None,
+            "angle_velocity": None,
             "stage": self.stage,
             "rep_count": self.rep_count,
+            "good_reps": self.good_reps,
+            "flawed_reps": self.flawed_reps,
+            "target_reps": self.target_reps,
+            "session_complete": self._is_complete(),
             "rep_completed": False,
             "rep_duration": None,
             "rep_avg_speed": None,
             "rep_classification": None,
+            "rep_form_quality": None,
+            "calibrated": self.calibrated,
+            "posture_ok": True,
+            "posture_issues": [],
+            "posture_messages": [],
             "feedback": None,
             "low_visibility": False,
-            "landmarks": [],
+            "elapsed_time": round(elapsed, 2),
         }
 
-        if not result.pose_landmarks:
-            self.last_timestamp_ms = timestamp_ms
+        if landmarks is None:
+            response["feedback"] = "No person detected — step into frame."
             return response
 
-        landmarks = result.pose_landmarks[0]
-        a_idx, b_idx, c_idx = self.config["joints"]
-        a, b, c = landmarks[a_idx], landmarks[b_idx], landmarks[c_idx]
+        shoulder = landmarks[self.shoulder_idx]
+        elbow = landmarks[self.elbow_idx]
+        wrist = landmarks[self.wrist_idx]
+        hip = landmarks[self.hip_idx]
+        opp_shoulder = landmarks[self.opp_shoulder_idx]
+        opp_hip = landmarks[self.opp_hip_idx]
 
-        visibilities = [getattr(p, "visibility", 1.0) for p in (a, b, c)]
-        if any(v is not None and v < MIN_LANDMARK_VISIBILITY for v in visibilities):
+        if not _visible((shoulder, elbow, wrist)):
             response["pose_detected"] = True
+            response["low_visibility"] = True
             response["angle"] = self.last_angle
             response["smoothed_angle"] = self.smoothed_angle
-            response["stage"] = self.stage
-            response["rep_count"] = self.rep_count
-            response["low_visibility"] = True
-            response["landmarks"] = [
-                {
-                    "x": lm.x,
-                    "y": lm.y,
-                    "z": lm.z,
-                    "visibility": getattr(lm, "visibility", None),
-                }
-                for lm in landmarks
-            ]
-            self.last_timestamp_ms = timestamp_ms
+            response["feedback"] = (
+                f"Can't see your {self.side} arm clearly — adjust your position."
+            )
             return response
 
-        raw_angle = self.angle(a, b, c)
+        torso_visible = _visible((hip, opp_shoulder, opp_hip))
 
+        # ---- elbow angle (drives rep counting) ----
+        raw_angle = _angle_deg(shoulder, elbow, wrist)
         if self.smoothed_angle is None:
             self.smoothed_angle = raw_angle
         else:
@@ -167,380 +273,301 @@ class bicep_curl_left:
                 + (1 - self.angle_smooth_alpha) * self.smoothed_angle
             )
 
-        t = timestamp_ms / 1000.0
-
         angle_velocity = None
-        if self.last_angle is not None and self.last_timestamp_ms is not None:
-            dt = t - (self.last_timestamp_ms / 1000.0)
+        if self.last_angle is not None and self.last_timestamp_s is not None:
+            dt = t - self.last_timestamp_s
             if dt > 0:
                 angle_velocity = (self.smoothed_angle - self.last_angle) / dt
 
-        if self.stage == "down" and self.smoothed_angle < self.config["up_angle"]:
+        # ---- posture metrics + calibration ----
+        elbow_flare = torso_lean = shoulder_offset = torso_length = None
+        if torso_visible:
+            elbow_flare = _angle_deg(hip, shoulder, elbow)
+
+            mid_shoulder = _midpoint(shoulder, opp_shoulder)
+            mid_hip = _midpoint(hip, opp_hip)
+            vertical_ref = _Point(mid_hip.x, mid_hip.y - 1.0)
+            torso_lean = _angle_deg(vertical_ref, mid_hip, mid_shoulder)
+
+            torso_length = math.hypot(shoulder.x - hip.x, shoulder.y - hip.y) or 1e-6
+            shoulder_offset = hip.y - shoulder.y  # positive: shoulder above hip
+
+            if self.stage == "down" and not self.calibrated:
+                self._calib_samples.append(
+                    (elbow_flare, torso_lean, shoulder_offset, torso_length)
+                )
+                if len(self._calib_samples) >= CALIBRATION_FRAMES:
+                    self._finish_calibration()
+
+        issues: list[str] = []
+        messages: list[str] = []
+        if self.calibrated and torso_visible:
+            if (
+                elbow_flare - self._baseline_elbow_flare > ELBOW_FLARE_DELTA_DEG
+                or elbow_flare > ELBOW_FLARE_HARD_MAX_DEG
+            ):
+                issues.append("elbow_flare")
+                messages.append(
+                    f"Pin your {self.side} elbow to your side — it's drifting away from your body."
+                )
+
+            if abs(torso_lean - self._baseline_torso_lean) > TORSO_LEAN_DELTA_DEG:
+                issues.append("torso_sway")
+                messages.append(
+                    "Keep your torso steady — don't swing your body for momentum."
+                )
+
+            normalized_shrug = (
+                shoulder_offset - self._baseline_shoulder_offset
+            ) / self._baseline_torso_length
+            if normalized_shrug > SHOULDER_SHRUG_RATIO:
+                issues.append("shoulder_shrug")
+                messages.append(
+                    f"Relax your {self.side} shoulder — don't shrug it toward your ear."
+                )
+
+        # ---- "curl higher" partial-rep coaching (pre-transition stage) ----
+        partial_feedback = None
+        if self.stage == "down":
+            if (
+                self._attempt_min_angle is None
+                or self.smoothed_angle < self._attempt_min_angle
+            ):
+                self._attempt_min_angle = self.smoothed_angle
+            elif (
+                not self._attempt_flagged
+                and self._attempt_min_angle is not None
+                and self.smoothed_angle - self._attempt_min_angle
+                > PARTIAL_REP_BOUNCE_DEG
+                and self._attempt_min_angle > UP_ANGLE + PARTIAL_REP_MARGIN_DEG
+                and DOWN_ANGLE - self._attempt_min_angle > PARTIAL_REP_MIN_DESCENT_DEG
+            ):
+                self._attempt_flagged = True
+                self.partial_rep_count += 1
+                partial_feedback = (
+                    f"Curl higher — you stopped around {self._attempt_min_angle:.0f}°, "
+                    f"aim for {UP_ANGLE:.0f}° or less at the top."
+                )
+
+            if self.smoothed_angle > DOWN_ANGLE - 5:
+                self._attempt_min_angle = None
+                self._attempt_flagged = False
+
+        # ---- rep arc-length accumulator (sanity check against tiny wobbles) ----
+        if self.stage == "down" and self.smoothed_angle < UP_ANGLE:
             self.rep_start_time = t
             self._rep_angle_acc = 0.0
-            self.frames_since_rep_start = 0
-
         if self.last_angle is not None:
             self._rep_angle_acc += abs(self.smoothed_angle - self.last_angle)
-            self.frames_since_rep_start += 1
 
-        rep_completed = self.update_rep_state(self.smoothed_angle)
-
-        rep_duration = None
-        rep_avg_speed = None
-        rep_class = None
-        feedback = None
-
-        if rep_completed:
-            self.rep_end_time = t
-            if self.rep_start_time is not None:
-                rep_duration = self.rep_end_time - self.rep_start_time
-
-            if rep_duration and rep_duration > 0:
-                rep_avg_speed = self._rep_angle_acc / rep_duration
-
-            if rep_duration is not None and rep_duration >= self.config.get(
-                "min_rep_duration", 0
-            ):
-                self.rep_durations.append(rep_duration)
-                if rep_avg_speed is not None:
-                    self.rep_speeds.append(rep_avg_speed)
-                rep_class = self.classify_rep_by_duration(rep_duration)
-
-                if rep_class in ("good", "fast"):
-                    feedback = f"Nice rep — {rep_class.replace('_', ' ')} ({rep_duration:.2f}s)."
-                elif rep_class in ("slow", "too_slow"):
-                    feedback = f"Slow down and control it — {rep_duration:.2f}s."
-                elif rep_class == "too_fast":
-                    feedback = f"Too fast — control the movement ({rep_duration:.2f}s)."
-                else:
-                    feedback = f"Rep recorded ({rep_duration:.2f}s)."
-            else:
-                rep_completed = False
-                self.rep_count -= 1 if self.rep_count > 0 else 0
-
-            self.rep_start_time = None
-            self._rep_angle_acc = 0.0
-            self.frames_since_rep_start = 0
-
-        self.last_angle = self.smoothed_angle
-        self.last_timestamp_ms = timestamp_ms
-
-        response["pose_detected"] = True
-        response["angle"] = raw_angle
-        response["smoothed_angle"] = self.smoothed_angle
-        response["angle_velocity"] = angle_velocity
-        response["stage"] = self.stage
-        response["rep_count"] = self.rep_count
-        response["rep_completed"] = rep_completed
-        response["rep_duration"] = rep_duration
-        response["rep_avg_speed"] = rep_avg_speed
-        response["rep_classification"] = rep_class
-        response["feedback"] = feedback
-        response["landmarks"] = [
-            {
-                "x": lm.x,
-                "y": lm.y,
-                "z": lm.z,
-                "visibility": getattr(lm, "visibility", None),
-            }
-            for lm in landmarks
-        ]
-        return response
-
-    def reset(self):
-        self.stage = "down"
-        self.rep_count = 0
-        self.last_timestamp_ms = None
-        self.last_angle = None
-        self.rep_start_time = None
-        self.rep_end_time = None
-        self.rep_durations = []
-        self.rep_speeds = []
-        self._rep_angle_acc = 0.0
-        self.smoothed_angle = None
-
-    def close(self):
-        self.landmarker.close()
-
-
-class bicep_curl_right:
-    def __init__(self):
-        if not os.path.exists(MODEL_PATH):
-            raise FileNotFoundError(f"{MODEL_PATH} not found.")
-
-        self.config = {
-            "joints": (RIGHT_SHOULDER, RIGHT_ELBOW, RIGHT_WRIST),
-            "down_angle": 160,
-            "up_angle": 50,
-            "min_angle_delta": 25,
-            "min_rep_duration": 0.25,
-        }
-
-        base_options = mp_python.BaseOptions(model_asset_path=MODEL_PATH)
-        options = vision.PoseLandmarkerOptions(
-            base_options=base_options,
-            running_mode=vision.RunningMode.VIDEO,
-            num_poses=1,
-            min_pose_detection_confidence=MIN_DETECTION_CONFIDENCE,
-            min_pose_presence_confidence=MIN_PRESENCE_CONFIDENCE,
-            min_tracking_confidence=MIN_TRACKING_CONFIDENCE,
-        )
-        self.landmarker = vision.PoseLandmarker.create_from_options(options)
-
-        self.stage = "down"
-        self.rep_count = 0
-        self.current_angle: Optional[float] = None
-        self.last_timestamp_ms: Optional[int] = None
-        self.last_angle: Optional[float] = None
-        self.rep_start_time: Optional[float] = None
-        self.rep_end_time: Optional[float] = None
-        self.rep_durations: list[float] = []
-        self.rep_speeds: list[float] = []
-        self._rep_angle_acc: float = 0.0
-        self.frames_since_rep_start: int = 0
-
-        self.thresholds = {
-            "too_slow": 2.5,
-            "slow": 1.5,
-            "good": 0.8,
-            "fast": 0.4,
-            "too_fast": 0.0,
-        }
-
-        self.angle_smooth_alpha = 0.6
-        self.smoothed_angle: Optional[float] = None
-
-    def angle(self, a, b, c) -> float:
-        ang = math.degrees(
-            math.atan2(c.y - b.y, c.x - b.x) - math.atan2(a.y - b.y, a.x - b.x)
-        )
-        ang = abs(ang)
-        if ang > 180:
-            ang = 360 - ang
-        return ang
-
-    def classify_rep_by_duration(self, duration: Optional[float]) -> Optional[str]:
-        if duration is None:
-            return None
-        th = self.thresholds
-        d = duration
-        if d >= th["too_slow"]:
-            return "too_slow"
-        if d >= th["slow"]:
-            return "slow"
-        if d >= th["good"]:
-            return "good"
-        if d >= th["fast"]:
-            return "fast"
-        return "too_fast"
-
-    def update_rep_state(self, angle: float) -> bool:
+        # ---- rep state machine ----
         rep_completed = False
-        down_angle = self.config["down_angle"]
-        up_angle = self.config["up_angle"]
-
-        if self.stage == "down" and angle < up_angle:
+        if self.stage == "down" and self.smoothed_angle < UP_ANGLE:
             self.stage = "up"
-        elif self.stage == "up" and angle > down_angle:
+            self._current_rep_issues = set()
+        elif self.stage == "up" and self.smoothed_angle > DOWN_ANGLE:
             self.stage = "down"
-            if self._rep_angle_acc >= self.config.get("min_angle_delta", 0):
-                rep_completed = True
-                self.rep_count += 1
-        return rep_completed
-
-    def detect(self, frame, timestamp_ms: int) -> dict[str, Any]:
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-        result = self.landmarker.detect_for_video(mp_image, timestamp_ms)
-
-        response = {
-            "pose_detected": False,
-            "angle": None,
-            "angle_velocity": None,
-            "smoothed_angle": None,
-            "stage": self.stage,
-            "rep_count": self.rep_count,
-            "rep_completed": False,
-            "rep_duration": None,
-            "rep_avg_speed": None,
-            "rep_classification": None,
-            "feedback": None,
-            "low_visibility": False,
-            "landmarks": [],
-        }
-
-        if not result.pose_landmarks:
-            self.last_timestamp_ms = timestamp_ms
-            return response
-
-        landmarks = result.pose_landmarks[0]
-        a_idx, b_idx, c_idx = self.config["joints"]
-        a, b, c = landmarks[a_idx], landmarks[b_idx], landmarks[c_idx]
-
-        visibilities = [getattr(p, "visibility", 1.0) for p in (a, b, c)]
-        if any(v is not None and v < MIN_LANDMARK_VISIBILITY for v in visibilities):
-            response["pose_detected"] = True
-            response["angle"] = self.last_angle
-            response["smoothed_angle"] = self.smoothed_angle
-            response["stage"] = self.stage
-            response["rep_count"] = self.rep_count
-            response["low_visibility"] = True
-            response["landmarks"] = [
-                {
-                    "x": lm.x,
-                    "y": lm.y,
-                    "z": lm.z,
-                    "visibility": getattr(lm, "visibility", None),
-                }
-                for lm in landmarks
-            ]
-            self.last_timestamp_ms = timestamp_ms
-            return response
-
-        raw_angle = self.angle(a, b, c)
-
-        if self.smoothed_angle is None:
-            self.smoothed_angle = raw_angle
-        else:
-            self.smoothed_angle = (
-                self.angle_smooth_alpha * raw_angle
-                + (1 - self.angle_smooth_alpha) * self.smoothed_angle
-            )
-
-        t = timestamp_ms / 1000.0
-
-        angle_velocity = None
-        if self.last_angle is not None and self.last_timestamp_ms is not None:
-            dt = t - (self.last_timestamp_ms / 1000.0)
-            if dt > 0:
-                angle_velocity = (self.smoothed_angle - self.last_angle) / dt
-
-        if self.stage == "down" and self.smoothed_angle < self.config["up_angle"]:
-            self.rep_start_time = t
-            self._rep_angle_acc = 0.0
-            self.frames_since_rep_start = 0
-
-        if self.last_angle is not None:
-            self._rep_angle_acc += abs(self.smoothed_angle - self.last_angle)
-            self.frames_since_rep_start += 1
-
-        rep_completed = self.update_rep_state(self.smoothed_angle)
-
-        rep_duration = None
-        rep_avg_speed = None
-        rep_class = None
-        feedback = None
-
-        if rep_completed:
-            self.rep_end_time = t
-            if self.rep_start_time is not None:
-                rep_duration = self.rep_end_time - self.rep_start_time
-
-            if rep_duration and rep_duration > 0:
-                rep_avg_speed = self._rep_angle_acc / rep_duration
-
-            if rep_duration is not None and rep_duration >= self.config.get(
-                "min_rep_duration", 0
-            ):
-                self.rep_durations.append(rep_duration)
-                if rep_avg_speed is not None:
-                    self.rep_speeds.append(rep_avg_speed)
-                rep_class = self.classify_rep_by_duration(rep_duration)
-
-                if rep_class in ("good", "fast"):
-                    feedback = f"Nice rep — {rep_class.replace('_', ' ')} ({rep_duration:.2f}s)."
-                elif rep_class in ("slow", "too_slow"):
-                    feedback = f"Slow down and control it — {rep_duration:.2f}s."
-                elif rep_class == "too_fast":
-                    feedback = f"Too fast — control the movement ({rep_duration:.2f}s)."
-                else:
-                    feedback = f"Rep recorded ({rep_duration:.2f}s)."
-            else:
-                rep_completed = False
-                self.rep_count -= 1 if self.rep_count > 0 else 0
-
-            self.rep_start_time = None
-            self._rep_angle_acc = 0.0
-            self.frames_since_rep_start = 0
-
-        self.last_angle = self.smoothed_angle
-        self.last_timestamp_ms = timestamp_ms
-
-        response["pose_detected"] = True
-        response["angle"] = raw_angle
-        response["smoothed_angle"] = self.smoothed_angle
-        response["angle_velocity"] = angle_velocity
-        response["stage"] = self.stage
-        response["rep_count"] = self.rep_count
-        response["rep_completed"] = rep_completed
-        response["rep_duration"] = rep_duration
-        response["rep_avg_speed"] = rep_avg_speed
-        response["rep_classification"] = rep_class
-        response["feedback"] = feedback
-        response["landmarks"] = [
-            {
-                "x": lm.x,
-                "y": lm.y,
-                "z": lm.z,
-                "visibility": getattr(lm, "visibility", None),
-            }
-            for lm in landmarks
-        ]
-        return response
-
-    def reset(self):
-        self.stage = "down"
-        self.rep_count = 0
-        self.last_timestamp_ms = None
-        self.last_angle = None
-        self.rep_start_time = None
-        self.rep_end_time = None
-        self.rep_durations = []
-        self.rep_speeds = []
-        self._rep_angle_acc = 0.0
-        self.smoothed_angle = None
-
-    def close(self):
-        self.landmarker.close()
-
-
-class bicep_curl_both:
-    def __init__(self):
-        self.left = bicep_curl_left()
-        self.right = bicep_curl_right()
-        self.both_rep_count = 0
-        self.last_both_stage = "down"
-
-    def detect(self, frame, timestamp_ms: int) -> dict[str, Any]:
-        left_result = self.left.detect(frame, timestamp_ms)
-        right_result = self.right.detect(frame, timestamp_ms)
-
-        left_stage = left_result["stage"]
-        right_stage = right_result["stage"]
-
-        both_down = left_stage == "down" and right_stage == "down"
-        both_up = left_stage == "up" and right_stage == "up"
-
-        rep_completed = False
-
-        if self.last_both_stage == "down" and both_up:
-            self.last_both_stage = "up"
-        elif self.last_both_stage == "up" and both_down:
-            self.last_both_stage = "down"
-            self.both_rep_count += 1
             rep_completed = True
+
+        if self.stage == "up":
+            self._current_rep_issues.update(issues)
+
+        rep_duration = rep_avg_speed = rep_class = rep_form_quality = None
+        feedback = partial_feedback
+
+        if rep_completed:
+            rep_duration = (
+                (t - self.rep_start_time) if self.rep_start_time is not None else None
+            )
+            if rep_duration and rep_duration > 0:
+                rep_avg_speed = self._rep_angle_acc / rep_duration
+
+            valid = (
+                rep_duration is not None
+                and MIN_REP_DURATION <= rep_duration <= MAX_REP_DURATION
+                and self._rep_angle_acc >= MIN_ANGLE_DELTA
+            )
+
+            if valid:
+                self.rep_count += 1
+                rep_class = self._classify_tempo(rep_duration)
+
+                if self._current_rep_issues:
+                    rep_form_quality = "needs_improvement"
+                    self.flawed_reps += 1
+                    issue_text = ", ".join(
+                        i.replace("_", " ") for i in sorted(self._current_rep_issues)
+                    )
+                    feedback = f"Rep {self.rep_count} counted, but watch your form ({issue_text})."
+                else:
+                    rep_form_quality = "good"
+                    self.good_reps += 1
+                    if rep_class in ("good", "fast"):
+                        feedback = (
+                            f"Clean rep — {rep_class} tempo ({rep_duration:.2f}s)."
+                        )
+                    elif rep_class in ("slow", "too_slow"):
+                        feedback = (
+                            f"Good form, nice and controlled ({rep_duration:.2f}s)."
+                        )
+                    else:
+                        feedback = (
+                            f"Clean rep, but control the tempo ({rep_duration:.2f}s)."
+                        )
+            else:
+                rep_completed = False
+                if rep_duration is not None and rep_duration < MIN_REP_DURATION:
+                    feedback = (
+                        "Too fast — that one wasn't counted, control the movement."
+                    )
+                elif rep_duration is not None and rep_duration > MAX_REP_DURATION:
+                    feedback = "That rep took too long — not counted. Keep moving."
+                else:
+                    feedback = "Not enough range of motion — not counted."
+
+            self.rep_start_time = None
+            self._rep_angle_acc = 0.0
+            self._current_rep_issues = set()
+
+        self.last_angle = self.smoothed_angle
+        self.last_timestamp_s = t
+
+        if feedback is None and messages:
+            feedback = messages[0]
+
+        response.update(
+            {
+                "pose_detected": True,
+                "angle": raw_angle,
+                "smoothed_angle": self.smoothed_angle,
+                "angle_velocity": angle_velocity,
+                "stage": self.stage,
+                "rep_count": self.rep_count,
+                "good_reps": self.good_reps,
+                "flawed_reps": self.flawed_reps,
+                "session_complete": self._is_complete(),
+                "rep_completed": rep_completed,
+                "rep_duration": rep_duration,
+                "rep_avg_speed": rep_avg_speed,
+                "rep_classification": rep_class,
+                "rep_form_quality": rep_form_quality,
+                "calibrated": self.calibrated,
+                "posture_ok": len(issues) == 0,
+                "posture_issues": issues,
+                "posture_messages": messages,
+                "feedback": feedback,
+            }
+        )
+        return response
+
+
+class SingleArmCurlSession:
+    """Left- or right-arm curl session: one shared pose model + one analyzer."""
+
+    def __init__(self, side: str, target_reps: Optional[int] = None):
+        self.engine = PoseEngine()
+        self.analyzer = ArmCurlAnalyzer(side, target_reps)
+
+    def detect(self, frame, timestamp_ms: int) -> dict[str, Any]:
+        landmarks = self.engine.detect(frame, timestamp_ms)
+        result = self.analyzer.update(landmarks, timestamp_ms)
+        result["landmarks"] = (
+            PoseEngine.landmarks_to_json(landmarks) if landmarks else []
+        )
+        return result
+
+    def close(self):
+        self.engine.close()
+
+
+class BothArmCurlSession:
+    """Both-arm curl session: one shared pose model, two analyzers.
+
+    The combined rep count is `min(left, right)` so an arm that lags behind
+    can't inflate the count, and live feedback tells the person which arm
+    needs to catch up if they drift out of sync.
+    """
+
+    def __init__(self, target_reps: Optional[int] = None):
+        self.engine = PoseEngine()
+        self.left = ArmCurlAnalyzer("left", target_reps)
+        self.right = ArmCurlAnalyzer("right", target_reps)
+        self.target_reps = target_reps
+
+        self.combined_rep_count = 0
+        self.combined_good_reps = 0
+        self.combined_flawed_reps = 0
+        self._last_left_quality: Optional[str] = None
+        self._last_right_quality: Optional[str] = None
+
+    def detect(self, frame, timestamp_ms: int) -> dict[str, Any]:
+        landmarks = self.engine.detect(frame, timestamp_ms)
+        left_result = self.left.update(landmarks, timestamp_ms)
+        right_result = self.right.update(landmarks, timestamp_ms)
+
+        if left_result.get("rep_form_quality"):
+            self._last_left_quality = left_result["rep_form_quality"]
+        if right_result.get("rep_form_quality"):
+            self._last_right_quality = right_result["rep_form_quality"]
+
+        new_count = min(left_result["rep_count"], right_result["rep_count"])
+        newly_completed = new_count > self.combined_rep_count
+        if newly_completed:
+            self.combined_rep_count = new_count
+            if "needs_improvement" in (
+                self._last_left_quality,
+                self._last_right_quality,
+            ):
+                self.combined_flawed_reps += 1
+            else:
+                self.combined_good_reps += 1
+
+        rep_diff = left_result["rep_count"] - right_result["rep_count"]
+        sync_ok = abs(rep_diff) <= 1
+
+        if not sync_ok:
+            lagging = "right" if rep_diff > 0 else "left"
+            feedback = (
+                f"Move both arms together — your {lagging} arm is falling behind."
+            )
+        elif newly_completed:
+            feedback = f"Nice, synced rep #{self.combined_rep_count} on both arms!"
+        else:
+            feedback = left_result.get("feedback") or right_result.get("feedback")
+
+        session_complete = (
+            self.target_reps is not None and self.combined_rep_count >= self.target_reps
+        )
+
+        landmarks_json = PoseEngine.landmarks_to_json(landmarks) if landmarks else []
 
         return {
             "pose_detected": left_result["pose_detected"]
             or right_result["pose_detected"],
             "left_arm": left_result,
             "right_arm": right_result,
-            "both_stage": self.last_both_stage,
-            "both_rep_count": self.both_rep_count,
-            "rep_completed": rep_completed,
+            "stage": self._combined_stage(left_result["stage"], right_result["stage"]),
+            "rep_count": self.combined_rep_count,
+            "good_reps": self.combined_good_reps,
+            "flawed_reps": self.combined_flawed_reps,
+            "target_reps": self.target_reps,
+            "session_complete": session_complete,
+            "rep_completed": newly_completed,
+            "sync_ok": sync_ok,
+            "feedback": feedback,
+            "elapsed_time": max(
+                left_result["elapsed_time"], right_result["elapsed_time"]
+            ),
+            "landmarks": landmarks_json,
         }
 
+    @staticmethod
+    def _combined_stage(left_stage: str, right_stage: str) -> str:
+        if left_stage == "up" and right_stage == "up":
+            return "up"
+        if left_stage == "down" and right_stage == "down":
+            return "down"
+        return "mixed"
+
     def close(self):
-        self.left.close()
-        self.right.close()
+        self.engine.close()
