@@ -1,16 +1,22 @@
 import { useState } from "react";
-
 import useRepWebSocket from "../hooks/usebicepCurlSocket";
 import CameraSelector from "../conponents/CameraSelector";
 import VideoPreview from "../conponents/VideoPreview";
 import AngleGauge from "../conponents/AngleGauge";
 
-const EXERCISES = ["bicep_curl", "squat", "pushup"] as const;
+const SELECT_ARM = ["left", "right", "both"] as const;
+type ArmMode = (typeof SELECT_ARM)[number];
+
+const MODE_LABELS: Record<ArmMode, string> = {
+  left: "LEFT ARM",
+  right: "RIGHT ARM",
+  both: "BOTH ARM",
+};
 
 const THRESHOLDS: Record<string, { up: number; down: number }> = {
-  bicep_curl: { up: 50, down: 160 },
-  squat: { up: 90, down: 160 },
-  pushup: { up: 70, down: 160 },
+  left: { up: 50, down: 160 },
+  right: { up: 50, down: 160 },
+  both: { up: 50, down: 160 },
 };
 
 const POSE_CONNECTIONS: [number, number][] = [
@@ -28,14 +34,14 @@ const POSE_CONNECTIONS: [number, number][] = [
   [26, 28],
 ];
 
-function RepPage() {
+function BicepPage() {
   const [cameraId, setCameraId] = useState("");
-  const [exercise, setExercise] = useState<string>(EXERCISES[0]);
+  const [exercise, setExercise] = useState<ArmMode>("left");
 
   const { connected, result, lastCompletedRep, sendFrame } =
     useRepWebSocket(exercise);
 
-  const range = THRESHOLDS[exercise];
+  const range = THRESHOLDS[exercise] ?? { up: 50, down: 160 };
 
   const skeleton = result.landmarks?.length
     ? [{ points: result.landmarks, connections: POSE_CONNECTIONS }]
@@ -45,10 +51,10 @@ function RepPage() {
     lastCompletedRep.rep_classification ?? result.rep_classification;
 
   const duration = lastCompletedRep.rep_duration ?? result.rep_duration;
-
   const speed = lastCompletedRep.rep_avg_speed ?? result.rep_avg_speed;
-
   const feedback = lastCompletedRep.feedback ?? result.feedback;
+
+  const stageText = (result.stage ?? "down").toUpperCase();
 
   return (
     <div className="page">
@@ -66,13 +72,13 @@ function RepPage() {
           />
 
           <div className="exercise-picker">
-            {EXERCISES.map((ex) => (
+            {SELECT_ARM.map((ex) => (
               <button
                 key={ex}
                 className={`pill ${exercise === ex ? "active" : ""}`}
                 onClick={() => setExercise(ex)}
               >
-                {ex.replace("_", " ")}
+                {MODE_LABELS[ex]}
               </button>
             ))}
           </div>
@@ -81,14 +87,14 @@ function RepPage() {
         <div className="stats-col">
           <div className="stat-block">
             <span className="stat-label">Reps</span>
-            <span className="stat-number">{result.rep_count}</span>
+            <span className="stat-number">{result.rep_count ?? 0}</span>
           </div>
 
           <AngleGauge
             angle={result.smoothed_angle ?? result.angle}
             upThreshold={range.up}
             downThreshold={range.down}
-            stage={result.stage}
+            stage={result.stage ?? "down"}
           />
 
           <div className="meta-row">
@@ -104,7 +110,7 @@ function RepPage() {
 
           <div className="meta-row">
             <span>Stage</span>
-            <span>{result.stage.toUpperCase()}</span>
+            <span>{stageText}</span>
           </div>
 
           <div className="meta-row">
@@ -156,4 +162,4 @@ function RepPage() {
   );
 }
 
-export default RepPage;
+export default BicepPage;

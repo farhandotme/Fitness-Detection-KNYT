@@ -2,7 +2,8 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
 import Layout from "./conponents/Layout";
 import FingerPage from "./pages/FingerPage";
-import RepPage from "./pages/RepPage";
+import BicepPage from "./pages/BicepPage";
+("./pages/BicepPage");
 
 function App() {
   return (
@@ -11,7 +12,7 @@ function App() {
         <Route path="/" element={<Layout />}>
           <Route index element={<Navigate to="/fingers" replace />} />
           <Route path="fingers" element={<FingerPage />} />
-          <Route path="reps" element={<RepPage />} />
+          <Route path="reps" element={<BicepPage />} />
         </Route>
       </Routes>
     </BrowserRouter>
