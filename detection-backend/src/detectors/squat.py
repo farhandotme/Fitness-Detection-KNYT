@@ -72,6 +72,18 @@ from src.engines.poseEngine import (  # type: ignore
 
 MIN_LANDMARK_VISIBILITY = 0.4
 
+CORE_LANDMARKS = (LEFT_SHOULDER, RIGHT_SHOULDER, LEFT_HIP, RIGHT_HIP)
+
+
+def _looks_like_a_person(landmarks) -> bool:
+    visible_core = sum(
+        1
+        for i in CORE_LANDMARKS
+        if landmarks[i].visibility is not None and landmarks[i].visibility > 0.6
+    )
+    return visible_core >= 3  # at least 3 of 4 core points confidently visible
+
+
 # Knee angle (hip-knee-ankle) thresholds that drive the rep state machine.
 # These also act as the hysteresis band, so a noisy angle sitting near one
 # edge can't flicker the stage back and forth.
@@ -240,6 +252,10 @@ class SquatAnalyzer:
         }
 
         if landmarks is None:
+            response["feedback"] = "No person detected — step into frame."
+            return response
+
+        if not _looks_like_a_person(landmarks):
             response["feedback"] = "No person detected — step into frame."
             return response
 

@@ -25,9 +25,9 @@ from mediapipe.tasks.python.components.containers.landmark import NormalizedLand
 
 MODEL_PATH = "./src/landmark-packages/pose_landmarker.task"
 
-MIN_DETECTION_CONFIDENCE = 0.4
-MIN_PRESENCE_CONFIDENCE = 0.4
-MIN_TRACKING_CONFIDENCE = 0.4
+MIN_DETECTION_CONFIDENCE = 0.75
+MIN_PRESENCE_CONFIDENCE = 0.75
+MIN_TRACKING_CONFIDENCE = 0.7
 
 # How many consecutive frames with *no* detected pose we tolerate before
 # reporting "no person" to callers. MediaPipe's tracker briefly drops the
