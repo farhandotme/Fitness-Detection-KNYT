@@ -1,0 +1,24 @@
+services:
+  backend:
+    build:
+      context: ./detection-backend
+    container_name: knyt-fitness-backend
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #     args:
+  #       # This has to be reachable from the *browser*, not just from inside
+  #       # the Docker network — with the default port mapping above,
+  #       # ws://localhost:8000 works for local use. Override in .env or via:
+  #       #   VITE_WEBSOCKET_FASTAPI_URL=ws://my-server.com:8000 docker compose up --build
+  #       VITE_WEBSOCKET_FASTAPI_URL: ${VITE_WEBSOCKET_FASTAPI_URL:-ws://localhost:8000}
+  #   container_name: knyt-fitness-frontend
+  #   ports:
+  #     - "5173:80"
+  #   depends_on:
+  #     - backend
+  #   restart: unless-stopped
