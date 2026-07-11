@@ -85,7 +85,7 @@ const EMPTY_RESULT: RepResult = {
 
 const WS_BASE =
   (import.meta.env.VITE_WEBSOCKET_FASTAPI_URL as string | undefined) ||
-  "ws://localhost:8000";
+  `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}`;
 
 export default function useRepWebSocket() {
   const socketRef = useRef<WebSocket | null>(null);
@@ -144,7 +144,8 @@ export default function useRepWebSocket() {
       setResult(data);
 
       const primary = mode === "both" ? undefined : (data as ArmData);
-      const flavors = mode === "both" ? [data.left_arm, data.right_arm] : [primary];
+      const flavors =
+        mode === "both" ? [data.left_arm, data.right_arm] : [primary];
 
       if (data.rep_completed) {
         const completed = flavors.find((a) => a?.rep_completed) ?? primary;
@@ -174,5 +175,13 @@ export default function useRepWebSocket() {
     ws.send(image);
   }, []);
 
-  return { connected, result, lastCompletedRep, sendFrame, start, stop, socketError };
+  return {
+    connected,
+    result,
+    lastCompletedRep,
+    sendFrame,
+    start,
+    stop,
+    socketError,
+  };
 }

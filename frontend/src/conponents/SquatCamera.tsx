@@ -46,6 +46,14 @@ export default function SquatCamera({
     let interval: number;
 
     async function startCamera() {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        onError?.(
+          window.isSecureContext
+            ? "This browser doesn't support camera access."
+            : "Camera access requires HTTPS. Open this page over https:// (not http://) — plain http only works on localhost.",
+        );
+        return;
+      }
       let stream: MediaStream;
       try {
         stream = await navigator.mediaDevices.getUserMedia({

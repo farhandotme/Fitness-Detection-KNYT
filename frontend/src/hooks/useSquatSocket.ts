@@ -66,7 +66,7 @@ const EMPTY_RESULT: SquatData = {
 
 const WS_BASE =
   (import.meta.env.VITE_WEBSOCKET_FASTAPI_URL as string | undefined) ||
-  "ws://localhost:8000";
+  `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}`;
 
 export default function useSquatSocket() {
   const socketRef = useRef<WebSocket | null>(null);
