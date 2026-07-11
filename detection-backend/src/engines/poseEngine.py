@@ -25,9 +25,19 @@ from mediapipe.tasks.python.components.containers.landmark import NormalizedLand
 
 MODEL_PATH = "./src/landmark-packages/pose_landmarker.task"
 
-MIN_DETECTION_CONFIDENCE = 0.5
-MIN_PRESENCE_CONFIDENCE = 0.5
-MIN_TRACKING_CONFIDENCE = 0.5
+MIN_DETECTION_CONFIDENCE = 0.4
+MIN_PRESENCE_CONFIDENCE = 0.4
+MIN_TRACKING_CONFIDENCE = 0.4
+
+# How many consecutive frames with *no* detected pose we tolerate before
+# reporting "no person" to callers. MediaPipe's tracker briefly drops the
+# pose on fast/blurry motion (very common mid-rep, especially on squats
+# where the whole body moves quickly) even though the person never left
+# the frame. Re-using the last good landmarks for a few frames avoids the
+# analyzers seeing a false "no person detected" / losing calibration every
+# time that happens, while still correctly reporting "no person" if they
+# actually step out of frame.
+MAX_HOLD_FRAMES = 6
 
 # Pose landmark indices (MediaPipe BlazePose topology)
 NOSE = 0
@@ -39,6 +49,14 @@ LEFT_WRIST = 15
 RIGHT_WRIST = 16
 LEFT_HIP = 23
 RIGHT_HIP = 24
+LEFT_KNEE = 25
+RIGHT_KNEE = 26
+LEFT_ANKLE = 27
+RIGHT_ANKLE = 28
+LEFT_HEEL = 29
+RIGHT_HEEL = 30
+LEFT_FOOT_INDEX = 31
+RIGHT_FOOT_INDEX = 32
 
 
 class PoseEngine:
@@ -62,6 +80,11 @@ class PoseEngine:
         # MediaPipe's VIDEO mode requires strictly increasing timestamps.
         self._last_timestamp_ms: Optional[int] = None
 
+        # Short-term hold buffer for brief detection dropouts (see
+        # MAX_HOLD_FRAMES above).
+        self._last_landmarks: Optional[list[NormalizedLandmark]] = None
+        self._missed_frames = 0
+
     def detect(self, frame, timestamp_ms: int) -> Optional[list[NormalizedLandmark]]:
         """Run pose detection once. Returns the 33-point landmark list, or
         None if no person was detected (or the frame/timestamp was invalid)."""
@@ -84,9 +107,20 @@ class PoseEngine:
         result = self.landmarker.detect_for_video(mp_image, timestamp_ms)
 
         if not result.pose_landmarks:
+            # Momentary miss — reuse the last good frame for a short window
+            # instead of instantly reporting "no person".
+            if (
+                self._last_landmarks is not None
+                and self._missed_frames < MAX_HOLD_FRAMES
+            ):
+                self._missed_frames += 1
+                return self._last_landmarks
+            self._last_landmarks = None
             return None
 
-        return result.pose_landmarks[0]
+        self._last_landmarks = result.pose_landmarks[0]
+        self._missed_frames = 0
+        return self._last_landmarks
 
     def close(self):
         self.landmarker.close()
