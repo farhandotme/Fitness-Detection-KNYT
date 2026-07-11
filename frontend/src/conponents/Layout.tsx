@@ -21,6 +21,12 @@ function Layout() {
           >
             Bicep
           </NavLink>
+          <NavLink
+            to="/squat"
+            className={({ isActive }) => `nav-pill ${isActive ? "active" : ""}`}
+          >
+            Squat
+          </NavLink>
         </nav>
       </header>
 
