@@ -30,6 +30,8 @@ export interface SquatData {
   posture_ok: boolean;
   posture_issues: string[];
   posture_messages: string[];
+  framing_ok: boolean;
+  framing_message: string | null;
   feedback: string | null;
   low_visibility: boolean;
   elapsed_time: number;
@@ -58,6 +60,8 @@ const EMPTY_RESULT: SquatData = {
   posture_ok: true,
   posture_issues: [],
   posture_messages: [],
+  framing_ok: true,
+  framing_message: null,
   feedback: null,
   low_visibility: false,
   elapsed_time: 0,
