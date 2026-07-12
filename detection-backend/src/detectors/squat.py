@@ -118,6 +118,20 @@ PARTIAL_REP_MARGIN_DEG = 15.0
 PARTIAL_REP_MIN_DESCENT_DEG = 25.0
 PARTIAL_REP_BOUNCE_DEG = 8.0
 
+# -------------------------------------------------------------------------
+# Camera framing / stance-position thresholds
+# -------------------------------------------------------------------------
+# These are independent of squat *form* — they check whether the user is
+# even standing where the camera can see them well enough to trust the
+# angle math above. A "perfect" detector has to get this right first: bad
+# framing (too close, too far, off to one side, half out of shot) is the
+# #1 cause of flaky rep counting and posture checks that never calibrate,
+# so it gets checked every frame and takes priority in the coach feedback.
+FRAME_EDGE_MARGIN = 0.04  # landmark within 4% of a frame edge = likely clipped
+TORSO_SPAN_TOO_CLOSE = 0.42  # shoulder-to-hip normalized y-span: too large = too close
+TORSO_SPAN_TOO_FAR = 0.10  # too small = too far from the camera
+CENTER_X_TOLERANCE = 0.22  # allowed horizontal drift of hip midline from frame center
+
 
 class _Point:
     __slots__ = ("x", "y")
@@ -156,6 +170,51 @@ def _dist(a, b) -> float:
     return math.hypot(a.x - b.x, a.y - b.y)
 
 
+def _framing_feedback(
+    l_shoulder, r_shoulder, l_hip, r_hip, feet_visible: bool
+) -> Optional[str]:
+    """Coaches the user into a good spot for the camera to track a squat —
+    checked every frame, independent of exercise form. Returns a short
+    instruction, or None if the current framing looks good.
+
+    Checks, in order of how badly they break tracking:
+      1. Part of the body clipped at a frame edge.
+      2. Feet not visible (can't score depth/heel-lift without them).
+      3. Too close / too far from the camera (using torso span as a
+         camera-agnostic proxy for distance).
+      4. Standing off to one side instead of centered.
+    """
+    mid_shoulder = _midpoint(l_shoulder, r_shoulder)
+    mid_hip = _midpoint(l_hip, r_hip)
+
+    for p in (l_shoulder, r_shoulder, l_hip, r_hip):
+        if (
+            p.x < FRAME_EDGE_MARGIN
+            or p.x > 1 - FRAME_EDGE_MARGIN
+            or p.y < FRAME_EDGE_MARGIN
+        ):
+            return (
+                "You're partly out of frame — center yourself with space on both sides."
+            )
+
+    if not feet_visible:
+        return "Step back so your feet and ankles are visible — I need your full body in frame for a squat."
+
+    torso_span = abs(mid_hip.y - mid_shoulder.y)
+    if torso_span > TORSO_SPAN_TOO_CLOSE:
+        return "You're too close to the camera — step back until your whole body fits in frame."
+    if torso_span < TORSO_SPAN_TOO_FAR:
+        return (
+            "You're too far from the camera — move a bit closer for accurate tracking."
+        )
+
+    if abs(mid_hip.x - 0.5) > CENTER_X_TOLERANCE:
+        side = "left" if mid_hip.x < 0.5 else "right"
+        return f"Move to the center of frame — you're too far to the {side}."
+
+    return None
+
+
 class SquatAnalyzer:
     """Stateful, bilateral squat rep counter + posture checker."""
 
@@ -182,12 +241,16 @@ class SquatAnalyzer:
         self._attempt_min_angle: Optional[float] = None
         self._attempt_flagged = False
 
-        # Personal posture baseline, captured at rest (standing)
-        self._calib_samples: list[tuple[float, float, float]] = []
+        # Personal posture baseline, captured at rest (standing). Heel gap
+        # is stored separately as Optional because it needs the feet in
+        # frame — a common framing miss — whereas knee-tracking and torso
+        # lean only need the legs + shoulders, so they shouldn't be held
+        # hostage by feet visibility.
+        self._calib_samples: list[tuple[float, float, Optional[float]]] = []
         self.calibrated = False
         self._baseline_knee_ankle_ratio = 1.0
         self._baseline_torso_lean = 0.0
-        self._baseline_heel_gap = 0.0
+        self._baseline_heel_gap: Optional[float] = None
 
         self._current_rep_issues: set[str] = set()
 
@@ -214,7 +277,15 @@ class SquatAnalyzer:
             sum(s[0] for s in self._calib_samples) / n, 1e-6
         )
         self._baseline_torso_lean = sum(s[1] for s in self._calib_samples) / n
-        self._baseline_heel_gap = sum(s[2] for s in self._calib_samples) / n
+        heel_samples = [s[2] for s in self._calib_samples if s[2] is not None]
+        # Only set a heel-lift baseline if we actually saw the feet during
+        # calibration. If we never did, leave it None so the heel-lift
+        # check stays silently disabled instead of comparing against a
+        # fabricated 0.0 baseline (which would misfire the moment the feet
+        # do become visible mid-set).
+        self._baseline_heel_gap = (
+            sum(heel_samples) / len(heel_samples) if heel_samples else None
+        )
         self.calibrated = True
 
     # ---------------------------------------------------------------
@@ -246,6 +317,8 @@ class SquatAnalyzer:
             "posture_ok": True,
             "posture_issues": [],
             "posture_messages": [],
+            "framing_ok": True,
+            "framing_message": None,
             "feedback": None,
             "low_visibility": False,
             "elapsed_time": round(elapsed, 2),
@@ -325,11 +398,26 @@ class SquatAnalyzer:
             r_gap = (r_toe.y - r_heel.y) / r_foot_len
             heel_gap = (l_gap + r_gap) / 2.0
 
-        can_calibrate = (
-            knee_ankle_ratio is not None
-            and torso_lean is not None
-            and heel_gap is not None
-        )
+        # ---- camera framing / stance-position check (every frame) ----
+        # This runs independent of calibration state — bad framing is worth
+        # flagging immediately, and it's also *why* calibration or posture
+        # checks may be silently failing, so it doubles as the explanation.
+        framing_message = None
+        if torso_visible:
+            framing_message = _framing_feedback(
+                l_shoulder, r_shoulder, l_hip, r_hip, feet_visible
+            )
+        elif both_legs_visible:
+            framing_message = (
+                "Step back — I can see your legs but not your upper body. "
+                "Get your full body in frame, facing the camera."
+            )
+
+        # Calibration only strictly needs both legs + torso (knee tracking,
+        # torso lean). Feet are nice-to-have for the heel-lift check but
+        # shouldn't block calibration entirely — plenty of valid camera
+        # setups crop the feet out.
+        can_calibrate = knee_ankle_ratio is not None and torso_lean is not None
         if self.stage == "down" and not self.calibrated and can_calibrate:
             self._calib_samples.append((knee_ankle_ratio, torso_lean, heel_gap))
             if len(self._calib_samples) >= CALIBRATION_FRAMES:
@@ -349,7 +437,7 @@ class SquatAnalyzer:
                     issues.append("knee_valgus")
                     messages.append("Push your knees out — don't let them cave inward.")
 
-            if heel_gap is not None:
+            if heel_gap is not None and self._baseline_heel_gap is not None:
                 if (
                     heel_gap - self._baseline_heel_gap > HEEL_LIFT_DELTA
                     or heel_gap > HEEL_LIFT_HARD_MAX
@@ -416,7 +504,11 @@ class SquatAnalyzer:
             self._current_rep_issues.update(issues)
 
         rep_duration = rep_avg_speed = rep_class = rep_form_quality = None
-        feedback = partial_feedback
+        # Framing problems make every other signal unreliable, so they beat
+        # the "squat lower" nudge — but a rep that just completed is still
+        # the single most important thing to tell the user, so it's allowed
+        # to override both below.
+        feedback = framing_message or partial_feedback
 
         if rep_completed:
             rep_duration = (
@@ -479,6 +571,13 @@ class SquatAnalyzer:
             feedback = messages[0]
         if feedback is None and not both_legs_visible:
             feedback = "Only one leg is fully visible — step back for a full-body view."
+        if feedback is None and not self.calibrated:
+            feedback = (
+                "Stand tall facing the camera, feet shoulder-width apart, and hold "
+                "still for a second — calibrating your posture."
+            )
+        if feedback is None:
+            feedback = "Good position — posture looks good."
 
         response.update(
             {
@@ -502,6 +601,8 @@ class SquatAnalyzer:
                 "posture_ok": len(issues) == 0,
                 "posture_issues": issues,
                 "posture_messages": messages,
+                "framing_ok": framing_message is None,
+                "framing_message": framing_message,
                 "feedback": feedback,
             }
         )
