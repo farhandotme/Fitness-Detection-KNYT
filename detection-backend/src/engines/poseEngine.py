@@ -21,7 +21,6 @@ import cv2
 import mediapipe as mp
 from mediapipe.tasks import python as mp_python
 from mediapipe.tasks.python import vision
-from mediapipe.tasks.python.vision import RunningMode
 from mediapipe.tasks.python.components.containers.landmark import NormalizedLandmark
 
 MODEL_PATH = "./src/landmark-packages/pose_landmarker.task"
@@ -77,7 +76,7 @@ class PoseEngine:
 
     def __init__(
         self,
-        running_mode: RunningMode = RunningMode.VIDEO,  # type: ignore
+        running_mode: vision.RunningMode = vision.RunningMode.VIDEO,
         min_detection_confidence: float = DEFAULT_MIN_DETECTION_CONFIDENCE,
         min_presence_confidence: float = DEFAULT_MIN_PRESENCE_CONFIDENCE,
         min_tracking_confidence: float = DEFAULT_MIN_TRACKING_CONFIDENCE,
