@@ -34,7 +34,9 @@ should fall back gracefully (see body_analysis.py) instead of crashing —
 the scan still works, just with lower-fidelity waist/hair/skin estimates.
 """
 
+import logging
 import os
+from pathlib import Path
 from typing import Optional
 
 import numpy as np
@@ -42,7 +44,13 @@ import mediapipe as mp
 from mediapipe.tasks import python as mp_python
 from mediapipe.tasks.python import vision
 
-MODEL_PATH = "./src/landmark-packages/selfie_multiclass.tflite"
+# Resolved relative to THIS FILE, not the process's working directory.
+# The old "./src/landmark-packages/..." path only worked if the server
+# happened to be launched from exactly the detection-backend/ folder --
+# any other launch cwd (a different terminal dir, a process manager, a
+# different WORKDIR) made os.path.exists() silently return False with no
+# error, so segmentation quietly degraded with zero indication why.
+MODEL_PATH = str(Path(__file__).resolve().parent.parent / "landmark-packages" / "selfie_multiclass.tflite")
 
 BACKGROUND = 0
 HAIR = 1
@@ -51,12 +59,19 @@ FACE_SKIN = 3
 CLOTHES = 4
 OTHER = 5
 
+log = logging.getLogger(__name__)
+
 
 class SegmentEngine:
     """Owns one ImageSegmenter. Call `segment()` per still frame."""
 
     def __init__(self):
         self.available = os.path.exists(MODEL_PATH)
+        log.warning(
+            "SegmentEngine: model %s at %s",
+            "FOUND" if self.available else "NOT FOUND",
+            MODEL_PATH,
+        )
         self.segmenter: Optional[vision.ImageSegmenter] = None
 
         if self.available:

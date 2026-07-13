@@ -38,7 +38,9 @@ What's genuinely measured vs. hand-tuned heuristic
     "heuristic" throughout.
 """
 
+import logging
 import os
+from pathlib import Path
 from typing import Any, Optional
 
 import numpy as np
@@ -46,7 +48,13 @@ import mediapipe as mp
 from mediapipe.tasks import python as mp_python
 from mediapipe.tasks.python import vision
 
-MODEL_PATH = "./src/landmark-packages/face_landmarker.task"
+MODEL_PATH = str(
+    Path(__file__).resolve().parent.parent
+    / "landmark-packages"
+    / "face_landmarker.task"
+)
+
+log = logging.getLogger(__name__)
 
 # Stable MediaPipe FaceMesh topology indices (478-point model, unchanged
 # across MediaPipe versions — these are the standard reference points
@@ -133,6 +141,11 @@ class FaceEngine:
 
     def __init__(self):
         self.available = os.path.exists(MODEL_PATH)
+        log.warning(
+            "FaceEngine: model %s at %s",
+            "FOUND" if self.available else "NOT FOUND",
+            MODEL_PATH,
+        )
         self.landmarker: Optional[vision.FaceLandmarker] = None
 
         if self.available:
@@ -177,7 +190,9 @@ class FaceEngine:
 # -------------------------------------------------------------------------
 
 
-def _classify_face_shape(width_px: float, height_px: float, jaw_px: float, forehead_px: float) -> str:
+def _classify_face_shape(
+    width_px: float, height_px: float, jaw_px: float, forehead_px: float
+) -> str:
     """Width/height + jaw-to-forehead ratio is the standard hand-rolled
     face-shape heuristic (the same one most "face shape" tutorials use) —
     fine as a descriptive label, not a rigorous classifier."""
@@ -227,9 +242,15 @@ def analyze_face(
     l_temple = _px(landmarks[LEFT_TEMPLE], w, h)
     r_temple = _px(landmarks[RIGHT_TEMPLE], w, h)
     nose_tip = _px(landmarks[NOSE_TIP], w, h)
-    l_eye_o, r_eye_o = _px(landmarks[LEFT_EYE_OUTER], w, h), _px(landmarks[RIGHT_EYE_OUTER], w, h)
-    l_eye_i, r_eye_i = _px(landmarks[LEFT_EYE_INNER], w, h), _px(landmarks[RIGHT_EYE_INNER], w, h)
-    mouth_l, mouth_r = _px(landmarks[MOUTH_LEFT], w, h), _px(landmarks[MOUTH_RIGHT], w, h)
+    l_eye_o, r_eye_o = _px(landmarks[LEFT_EYE_OUTER], w, h), _px(
+        landmarks[RIGHT_EYE_OUTER], w, h
+    )
+    l_eye_i, r_eye_i = _px(landmarks[LEFT_EYE_INNER], w, h), _px(
+        landmarks[RIGHT_EYE_INNER], w, h
+    )
+    mouth_l, mouth_r = _px(landmarks[MOUTH_LEFT], w, h), _px(
+        landmarks[MOUTH_RIGHT], w, h
+    )
 
     face_width_px = np.linalg.norm(l_cheek - r_cheek)
     face_height_px = np.linalg.norm(forehead - chin)
@@ -237,7 +258,9 @@ def analyze_face(
     forehead_width_px = np.linalg.norm(l_temple - r_temple)
 
     # --- Face shape (heuristic) ------------------------------------------
-    face_shape = _classify_face_shape(face_width_px, face_height_px, jaw_width_px, forehead_width_px)
+    face_shape = _classify_face_shape(
+        face_width_px, face_height_px, jaw_width_px, forehead_width_px
+    )
 
     # --- Face symmetry: compare left vs right distance from the
     # nose-tip/face-center-line to matched landmark pairs. Averaged across
@@ -298,8 +321,12 @@ def analyze_face(
     head_size = None
     if px_per_cm:
         head_size = {
-            "head_width_cm": round(float(face_width_px / px_per_cm) * 1.35, 1),  # cheek-to-cheek -> full head incl. ears, rough factor
-            "head_height_cm": round(float(face_height_px / px_per_cm) * 1.25, 1),  # forehead-to-chin -> crown-to-chin, rough factor
+            "head_width_cm": round(
+                float(face_width_px / px_per_cm) * 1.35, 1
+            ),  # cheek-to-cheek -> full head incl. ears, rough factor
+            "head_height_cm": round(
+                float(face_height_px / px_per_cm) * 1.25, 1
+            ),  # forehead-to-chin -> crown-to-chin, rough factor
             "confidence": "measured",
             "note": "Derived from the 478-point face mesh bounding box, adjusted by a fixed factor to approximate full cranium size beyond the visible face.",
         }
@@ -309,12 +336,18 @@ def analyze_face(
         "face_shape": face_shape,
         "face_symmetry_pct": round(face_symmetry_pct, 1),
         "face_symmetry_label": (
-            "Highly symmetric" if face_symmetry_pct >= 95
-            else "Normal — minor left/right difference" if face_symmetry_pct >= 88
-            else "Noticeable left/right difference"
+            "Highly symmetric"
+            if face_symmetry_pct >= 95
+            else (
+                "Normal — minor left/right difference"
+                if face_symmetry_pct >= 88
+                else "Noticeable left/right difference"
+            )
         ),
         "smile_detected": smile_detected,
-        "smile_intensity": round(smile_intensity, 2) if smile_intensity is not None else None,
+        "smile_intensity": (
+            round(smile_intensity, 2) if smile_intensity is not None else None
+        ),
         "left_eye_openness": left_eye_openness,
         "right_eye_openness": right_eye_openness,
         "eye_openness_label": eye_openness_label,
