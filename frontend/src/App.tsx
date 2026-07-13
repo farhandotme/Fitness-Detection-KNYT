@@ -5,6 +5,7 @@ import FingerPage from "./pages/FingerPage";
 import BicepPage from "./pages/BicepPage";
 import SquatPage from "./pages/SquatPage";
 import PushupPage from "./pages/PushupPage";
+import BodyAnalysisPage from "./pages/BodyAnalysisPage";
 
 function App() {
   return (
@@ -16,6 +17,7 @@ function App() {
           <Route path="reps" element={<BicepPage />} />
           <Route path="squat" element={<SquatPage />} />
           <Route path="pushup" element={<PushupPage />} />
+          <Route path="body-scan" element={<BodyAnalysisPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

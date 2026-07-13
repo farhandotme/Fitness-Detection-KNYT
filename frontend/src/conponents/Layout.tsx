@@ -33,6 +33,12 @@ function Layout() {
           >
             Push-ups
           </NavLink>
+          <NavLink
+            to="/body-scan"
+            className={({ isActive }) => `nav-pill ${isActive ? "active" : ""}`}
+          >
+            Body Scan
+          </NavLink>
         </nav>
       </header>
 
