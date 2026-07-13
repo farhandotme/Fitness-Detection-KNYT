@@ -4,29 +4,47 @@ import BodyResultsPanel from "../conponents/BodyResultsPanel";
 import "./BodyAnalysisPage.css";
 
 export interface BodyAnalysisResult {
+  height_in: number;
   height_cm: number;
   views_used: string[];
   warnings: string[];
   measurements: {
+    shoulder_width_in: number;
     shoulder_width_cm: number;
+    hip_width_in: number;
     hip_width_cm: number;
+    neck_length_in: number;
     neck_length_cm: number;
+    torso_length_in: number;
     torso_length_cm: number;
+    upper_arm_length_in: number;
     upper_arm_length_cm: number;
+    forearm_length_in: number;
     forearm_length_cm: number;
+    arm_length_in: number;
     arm_length_cm: number;
+    sleeve_length_in: number;
     sleeve_length_cm: number;
+    thigh_length_in: number;
     thigh_length_cm: number;
+    lower_leg_length_in: number;
     lower_leg_length_cm: number;
+    leg_length_in: number;
     leg_length_cm: number;
+    inseam_in: number;
     inseam_cm: number;
+    head_width_in: number;
     head_width_cm: number;
+    head_height_in: number;
     head_height_cm: number;
     head_size_confidence: "measured" | "estimated" | "approximate";
   };
   circumference: {
+    chest_in: number;
     chest_cm: number;
+    waist_in: number;
     waist_cm: number;
+    hip_in: number;
     hip_cm: number;
     confidence: "measured" | "estimated";
   };

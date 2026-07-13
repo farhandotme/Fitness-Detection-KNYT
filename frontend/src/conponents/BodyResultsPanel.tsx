@@ -62,77 +62,112 @@ export default function BodyResultsPanel({ result, onRescan }: Props) {
       <div className="scan-results-grid">
         <div className="scan-result-card">
           <span className="scan-result-label">Height</span>
-          <span className="scan-result-value">{result.height_cm} cm</span>
+          <span className="scan-result-value">{result.height_in} in</span>
+          <span className="scan-result-sub">{result.height_cm} cm</span>
         </div>
         <div className="scan-result-card">
           <span className="scan-result-label">Shoulder width</span>
           <span className="scan-result-value">
+            {measurements.shoulder_width_in} in
+          </span>
+          <span className="scan-result-sub">
             {measurements.shoulder_width_cm} cm
           </span>
         </div>
         <div className="scan-result-card">
           <span className="scan-result-label">Hip width</span>
           <span className="scan-result-value">
+            {measurements.hip_width_in} in
+          </span>
+          <span className="scan-result-sub">
             {measurements.hip_width_cm} cm
           </span>
         </div>
         <div className="scan-result-card">
           <span className="scan-result-label">Neck length</span>
           <span className="scan-result-value">
+            {measurements.neck_length_in} in
+          </span>
+          <span className="scan-result-sub">
             {measurements.neck_length_cm} cm
           </span>
         </div>
         <div className="scan-result-card">
           <span className="scan-result-label">Torso length</span>
           <span className="scan-result-value">
+            {measurements.torso_length_in} in
+          </span>
+          <span className="scan-result-sub">
             {measurements.torso_length_cm} cm
           </span>
         </div>
         <div className="scan-result-card">
           <span className="scan-result-label">Upper arm</span>
           <span className="scan-result-value">
+            {measurements.upper_arm_length_in} in
+          </span>
+          <span className="scan-result-sub">
             {measurements.upper_arm_length_cm} cm
           </span>
         </div>
         <div className="scan-result-card">
           <span className="scan-result-label">Forearm</span>
           <span className="scan-result-value">
+            {measurements.forearm_length_in} in
+          </span>
+          <span className="scan-result-sub">
             {measurements.forearm_length_cm} cm
           </span>
         </div>
         <div className="scan-result-card">
           <span className="scan-result-label">Full arm length</span>
           <span className="scan-result-value">
+            {measurements.arm_length_in} in
+          </span>
+          <span className="scan-result-sub">
             {measurements.arm_length_cm} cm
           </span>
         </div>
         <div className="scan-result-card">
           <span className="scan-result-label">Sleeve length</span>
           <span className="scan-result-value">
+            {measurements.sleeve_length_in} in
+          </span>
+          <span className="scan-result-sub">
             {measurements.sleeve_length_cm} cm
           </span>
         </div>
         <div className="scan-result-card">
           <span className="scan-result-label">Thigh length</span>
           <span className="scan-result-value">
+            {measurements.thigh_length_in} in
+          </span>
+          <span className="scan-result-sub">
             {measurements.thigh_length_cm} cm
           </span>
         </div>
         <div className="scan-result-card">
           <span className="scan-result-label">Lower leg length</span>
           <span className="scan-result-value">
+            {measurements.lower_leg_length_in} in
+          </span>
+          <span className="scan-result-sub">
             {measurements.lower_leg_length_cm} cm
           </span>
         </div>
         <div className="scan-result-card">
           <span className="scan-result-label">Full leg length</span>
           <span className="scan-result-value">
+            {measurements.leg_length_in} in
+          </span>
+          <span className="scan-result-sub">
             {measurements.leg_length_cm} cm
           </span>
         </div>
         <div className="scan-result-card">
           <span className="scan-result-label">Inseam</span>
-          <span className="scan-result-value">{measurements.inseam_cm} cm</span>
+          <span className="scan-result-value">{measurements.inseam_in} in</span>
+          <span className="scan-result-sub">{measurements.inseam_cm} cm</span>
         </div>
         <div className="scan-result-card">
           <span className="scan-result-label">
@@ -140,6 +175,9 @@ export default function BodyResultsPanel({ result, onRescan }: Props) {
             <ConfidenceTag level={measurements.head_size_confidence} />
           </span>
           <span className="scan-result-value">
+            {measurements.head_width_in} × {measurements.head_height_in} in
+          </span>
+          <span className="scan-result-sub">
             {measurements.head_width_cm} × {measurements.head_height_cm} cm
           </span>
         </div>
@@ -148,20 +186,23 @@ export default function BodyResultsPanel({ result, onRescan }: Props) {
             Chest circumference{" "}
             <ConfidenceTag level={circumference.confidence} />
           </span>
-          <span className="scan-result-value">{circumference.chest_cm} cm</span>
+          <span className="scan-result-value">{circumference.chest_in} in</span>
+          <span className="scan-result-sub">{circumference.chest_cm} cm</span>
         </div>
         <div className="scan-result-card">
           <span className="scan-result-label">
             Waist circumference{" "}
             <ConfidenceTag level={circumference.confidence} />
           </span>
-          <span className="scan-result-value">{circumference.waist_cm} cm</span>
+          <span className="scan-result-value">{circumference.waist_in} in</span>
+          <span className="scan-result-sub">{circumference.waist_cm} cm</span>
         </div>
         <div className="scan-result-card">
           <span className="scan-result-label">
             Hip circumference <ConfidenceTag level={circumference.confidence} />
           </span>
-          <span className="scan-result-value">{circumference.hip_cm} cm</span>
+          <span className="scan-result-value">{circumference.hip_in} in</span>
+          <span className="scan-result-sub">{circumference.hip_cm} cm</span>
         </div>
       </div>
 

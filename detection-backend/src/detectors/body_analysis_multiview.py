@@ -54,10 +54,12 @@ from src.detectors.body_analysis import (
     _chain_length_cm,
     _classify_build,
     _classify_leg_torso_ratio,
+    _cm_to_in,
     _compute_px_per_cm,
     _estimate_head_size_cm,
     _hex,
     _landmark_width_cm,
+    _with_in,
     _mid,
     _nearest_label,
     _pct_match,
@@ -399,10 +401,11 @@ def analyze_body_multiview(
     )
 
     result: dict[str, Any] = {
+        "height_in": round(_cm_to_in(height_cm), 2),
         "height_cm": round(height_cm, 1),
         "views_used": views_used,
         "warnings": warnings,
-        "measurements": {
+        "measurements": _with_in({
             "shoulder_width_cm": round(shoulder_width_cm, 1),
             "hip_width_cm": round(hip_width_cm, 1),
             "neck_length_cm": round(neck_length_cm, 1),
@@ -418,13 +421,13 @@ def analyze_body_multiview(
             "head_width_cm": head_size["head_width_cm"],
             "head_height_cm": head_size["head_height_cm"],
             "head_size_confidence": head_size["confidence"],
-        },
-        "circumference": {
+        }),
+        "circumference": _with_in({
             "chest_cm": round(chest_circumference_cm, 1),
             "waist_cm": round(waist_circumference_cm, 1),
             "hip_cm": round(hip_circumference_cm, 1),
             "confidence": depth_confidence,
-        },
+        }),
         "body_proportions": {
             "shoulder_to_waist_ratio": round(shoulder_to_waist, 3),
             "waist_to_hip_ratio": round(waist_to_hip, 3),

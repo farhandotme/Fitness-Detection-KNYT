@@ -230,6 +230,32 @@ def check_full_body_visible(landmarks, is_side_view: bool = False) -> None:
 
 
 # -------------------------------------------------------------------------
+# cm -> inches conversion (inches is the primary unit shown to the user;
+# cm is kept alongside as a secondary reference value).
+# -------------------------------------------------------------------------
+
+CM_PER_INCH = 2.54
+
+
+def _cm_to_in(cm: float) -> float:
+    """Decimal inches, e.g. 175 cm -> 68.9 in."""
+    return cm / CM_PER_INCH
+
+
+def _with_in(cm_dict: dict[str, Any]) -> dict[str, Any]:
+    """Given a dict of *_cm (and other) fields, returns a new dict where
+    every *_cm numeric field is followed by a matching *_in field, in
+    decimal inches. Non-*_cm fields (confidence strings, etc.) pass through
+    unchanged."""
+    out: dict[str, Any] = {}
+    for key, value in cm_dict.items():
+        out[key] = value
+        if key.endswith("_cm") and isinstance(value, (int, float)):
+            out[key[: -len("_cm")] + "_in"] = round(_cm_to_in(float(value)), 2)
+    return out
+
+
+# -------------------------------------------------------------------------
 # Scale + linear measurements
 # -------------------------------------------------------------------------
 
@@ -1011,9 +1037,10 @@ def analyze_body(
     appearance_extra = _assess_appearance_extra(landmarks, frame_rgb, mask, w, h)
 
     result: dict[str, Any] = {
+        "height_in": round(_cm_to_in(height_cm), 2),
         "height_cm": round(height_cm, 1),
         "warnings": warnings,
-        "measurements": {
+        "measurements": _with_in({
             "shoulder_width_cm": round(shoulder_width_cm, 1),
             "hip_width_cm": round(hip_width_cm, 1),
             "waist_width_cm": round(waist_width_cm, 1),
@@ -1031,7 +1058,7 @@ def analyze_body(
             "head_width_cm": head_size["head_width_cm"],
             "head_height_cm": head_size["head_height_cm"],
             "head_size_confidence": head_size["confidence"],
-        },
+        }),
         "body_proportions": {
             "shoulder_to_waist_ratio": round(shoulder_to_waist, 3),
             "waist_to_hip_ratio": round(waist_to_hip, 3),
