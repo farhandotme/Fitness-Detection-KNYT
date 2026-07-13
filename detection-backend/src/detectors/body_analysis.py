@@ -52,7 +52,7 @@ Nothing here is a medical or tailoring-grade measurement. See the
 """
 
 import math
-from typing import Any, Optional
+from typing import Any, NamedTuple, Optional
 
 import numpy as np
 
@@ -158,9 +158,42 @@ def _mid(a, b, w: int, h: int) -> np.ndarray:
     return (_px(a, w, h) + _px(b, w, h)) / 2.0
 
 
-def check_full_body_visible(landmarks) -> None:
+def check_full_body_visible(landmarks, is_side_view: bool = False) -> None:
     """Raises BodyScanError with a user-facing message if the frame doesn't
-    show a clean head-to-ankle view. Call this before doing anything else."""
+    show a clean head-to-ankle view. Call this before doing anything else.
+
+    `is_side_view=True` is for left/right photos in a multi-view scan,
+    where the person is turned ~90 degrees on purpose. Two things follow
+    from that on purpose:
+      1. Shoulder width naturally collapses -- that's the whole point of
+         a side photo, so we skip the "shoulders look too narrow" check.
+      2. The FAR leg is genuinely, physically occluded by the near leg in
+         a true profile shot. MediaPipe correctly reports low visibility
+         for it -- that's the model being honest about not being able to
+         see something, not a bad photo. Requiring BOTH legs' landmarks
+         (like the front-facing check does) rejects every correctly-taken
+         side photo. We only require ONE full leg chain (whichever side
+         is actually facing the camera) plus the head.
+    """
+
+    head_ok = getattr(landmarks[NOSE], "visibility", 1.0) >= MIN_VISIBILITY
+
+    if is_side_view:
+
+        def chain_visibility(idxs) -> float:
+            return min(getattr(landmarks[i], "visibility", 1.0) for i in idxs)
+
+        left_chain = chain_visibility((LEFT_SHOULDER, LEFT_HIP, LEFT_KNEE, LEFT_ANKLE))
+        right_chain = chain_visibility(
+            (RIGHT_SHOULDER, RIGHT_HIP, RIGHT_KNEE, RIGHT_ANKLE)
+        )
+
+        if not head_ok or max(left_chain, right_chain) < MIN_VISIBILITY:
+            raise BodyScanError(
+                "Full body isn't visible — step back so your head and both "
+                "feet are inside the frame."
+            )
+        return
 
     required = {
         "head": NOSE,
@@ -251,35 +284,131 @@ def _segment_lengths(landmarks, w, h, px_per_cm) -> dict[str, float]:
     }
 
 
-def _silhouette_width_cm(
-    mask: np.ndarray, center_x_px: float, row_y_px: float, px_per_cm: float
-) -> Optional[float]:
-    """Scans one row of the segmentation mask outward from center_x_px and
-    returns the width (in cm) of the contiguous "person" region there."""
+def _arm_clamp_px(
+    landmarks, w: int, h: int, row_y_px: float, center_x_px: float
+) -> tuple[float, float]:
+    """Returns (left_bound_px, right_bound_px) the silhouette scan must not
+    cross, derived from where THIS person's elbow/wrist actually are in
+    THIS photo.
 
-    row = int(np.clip(row_y_px, 0, mask.shape[0] - 1))
-    cx = int(np.clip(center_x_px, 0, mask.shape[1] - 1))
-    line = mask[row]
+    Why this exists
+    ----------------
+    In a natural standing pose, arms hang at the sides and their silhouette
+    touches (or overlaps) the torso silhouette at exactly chest/waist/hip
+    height — the segmentation mask has no "arm" category distinct from
+    "torso" (both are BODY_SKIN/CLOTHES), so a plain contiguous-region scan
+    from the torso center doesn't stop at the true torso edge, it keeps
+    going straight out through the arm. That silently inflates waist/chest
+    readings by several centimeters for anyone photographed with relaxed
+    arms — which is most people, since "hold your arms slightly out" is
+    not something anyone thinks to do unprompted.
+
+    Real body-scanning apps solve this by instructing an A-pose. We can't
+    force that, so instead we clamp the scan to the nearer of (elbow,
+    wrist) on each side whenever that landmark sits close to this row's
+    height — the true torso edge is always strictly between the body
+    center and the arm attachment point, so this bound can only ever
+    correct the reading toward truth, never away from it.
+    """
+    left_bound, right_bound = 0.0, float("inf")
+
+    for elbow_idx, wrist_idx in ((LEFT_ELBOW, LEFT_WRIST), (RIGHT_ELBOW, RIGHT_WRIST)):
+        elbow_px = _px(landmarks[elbow_idx], w, h)
+        wrist_px = _px(landmarks[wrist_idx], w, h)
+        # Whichever of elbow/wrist is vertically closer to this row is the
+        # more relevant bound for it (e.g. waist height is usually nearer
+        # the wrist, chest height nearer the elbow).
+        candidate = (
+            elbow_px
+            if abs(elbow_px[1] - row_y_px) <= abs(wrist_px[1] - row_y_px)
+            else wrist_px
+        )
+        if candidate[0] < center_x_px:
+            left_bound = max(left_bound, candidate[0])
+        else:
+            right_bound = min(right_bound, candidate[0])
+
+    return left_bound, right_bound
+
+
+class SilhouetteReading(NamedTuple):
+    width_cm: Optional[float]
+    arm_contact: bool  # True if the arm clamp actually had to cut the scan short
+
+
+def _silhouette_width_cm(
+    mask: np.ndarray,
+    center_x_px: float,
+    row_y_px: float,
+    px_per_cm: float,
+    left_bound_px: float = 0.0,
+    right_bound_px: Optional[float] = None,
+    band_px: int = 0,
+) -> SilhouetteReading:
+    """Scans one or more rows of the segmentation mask outward from
+    center_x_px and returns the median width (in cm) of the contiguous
+    "person" region there.
+
+    `left_bound_px`/`right_bound_px` hard-stop the outward scan (see
+    `_arm_clamp_px`) so it can't bleed past a nearby arm into an inflated
+    reading. `band_px` averages over `2*band_px + 1` adjacent rows
+    (median, not mean, so a single noisy row — a clothing fold, a hair
+    strand crossing the silhouette edge — can't skew the result the way
+    reading exactly one row can).
+
+    `arm_contact` comes back True if the scan actually hit one of those
+    bounds instead of reaching real background on its own — meaning the
+    arm's silhouette was touching the torso at this row, and the reading,
+    while clamped, still can't fully isolate the true torso edge (the
+    landmark sits inside the arm's own width, not exactly at its inner
+    edge). Treat width_cm as lower-confidence when this is True.
+    """
 
     def _is_person(v):
         return v != BACKGROUND
 
-    if not _is_person(line[cx]):
-        # Center pixel missed the body (mask noise) — no reliable reading.
-        return None
+    def _row_width(row: int) -> Optional[tuple[float, bool]]:
+        row = int(np.clip(row, 0, mask.shape[0] - 1))
+        cx = int(np.clip(center_x_px, 0, mask.shape[1] - 1))
+        lo = int(np.clip(left_bound_px, 0, mask.shape[1] - 1))
+        hi = int(
+            np.clip(
+                right_bound_px if right_bound_px is not None else mask.shape[1] - 1,
+                0,
+                mask.shape[1] - 1,
+            )
+        )
+        line = mask[row]
 
-    left = cx
-    while left > 0 and _is_person(line[left - 1]):
-        left -= 1
-    right = cx
-    while right < len(line) - 1 and _is_person(line[right + 1]):
-        right += 1
+        if not _is_person(line[cx]):
+            return None
 
-    width_px = right - left
-    if width_px <= 0:
-        return None
+        left = cx
+        while left > lo and _is_person(line[left - 1]):
+            left -= 1
+        hit_left_bound = left == lo and _is_person(line[max(left - 1, 0)])
 
-    return float(width_px / px_per_cm)
+        right = cx
+        while right < hi and _is_person(line[right + 1]):
+            right += 1
+        hit_right_bound = right == hi and _is_person(
+            line[min(right + 1, len(line) - 1)]
+        )
+
+        width_px = right - left
+        if width_px <= 0:
+            return None
+        return float(width_px), (hit_left_bound or hit_right_bound)
+
+    row0 = int(np.clip(row_y_px, 0, mask.shape[0] - 1))
+    raw = [_row_width(row0 + dy) for dy in range(-band_px, band_px + 1)]
+    readings = [r for r in raw if r is not None]
+    if not readings:
+        return SilhouetteReading(None, False)
+
+    widths = [r[0] for r in readings]
+    any_contact = any(r[1] for r in readings)
+    return SilhouetteReading(float(np.median(widths) / px_per_cm), any_contact)
 
 
 def _nearest_label(
@@ -794,13 +923,33 @@ def analyze_body(
 
     waist_width_cm: Optional[float] = None
     waist_confidence = "estimated"
+    warnings: list[str] = []
 
     if mask is not None:
-        waist_width_cm = _silhouette_width_cm(
-            mask, waist_center_x, waist_row_y, px_per_cm
+        left_bound, right_bound = _arm_clamp_px(
+            landmarks, w, h, waist_row_y, waist_center_x
         )
+        reading = _silhouette_width_cm(
+            mask,
+            waist_center_x,
+            waist_row_y,
+            px_per_cm,
+            left_bound_px=left_bound,
+            right_bound_px=right_bound,
+            band_px=3,
+        )
+        waist_width_cm = reading.width_cm
         if waist_width_cm is not None:
-            waist_confidence = "measured"
+            waist_confidence = (
+                "measured_low_confidence" if reading.arm_contact else "measured"
+            )
+            if reading.arm_contact:
+                warnings.append(
+                    "Arms appear to be resting against your torso in this photo — "
+                    "waist/chest width may still run a bit wide. For the most "
+                    "accurate reading, retake with arms held slightly away from "
+                    "your sides."
+                )
 
     if waist_width_cm is None:
         waist_width_cm = shoulder_width_cm + WAIST_FRACTION * (
@@ -863,6 +1012,7 @@ def analyze_body(
 
     result: dict[str, Any] = {
         "height_cm": round(height_cm, 1),
+        "warnings": warnings,
         "measurements": {
             "shoulder_width_cm": round(shoulder_width_cm, 1),
             "hip_width_cm": round(hip_width_cm, 1),

@@ -48,6 +48,7 @@ from src.detectors.body_analysis import (
     SKIN_TONE_PALETTE,
     WAIST_FRACTION,
     BodyScanError,
+    _arm_clamp_px,
     _assess_appearance_extra,
     _assess_posture,
     _chain_length_cm,
@@ -109,9 +110,11 @@ def _ellipse_circumference_cm(width_cm: float, depth_cm: float) -> float:
     return float(math.pi * (3 * (a + b) - math.sqrt((3 * a + b) * (a + 3 * b))))
 
 
-def _view_metrics(view: ViewInput, height_cm: float) -> dict[str, Any]:
+def _view_metrics(
+    view: ViewInput, height_cm: float, is_side_view: bool = False
+) -> dict[str, Any]:
     landmarks, frame_bgr, mask = view
-    check_full_body_visible(landmarks)
+    check_full_body_visible(landmarks, is_side_view=is_side_view)
 
     h, w = frame_bgr.shape[:2]
     px_per_cm = _compute_px_per_cm(landmarks, w, h, height_cm)
@@ -119,15 +122,28 @@ def _view_metrics(view: ViewInput, height_cm: float) -> dict[str, Any]:
     shoulder_mid = _mid(landmarks[LEFT_SHOULDER], landmarks[RIGHT_SHOULDER], w, h)
     hip_mid = _mid(landmarks[LEFT_HIP], landmarks[RIGHT_HIP], w, h)
 
-    shoulder_width_cm = _landmark_width_cm(landmarks[LEFT_SHOULDER], landmarks[RIGHT_SHOULDER], w, h, px_per_cm)
-    hip_width_cm = _landmark_width_cm(landmarks[LEFT_HIP], landmarks[RIGHT_HIP], w, h, px_per_cm)
+    shoulder_width_cm = _landmark_width_cm(
+        landmarks[LEFT_SHOULDER], landmarks[RIGHT_SHOULDER], w, h, px_per_cm
+    )
+    hip_width_cm = _landmark_width_cm(
+        landmarks[LEFT_HIP], landmarks[RIGHT_HIP], w, h, px_per_cm
+    )
 
-    def row_width_cm(fraction: float) -> Optional[float]:
+    def row_width_cm(fraction: float):
         if mask is None:
             return None
         row_y = shoulder_mid[1] + fraction * (hip_mid[1] - shoulder_mid[1])
         row_x = shoulder_mid[0] + fraction * (hip_mid[0] - shoulder_mid[0])
-        return _silhouette_width_cm(mask, row_x, row_y, px_per_cm)
+        left_bound, right_bound = _arm_clamp_px(landmarks, w, h, row_y, row_x)
+        return _silhouette_width_cm(
+            mask,
+            row_x,
+            row_y,
+            px_per_cm,
+            left_bound_px=left_bound,
+            right_bound_px=right_bound,
+            band_px=3,
+        )
 
     return {
         "px_per_cm": px_per_cm,
@@ -149,6 +165,17 @@ def _view_metrics(view: ViewInput, height_cm: float) -> dict[str, Any]:
 def _avg(values: list[Optional[float]]) -> Optional[float]:
     vals = [v for v in values if v is not None]
     return sum(vals) / len(vals) if vals else None
+
+
+def _avg_readings(readings: list) -> tuple[Optional[float], bool]:
+    """Averages a list of Optional[SilhouetteReading] (e.g. chest_row_cm
+    from front + back) into (width_cm, any_arm_contact)."""
+    usable = [r for r in readings if r is not None and r.width_cm is not None]
+    if not usable:
+        return None, False
+    width = sum(r.width_cm for r in usable) / len(usable)
+    arm_contact = any(r.arm_contact for r in usable)
+    return width, arm_contact
 
 
 def analyze_body_multiview(
@@ -182,7 +209,7 @@ def analyze_body_multiview(
         if view is None:
             continue
         try:
-            side_metrics.append(_view_metrics(view, height_cm))
+            side_metrics.append(_view_metrics(view, height_cm, is_side_view=True))
             views_used.append(label)
         except BodyScanError as e:
             warnings.append(f"{label.capitalize()} photo skipped: {e}")
@@ -198,22 +225,43 @@ def analyze_body_multiview(
     front_back = [front_m] + ([back_m] if back_m else [])
     shoulder_width_cm = _avg([m["shoulder_width_cm"] for m in front_back])
     hip_width_landmark_cm = _avg([m["hip_width_cm"] for m in front_back])
-    chest_width_cm = _avg([m["chest_row_cm"] for m in front_back])
-    waist_width_cm = _avg([m["waist_row_cm"] for m in front_back])
-    hip_width_cm = _avg([m["hip_row_cm"] for m in front_back]) or hip_width_landmark_cm
+    chest_width_cm, chest_arm_contact = _avg_readings(
+        [m["chest_row_cm"] for m in front_back]
+    )
+    waist_width_cm, waist_arm_contact = _avg_readings(
+        [m["waist_row_cm"] for m in front_back]
+    )
+    hip_width_cm, hip_arm_contact = _avg_readings([m["hip_row_cm"] for m in front_back])
+    hip_width_cm = hip_width_cm or hip_width_landmark_cm
+
+    if chest_arm_contact or waist_arm_contact or hip_arm_contact:
+        warnings.append(
+            "Arms appear to be resting against your torso in the front/back "
+            "photo — chest/waist/hip width may still run a bit wide even "
+            "after correction. For the most accurate reading, retake with "
+            "arms held slightly away from your sides."
+        )
 
     # Fallbacks when the segmentation mask wasn't available at all.
     if waist_width_cm is None:
-        waist_width_cm = shoulder_width_cm + WAIST_FRACTION * (hip_width_landmark_cm - shoulder_width_cm)
+        waist_width_cm = shoulder_width_cm + WAIST_FRACTION * (
+            hip_width_landmark_cm - shoulder_width_cm
+        )
     if chest_width_cm is None:
-        chest_width_cm = shoulder_width_cm + CHEST_FRACTION * (hip_width_landmark_cm - shoulder_width_cm)
+        chest_width_cm = shoulder_width_cm + CHEST_FRACTION * (
+            hip_width_landmark_cm - shoulder_width_cm
+        )
 
     # --- Depth: average left + right ---------------------------------------
-    chest_depth_cm = _avg([m["chest_row_cm"] for m in side_metrics])
-    waist_depth_cm = _avg([m["waist_row_cm"] for m in side_metrics])
-    hip_depth_cm = _avg([m["hip_row_cm"] for m in side_metrics])
+    chest_depth_cm, _ = _avg_readings([m["chest_row_cm"] for m in side_metrics])
+    waist_depth_cm, _ = _avg_readings([m["waist_row_cm"] for m in side_metrics])
+    hip_depth_cm, _ = _avg_readings([m["hip_row_cm"] for m in side_metrics])
 
-    depth_confidence = "measured" if any(v is not None for v in (chest_depth_cm, waist_depth_cm, hip_depth_cm)) else "estimated"
+    depth_confidence = (
+        "measured"
+        if any(v is not None for v in (chest_depth_cm, waist_depth_cm, hip_depth_cm))
+        else "estimated"
+    )
 
     if chest_depth_cm is None:
         chest_depth_cm = chest_width_cm * DEPTH_RATIO_FALLBACK["chest"]
@@ -233,11 +281,18 @@ def analyze_body_multiview(
     # width-only proxy the single-photo version had to use.
     waist_to_height = waist_circumference_cm / height_cm
     shoulder_to_waist = shoulder_width_cm / waist_width_cm if waist_width_cm else 0.0
-    waist_to_hip = waist_circumference_cm / hip_circumference_cm if hip_circumference_cm else 0.0
+    waist_to_hip = (
+        waist_circumference_cm / hip_circumference_cm if hip_circumference_cm else 0.0
+    )
     build_estimate = _classify_build(waist_to_height, shoulder_to_waist)
 
     # --- Limb lengths + everything else geometric, from the front photo ---
-    landmarks, w, h, px_per_cm = front_m["landmarks"], front_m["w"], front_m["h"], front_m["px_per_cm"]
+    landmarks, w, h, px_per_cm = (
+        front_m["landmarks"],
+        front_m["w"],
+        front_m["h"],
+        front_m["px_per_cm"],
+    )
 
     seg = _segment_lengths(landmarks, w, h, px_per_cm)
     upper_arm_cm = (seg["upper_arm_l"] + seg["upper_arm_r"]) / 2
@@ -246,16 +301,40 @@ def analyze_body_multiview(
     lower_leg_cm = (seg["lower_leg_l"] + seg["lower_leg_r"]) / 2
 
     arm_length_cm = (
-        _chain_length_cm([landmarks[LEFT_SHOULDER], landmarks[LEFT_ELBOW], landmarks[LEFT_WRIST]], w, h, px_per_cm)
-        + _chain_length_cm([landmarks[RIGHT_SHOULDER], landmarks[RIGHT_ELBOW], landmarks[RIGHT_WRIST]], w, h, px_per_cm)
+        _chain_length_cm(
+            [landmarks[LEFT_SHOULDER], landmarks[LEFT_ELBOW], landmarks[LEFT_WRIST]],
+            w,
+            h,
+            px_per_cm,
+        )
+        + _chain_length_cm(
+            [landmarks[RIGHT_SHOULDER], landmarks[RIGHT_ELBOW], landmarks[RIGHT_WRIST]],
+            w,
+            h,
+            px_per_cm,
+        )
     ) / 2
     leg_length_cm = (
-        _chain_length_cm([landmarks[LEFT_HIP], landmarks[LEFT_KNEE], landmarks[LEFT_ANKLE]], w, h, px_per_cm)
-        + _chain_length_cm([landmarks[RIGHT_HIP], landmarks[RIGHT_KNEE], landmarks[RIGHT_ANKLE]], w, h, px_per_cm)
+        _chain_length_cm(
+            [landmarks[LEFT_HIP], landmarks[LEFT_KNEE], landmarks[LEFT_ANKLE]],
+            w,
+            h,
+            px_per_cm,
+        )
+        + _chain_length_cm(
+            [landmarks[RIGHT_HIP], landmarks[RIGHT_KNEE], landmarks[RIGHT_ANKLE]],
+            w,
+            h,
+            px_per_cm,
+        )
     ) / 2
-    torso_length_cm = float(np.linalg.norm(front_m["hip_mid"] - front_m["shoulder_mid"]) / px_per_cm)
+    torso_length_cm = float(
+        np.linalg.norm(front_m["hip_mid"] - front_m["shoulder_mid"]) / px_per_cm
+    )
     ear_mid = _mid(landmarks[LEFT_EAR], landmarks[RIGHT_EAR], w, h)
-    neck_length_cm = float(np.linalg.norm(ear_mid - front_m["shoulder_mid"]) / px_per_cm)
+    neck_length_cm = float(
+        np.linalg.norm(ear_mid - front_m["shoulder_mid"]) / px_per_cm
+    )
     ankle_mid = _mid(landmarks[LEFT_ANKLE], landmarks[RIGHT_ANKLE], w, h)
     inseam_cm = float(np.linalg.norm(ankle_mid - front_m["hip_mid"]) / px_per_cm)
     sleeve_length_cm = neck_length_cm * 0.5 + arm_length_cm
@@ -285,7 +364,9 @@ def analyze_body_multiview(
     skin_confidence = "estimated"
     skin_rgb = None
     if front_m["mask"] is not None:
-        skin_rgb = _sample_mask_color(frame_rgb, front_m["mask"], {BODY_SKIN, FACE_SKIN})
+        skin_rgb = _sample_mask_color(
+            frame_rgb, front_m["mask"], {BODY_SKIN, FACE_SKIN}
+        )
         if skin_rgb is not None:
             skin_confidence = "measured"
     if skin_rgb is None:
@@ -313,7 +394,9 @@ def analyze_body_multiview(
         hair_point = np.array([eye_mid[0], max(0.0, eye_mid[1] - head_span)])
         hair_rgb = _sample_patch_color(frame_rgb, hair_point)
 
-    appearance_extra = _assess_appearance_extra(landmarks, frame_rgb, front_m["mask"], w, h)
+    appearance_extra = _assess_appearance_extra(
+        landmarks, frame_rgb, front_m["mask"], w, h
+    )
 
     result: dict[str, Any] = {
         "height_cm": round(height_cm, 1),
