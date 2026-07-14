@@ -12,7 +12,11 @@ from mediapipe.tasks.python import vision
 # Configuration
 # -------------------------------
 
-MODEL_PATH = str(Path(__file__).resolve().parent.parent / "landmark-packages" / "hand_landmarker.task")
+MODEL_PATH = str(
+    Path(__file__).resolve().parent.parent
+    / "landmark-packages"
+    / "hand_landmarker.task"
+)
 
 NUM_HANDS = 2
 MIN_DETECTION_CONFIDENCE = 0.6

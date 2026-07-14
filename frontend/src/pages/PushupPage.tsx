@@ -354,8 +354,8 @@ function PushupPage() {
                 Get down on the floor into a high plank: hands under your
                 shoulders, body in a straight line from head to heels. Camera
                 can be positioned to your side (recommended, shows your full
-                body line) or in front of you at floor level — reps only
-                count once a real plank position is confirmed.
+                body line) or in front of you at floor level — reps only count
+                once a real plank position is confirmed.
               </div>
 
               <button className="start-btn full-width" onClick={handleStart}>

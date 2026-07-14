@@ -1,4 +1,3 @@
-
 import os
 from pathlib import Path
 from typing import Optional
@@ -9,7 +8,11 @@ from mediapipe.tasks import python as mp_python
 from mediapipe.tasks.python import vision
 from mediapipe.tasks.python.components.containers.landmark import NormalizedLandmark
 
-MODEL_PATH = str(Path(__file__).resolve().parent.parent / "landmark-packages" / "pose_landmarker.task")
+MODEL_PATH = str(
+    Path(__file__).resolve().parent.parent
+    / "landmark-packages"
+    / "pose_landmarker.task"
+)
 
 # Defaults tuned for close-up rep counting (squats/curls/pushups), where the
 # person fills most of the frame and landmarks are large and sharp.

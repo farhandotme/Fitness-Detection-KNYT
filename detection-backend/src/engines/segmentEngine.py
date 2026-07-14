@@ -1,5 +1,3 @@
-
-
 import logging
 import os
 from pathlib import Path
@@ -16,7 +14,11 @@ from mediapipe.tasks.python import vision
 # any other launch cwd (a different terminal dir, a process manager, a
 # different WORKDIR) made os.path.exists() silently return False with no
 # error, so segmentation quietly degraded with zero indication why.
-MODEL_PATH = str(Path(__file__).resolve().parent.parent / "landmark-packages" / "selfie_multiclass.tflite")
+MODEL_PATH = str(
+    Path(__file__).resolve().parent.parent
+    / "landmark-packages"
+    / "selfie_multiclass.tflite"
+)
 
 BACKGROUND = 0
 HAIR = 1

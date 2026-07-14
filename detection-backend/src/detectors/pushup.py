@@ -1,5 +1,3 @@
-
-
 import math
 from typing import Any, Optional
 from src.engines.poseEngine import (  # type: ignore
@@ -202,7 +200,9 @@ def _framing_feedback(points: list[_Point]) -> Optional[str]:
             or p.y < FRAME_EDGE_MARGIN
             or p.y > 1 - FRAME_EDGE_MARGIN
         ):
-            return "You're partly out of frame — reposition so your whole body is visible."
+            return (
+                "You're partly out of frame — reposition so your whole body is visible."
+            )
 
     if len(points) < 4:
         return None
@@ -213,7 +213,9 @@ def _framing_feedback(points: list[_Point]) -> Optional[str]:
     height = max(ys) - min(ys)
 
     if width > BBOX_TOO_CLOSE or height > BBOX_TOO_CLOSE:
-        return "You're too close to the camera — back up so your whole body fits in frame."
+        return (
+            "You're too close to the camera — back up so your whole body fits in frame."
+        )
     if width < BBOX_TOO_FAR and height < BBOX_TOO_FAR:
         return "You're too far from the camera — move closer for accurate tracking."
 
@@ -227,7 +229,9 @@ class PushupAnalyzer:
         self.target_reps = target_reps
 
         # Rep state machine
-        self.stage = "down"  # "down" = arms extended (top/rest), "up" = arms bent (bottom)
+        self.stage = (
+            "down"  # "down" = arms extended (top/rest), "up" = arms bent (bottom)
+        )
         self.rep_count = 0
         self.good_reps = 0
         self.flawed_reps = 0
@@ -423,9 +427,7 @@ class PushupAnalyzer:
 
         # ---- elbow angles (drive rep counting) ----
         left_angle = _angle_deg(l_shoulder, l_elbow, l_wrist) if left_arm_ok else None
-        right_angle = (
-            _angle_deg(r_shoulder, r_elbow, r_wrist) if right_arm_ok else None
-        )
+        right_angle = _angle_deg(r_shoulder, r_elbow, r_wrist) if right_arm_ok else None
         angles = [a for a in (left_angle, right_angle) if a is not None]
         raw_angle = sum(angles) / len(angles)
 
@@ -574,13 +576,9 @@ class PushupAnalyzer:
                                 f"Clean rep — {rep_class} tempo ({rep_duration:.2f}s)."
                             )
                         elif rep_class in ("slow", "too_slow"):
-                            feedback = (
-                                f"Good depth, nice and controlled ({rep_duration:.2f}s)."
-                            )
+                            feedback = f"Good depth, nice and controlled ({rep_duration:.2f}s)."
                         else:
-                            feedback = (
-                                f"Clean rep, but control the tempo ({rep_duration:.2f}s)."
-                            )
+                            feedback = f"Clean rep, but control the tempo ({rep_duration:.2f}s)."
                 else:
                     rep_completed = False
                     if rep_duration is not None and rep_duration < MIN_REP_DURATION:

@@ -1,5 +1,3 @@
-
-
 import math
 from typing import Any, NamedTuple, Optional
 
@@ -367,29 +365,33 @@ def analyze_body_multiview(
         "height_cm": round(height_cm, 1),
         "views_used": views_used,
         "warnings": warnings,
-        "measurements": _with_in({
-            "shoulder_width_cm": round(shoulder_width_cm, 1),
-            "hip_width_cm": round(hip_width_cm, 1),
-            "neck_length_cm": round(neck_length_cm, 1),
-            "torso_length_cm": round(torso_length_cm, 1),
-            "upper_arm_length_cm": round(upper_arm_cm, 1),
-            "forearm_length_cm": round(forearm_cm, 1),
-            "arm_length_cm": round(arm_length_cm, 1),
-            "sleeve_length_cm": round(sleeve_length_cm, 1),
-            "thigh_length_cm": round(thigh_cm, 1),
-            "lower_leg_length_cm": round(lower_leg_cm, 1),
-            "leg_length_cm": round(leg_length_cm, 1),
-            "inseam_cm": round(inseam_cm, 1),
-            "head_width_cm": head_size["head_width_cm"],
-            "head_height_cm": head_size["head_height_cm"],
-            "head_size_confidence": head_size["confidence"],
-        }),
-        "circumference": _with_in({
-            "chest_cm": round(chest_circumference_cm, 1),
-            "waist_cm": round(waist_circumference_cm, 1),
-            "hip_cm": round(hip_circumference_cm, 1),
-            "confidence": depth_confidence,
-        }),
+        "measurements": _with_in(
+            {
+                "shoulder_width_cm": round(shoulder_width_cm, 1),
+                "hip_width_cm": round(hip_width_cm, 1),
+                "neck_length_cm": round(neck_length_cm, 1),
+                "torso_length_cm": round(torso_length_cm, 1),
+                "upper_arm_length_cm": round(upper_arm_cm, 1),
+                "forearm_length_cm": round(forearm_cm, 1),
+                "arm_length_cm": round(arm_length_cm, 1),
+                "sleeve_length_cm": round(sleeve_length_cm, 1),
+                "thigh_length_cm": round(thigh_cm, 1),
+                "lower_leg_length_cm": round(lower_leg_cm, 1),
+                "leg_length_cm": round(leg_length_cm, 1),
+                "inseam_cm": round(inseam_cm, 1),
+                "head_width_cm": head_size["head_width_cm"],
+                "head_height_cm": head_size["head_height_cm"],
+                "head_size_confidence": head_size["confidence"],
+            }
+        ),
+        "circumference": _with_in(
+            {
+                "chest_cm": round(chest_circumference_cm, 1),
+                "waist_cm": round(waist_circumference_cm, 1),
+                "hip_cm": round(hip_circumference_cm, 1),
+                "confidence": depth_confidence,
+            }
+        ),
         "body_proportions": {
             "shoulder_to_waist_ratio": round(shoulder_to_waist, 3),
             "waist_to_hip_ratio": round(waist_to_hip, 3),
