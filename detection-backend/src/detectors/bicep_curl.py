@@ -1,43 +1,4 @@
-"""
-Bicep curl rep counting + posture correction.
 
-Design
-------
-`ArmCurlAnalyzer` is a pure, stateful, per-arm analyzer. It knows nothing
-about the camera or the MediaPipe model — you feed it the 33-point pose
-landmark list (or None) each frame and it returns rep count, tempo, and
-form/posture feedback. Because it's decoupled from the model, "both arms"
-mode can run the (expensive) pose model exactly ONCE per frame via a single
-shared `PoseEngine` and feed the same landmarks into two analyzers, instead
-of the old approach of running the whole pose model twice per frame.
-
-Posture correction
--------------------
-Three form issues are actively detected, each calibrated against the
-person's own relaxed starting posture (captured automatically during the
-first ~15 "arm extended" frames, so it works regardless of body type,
-distance from camera, or camera angle):
-
-  * elbow_flare    — the upper arm should stay pinned to the torso; if the
-                      elbow drifts forward/outward beyond the person's own
-                      baseline, that's a flare (a very common curl mistake).
-  * torso_sway     — leaning/rocking the torso to "help" the weight up
-                      (using back momentum instead of the biceps).
-  * shoulder_shrug — hiking the shoulder up toward the ear instead of
-                      isolating the elbow joint.
-
-A rep is still counted the moment it meets the range-of-motion and tempo
-requirements (a flawed-form rep still counts as a rep — "perfect or
-nothing" counting is discouraging), but it's tagged
-`rep_form_quality: "needs_improvement"` with the specific issue(s), and a
-running `good_reps` / `flawed_reps` split is kept for the session summary.
-
-A "partial rep" heuristic also fires live coaching ("curl higher") when the
-user visibly starts a curl but reverses direction before reaching a real
-contraction — this does NOT get counted (correctly — it never crosses the
-rep-completion threshold), it just adds an explanatory feedback message
-instead of silence.
-"""
 
 import math
 from typing import Any, Optional

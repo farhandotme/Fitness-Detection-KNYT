@@ -14,15 +14,6 @@ from src.engines.poseEngine import PoseEngine
 from src.engines.segmentEngine import SegmentEngine
 
 router = APIRouter()
-
-# All three models are expensive to load — create once at import time and
-# reuse across requests, same as the pattern used for the websocket
-# sessions.
-#
-# IMAGE mode + lower confidence thresholds: a full-body-distance photo has
-# much lower per-landmark confidence than the close-up rep-counting frames
-# the default thresholds were tuned for (the person occupies far less of
-# the frame), so the default 0.75 thresholds were rejecting valid detections.
 _pose_engine = PoseEngine(
     running_mode=vision.RunningMode.IMAGE,
     min_detection_confidence=0.4,

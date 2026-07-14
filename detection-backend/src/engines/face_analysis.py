@@ -1,42 +1,4 @@
-"""
-Face analysis — the counterpart to PoseEngine/SegmentEngine for everything
-that needs a real face model rather than the 33-point body pose.
 
-Why this is a separate model
-------------------------------
-MediaPipe Pose gives 5 face-adjacent points (nose, eyes, ears, mouth
-corners) — enough for head-tilt and a rough head-size guess, but nowhere
-near enough for face shape, face symmetry, smile detection, eye openness,
-or eye color. Those need MediaPipe's FaceLandmarker: a 478-point face mesh
-(including iris landmarks) plus, optionally, 52 ARKit-style "blendshape"
-scores (0-1 activation for things like `mouthSmileLeft`, `eyeBlinkRight`)
-that are exactly the signal smile/blink detection actually needs — far
-more reliable than trying to hand-roll "is the mouth curved" from raw
-mesh points.
-
-Model file — NOT bundled, and this environment has no network access to
-fetch it for you. Grab it once and drop it next to the other
-`.task`/`.tflite` files, same pattern as segmentEngine.py's selfie model:
-
-    curl -L -o src/landmark-packages/face_landmarker.task \\
-      https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task
-
-If the file isn't present, `FaceEngine.available` is False and every
-field in this module's output comes back None with a note — the rest of
-the body scan still works, it just skips the face-specific fields (same
-graceful-degradation contract as segmentation waist/hair readings).
-
-What's genuinely measured vs. hand-tuned heuristic
------------------------------------------------------
-  * Face landmarks / mesh, blendshape scores (smile, eye-blink) — these
-    come directly from Google's trained model output. As good as that
-    model is.
-  * Face shape, face symmetry, eye color, head size — these are OUR
-    heuristics layered on top of the raw mesh points (width/height
-    ratios, nearest-color-match, bounding box). Reasonable, but nowhere
-    near a clinical or forensic-grade classification — labelled
-    "heuristic" throughout.
-"""
 
 import logging
 import os

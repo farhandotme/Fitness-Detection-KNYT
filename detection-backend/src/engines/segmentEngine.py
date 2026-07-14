@@ -1,38 +1,4 @@
-"""
-Shared MediaPipe Image Segmenter wrapper — the body-scan counterpart to
-PoseEngine.
 
-Why this exists
-----------------
-Pose landmarks alone (joint positions) cannot tell you anything about a
-person's actual body outline — two people with identical skeletons can have
-very different amounts of soft tissue between those joints. To make any
-honest claim about torso/waist width or to sample "where the hair is" vs
-"where the skin is", we need the actual pixel silhouette, not just 33 dots.
-
-`SegmentEngine` wraps MediaPipe's selfie multiclass segmenter, which
-outputs a per-pixel category mask:
-
-    0 = background
-    1 = hair
-    2 = body-skin
-    3 = face-skin
-    4 = clothes
-    5 = other (accessories, etc.)
-
-Model file
-----------
-This model is NOT bundled in this repo (it's a separate download from the
-one used for pose_landmarker.task). Grab it once and drop it next to the
-other `.task`/`.tflite` files:
-
-    curl -L -o src/landmark-packages/selfie_multiclass.tflite \\
-      https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_multiclass_256x256/float32/latest/selfie_multiclass_256x256.tflite
-
-If the file isn't present, `SegmentEngine.available` is False and callers
-should fall back gracefully (see body_analysis.py) instead of crashing —
-the scan still works, just with lower-fidelity waist/hair/skin estimates.
-"""
 
 import logging
 import os

@@ -1,18 +1,3 @@
-"""
-Shared MediaPipe Pose Landmarker wrapper.
-
-Why this file exists
----------------------
-The old implementation created a *separate* PoseLandmarker instance for the
-left arm and another one for the right arm, and "both arms" mode ran BOTH of
-those detectors on the *same frame* — i.e. it ran the (expensive) pose model
-twice per frame for no reason, doubling latency and doing twice the work for
-identical output.
-
-`PoseEngine` runs the model exactly once per frame. Anything that needs pose
-landmarks (single-arm or both-arm curl analysis) shares one engine instance
-and reads the same landmark list.
-"""
 
 import os
 from pathlib import Path

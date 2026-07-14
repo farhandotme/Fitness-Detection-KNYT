@@ -1,42 +1,4 @@
-"""
-Multi-view body scan — front + left + right + back.
 
-Why this exists
-----------------
-`analyze_body()` (single front photo) can only measure *width* — the
-left-right extent of the body. It has zero information about *depth*
-(front-to-back extent), so "waist width" from one photo is fundamentally
-incomplete: two people with the same shoulder-to-shoulder width can have
-very different waist circumferences depending on how deep their torso is.
-
-A side photo fixes exactly this gap. Rotate the camera 90° around the
-person and what used to be "depth" (invisible from the front) is now the
-horizontal axis of the *side* photo — so the exact same silhouette-width
-technique used for the front photo, applied to a side photo, measures
-depth instead of width.
-
-Width (front/back) + depth (left/right) at the same body height lets us
-approximate the actual cross-section as an ellipse and compute real
-circumference (Ramanujan's ellipse-perimeter formula) — this is a
-genuinely more accurate number than a flat width, and it's how DIY
-anthropometry projects typically bridge the gap without a full 3D model.
-
-Still approximate
-------------------
-This is NOT a 3D body scan. The torso cross-section isn't a perfect
-ellipse, camera alignment/distance varies photo to photo, and clothing
-adds noise. Treat it as "meaningfully better than one photo," not
-"clinically accurate" — see the disclaimer in the returned payload.
-
-Front and back photos are averaged for width (reduces single-photo pose
-noise); left and right are averaged for depth the same way. Only the
-front photo is required — everything else degrades gracefully and is
-flagged in `warnings` / the relevant `confidence` field instead of
-failing the whole scan.
-
-Height-only calibration — no weight input anywhere in this file. See the
-module docstring in body_analysis.py for why.
-"""
 
 import math
 from typing import Any, NamedTuple, Optional
