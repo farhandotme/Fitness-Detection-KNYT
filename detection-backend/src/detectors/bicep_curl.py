@@ -1,4 +1,43 @@
+"""
+Bicep curl rep counting + posture correction.
 
+Design
+------
+`ArmCurlAnalyzer` is a pure, stateful, per-arm analyzer. It knows nothing
+about the camera or the MediaPipe model — you feed it the 33-point pose
+landmark list (or None) each frame and it returns rep count, tempo, and
+form/posture feedback. Because it's decoupled from the model, "both arms"
+mode can run the (expensive) pose model exactly ONCE per frame via a single
+shared `PoseEngine` and feed the same landmarks into two analyzers, instead
+of the old approach of running the whole pose model twice per frame.
+
+Posture correction
+-------------------
+Three form issues are actively detected, each calibrated against the
+person's own relaxed starting posture (captured automatically during the
+first ~15 "arm extended" frames, so it works regardless of body type,
+distance from camera, or camera angle):
+
+  * elbow_flare    — the upper arm should stay pinned to the torso; if the
+                      elbow drifts forward/outward beyond the person's own
+                      baseline, that's a flare (a very common curl mistake).
+  * torso_sway     — leaning/rocking the torso to "help" the weight up
+                      (using back momentum instead of the biceps).
+  * shoulder_shrug — hiking the shoulder up toward the ear instead of
+                      isolating the elbow joint.
+
+A rep is still counted the moment it meets the range-of-motion and tempo
+requirements (a flawed-form rep still counts as a rep — "perfect or
+nothing" counting is discouraging), but it's tagged
+`rep_form_quality: "needs_improvement"` with the specific issue(s), and a
+running `good_reps` / `flawed_reps` split is kept for the session summary.
+
+A "partial rep" heuristic also fires live coaching ("curl higher") when the
+user visibly starts a curl but reverses direction before reaching a real
+contraction — this does NOT get counted (correctly — it never crosses the
+rep-completion threshold), it just adds an explanatory feedback message
+instead of silence.
+"""
 
 import math
 from typing import Any, Optional
@@ -423,17 +462,42 @@ class ArmCurlAnalyzer:
 
 
 class SingleArmCurlSession:
-    """Left- or right-arm curl session: one shared pose model + one analyzer."""
+    """Left- or right-arm curl session: one shared pose model + one analyzer.
 
-    def __init__(self, side: str, target_reps: Optional[int] = None):
+    `target_reps` / `target_sets` / `set_number` are the coach-assigned plan
+    for this user. They are supplied by the caller (currently the websocket
+    route, from query params) — the frontend must NOT be trusted to decide
+    on its own whether a set/exercise is "done"; this class is the single
+    source of truth for that decision via `session_complete` (this set's
+    reps are done) and `exercise_complete` (the whole assigned plan — all
+    sets — is done).
+    """
+
+    def __init__(
+        self,
+        side: str,
+        target_reps: Optional[int] = None,
+        target_sets: int = 1,
+        set_number: int = 1,
+    ):
         self.engine = PoseEngine()
         self.analyzer = ArmCurlAnalyzer(side, target_reps)
+        self.target_sets = max(1, target_sets)
+        self.set_number = max(1, min(set_number, self.target_sets))
 
     def detect(self, frame, timestamp_ms: int) -> dict[str, Any]:
         landmarks = self.engine.detect(frame, timestamp_ms)
         result = self.analyzer.update(landmarks, timestamp_ms)
         result["landmarks"] = (
             PoseEngine.landmarks_to_json(landmarks) if landmarks else []
+        )
+
+        # Backend-validated plan progress — frontend just reads these, it
+        # never computes them itself.
+        result["set_number"] = self.set_number
+        result["target_sets"] = self.target_sets
+        result["exercise_complete"] = bool(
+            result["session_complete"] and self.set_number >= self.target_sets
         )
         return result
 
@@ -449,11 +513,18 @@ class BothArmCurlSession:
     needs to catch up if they drift out of sync.
     """
 
-    def __init__(self, target_reps: Optional[int] = None):
+    def __init__(
+        self,
+        target_reps: Optional[int] = None,
+        target_sets: int = 1,
+        set_number: int = 1,
+    ):
         self.engine = PoseEngine()
         self.left = ArmCurlAnalyzer("left", target_reps)
         self.right = ArmCurlAnalyzer("right", target_reps)
         self.target_reps = target_reps
+        self.target_sets = max(1, target_sets)
+        self.set_number = max(1, min(set_number, self.target_sets))
 
         self.combined_rep_count = 0
         self.combined_good_reps = 0
@@ -502,6 +573,12 @@ class BothArmCurlSession:
 
         landmarks_json = PoseEngine.landmarks_to_json(landmarks) if landmarks else []
 
+        # Backend-validated plan progress — this, not the frontend, is the
+        # source of truth for whether the assigned sets/reps are done.
+        exercise_complete = bool(
+            session_complete and self.set_number >= self.target_sets
+        )
+
         return {
             "pose_detected": left_result["pose_detected"]
             or right_result["pose_detected"],
@@ -513,6 +590,9 @@ class BothArmCurlSession:
             "flawed_reps": self.combined_flawed_reps,
             "target_reps": self.target_reps,
             "session_complete": session_complete,
+            "set_number": self.set_number,
+            "target_sets": self.target_sets,
+            "exercise_complete": exercise_complete,
             "rep_completed": newly_completed,
             "sync_ok": sync_ok,
             "feedback": feedback,

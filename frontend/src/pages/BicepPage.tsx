@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import useRepWebSocket, { type ArmData, type ArmMode } from "../hooks/usebicepCurlSocket";
+import useRepWebSocket, {
+  type ArmData,
+  type ArmMode,
+} from "../hooks/usebicepCurlSocket";
 import BicepCamera from "../conponents/BicepCamera";
 import ArmStatsPanel from "../conponents/ArmStatsPanel";
 import "./BicepPage.css";
@@ -53,19 +56,33 @@ function BicepPage() {
   const [setSummaries, setSetSummaries] = useState<SetSummary[]>([]);
   const [cameraError, setCameraError] = useState<string | null>(null);
 
-  const { connected, result, lastCompletedRep, sendFrame, start, stop, socketError } =
-    useRepWebSocket();
+  const {
+    connected,
+    result,
+    lastCompletedRep,
+    sendFrame,
+    start,
+    stop,
+    socketError,
+  } = useRepWebSocket();
 
   const skeleton = result.landmarks?.length
     ? [{ points: result.landmarks, connections: POSE_CONNECTIONS }]
     : [];
 
   const currentReps = result.rep_count ?? 0;
-  const progressPct = Math.min(100, (currentReps / Math.max(1, repsPerSet)) * 100);
+  const progressPct = Math.min(
+    100,
+    (currentReps / Math.max(1, repsPerSet)) * 100,
+  );
 
-  // ---- advance a set to completion once the user's target reps is hit ----
+  // ---- advance a set once the BACKEND confirms this set's reps are done ----
+  // `session_complete` is computed server-side (ArmCurlAnalyzer._is_complete),
+  // from the target_reps the backend itself was given when the socket opened.
+  // We never derive this from currentReps/repsPerSet on the client — that
+  // was letting the frontend "grade its own homework".
   useEffect(() => {
-    if (phase !== "active" || currentReps < repsPerSet) return;
+    if (phase !== "active" || !result.session_complete) return;
 
     stop();
 
@@ -78,36 +95,71 @@ function BicepPage() {
     };
     setSetSummaries((prev) => [...prev, summary]);
 
-    if (currentSet >= totalSets) {
+    // exercise_complete is also backend-validated: true only once every
+    // set in the plan hit its target. This is the boolean that should
+    // trigger persisting "user completed this exercise" to the database.
+    if (result.exercise_complete) {
       setPhase("complete");
     } else {
       setRestRemaining(restSeconds);
       setPhase("resting");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, currentReps, repsPerSet, currentSet, totalSets, restSeconds, result, stop]);
+  }, [
+    phase,
+    result.session_complete,
+    currentSet,
+    totalSets,
+    restSeconds,
+    result,
+    stop,
+  ]);
+
+  // ---- persist completion once the backend confirms the whole plan is done ----
+  useEffect(() => {
+    if (!result.exercise_complete) return;
+    // TODO: wire this up to the real backend endpoint once it exists, e.g.
+    //   POST /api/workouts/complete { exercise: "bicep_curl", armMode, repsPerSet, totalSets }
+    // That endpoint is what should write the "user completed this exercise"
+    // record to MongoDB. The frontend must only ever send what the backend
+    // already validated here (exercise_complete === true) — it must not
+    // decide completion on its own.
+    console.log(
+      "Exercise completed (backend-validated) — ready to persist to DB.",
+    );
+  }, [result.exercise_complete]);
 
   // ---- rest countdown between sets, then auto-start the next one ----
   useEffect(() => {
     if (phase !== "resting") return;
 
     if (restRemaining <= 0) {
-      setCurrentSet((s) => s + 1);
+      const nextSet = currentSet + 1;
+      setCurrentSet(nextSet);
       setPhase("active");
-      start(armMode);
+      start(armMode, {
+        targetReps: repsPerSet,
+        targetSets: totalSets,
+        setNumber: nextSet,
+      });
       return;
     }
 
     const timer = window.setTimeout(() => setRestRemaining((r) => r - 1), 1000);
     return () => window.clearTimeout(timer);
-  }, [phase, restRemaining, armMode, start]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, restRemaining, armMode, start, currentSet, repsPerSet, totalSets]);
 
   function handleStart() {
     setCameraError(null);
     setSetSummaries([]);
     setCurrentSet(1);
     setPhase("active");
-    start(armMode);
+    start(armMode, {
+      targetReps: repsPerSet,
+      targetSets: totalSets,
+      setNumber: 1,
+    });
   }
 
   function handleSkipRest() {
@@ -227,10 +279,17 @@ function BicepPage() {
           {(phase === "active" || phase === "resting") && (
             <>
               <div className="progress-track">
-                <div className="progress-fill" style={{ width: `${phase === "active" ? progressPct : 100}%` }} />
+                <div
+                  className="progress-fill"
+                  style={{
+                    width: `${phase === "active" ? progressPct : 100}%`,
+                  }}
+                />
               </div>
               <div className="progress-caption">
-                {phase === "active" ? `${currentReps} / ${repsPerSet} reps` : "Set complete — resting"}
+                {phase === "active"
+                  ? `${currentReps} / ${repsPerSet} reps`
+                  : "Set complete — resting"}
               </div>
 
               <div className="set-dots">
@@ -238,7 +297,8 @@ function BicepPage() {
                   <span
                     key={n}
                     className={`set-dot ${
-                      n < currentSet || (n === currentSet && phase === "resting")
+                      n < currentSet ||
+                      (n === currentSet && phase === "resting")
                         ? "done"
                         : n === currentSet
                           ? "current"
@@ -268,6 +328,13 @@ function BicepPage() {
 
         <div className="bicep-stats-col">
           {phase === "setup" && (
+            // TODO(coach-assignment): once a coach/plan API exists, repsPerSet
+            // and totalSets should come from the user's assigned plan (fetched
+            // here) and this picker should become read-only display, not
+            // user-editable inputs. For now these are still editable locally,
+            // but whatever value is picked here is what actually gets sent to
+            // the backend as target_reps/target_sets — and the backend (not
+            // this component) is what decides when it's been met.
             <div className="session-builder">
               <div className="builder-row">
                 <span className="builder-label">Reps per set</span>
@@ -278,7 +345,9 @@ function BicepPage() {
                     max={100}
                     value={repsPerSet}
                     onChange={(e) =>
-                      setRepsPerSet(Math.max(1, Math.min(100, Number(e.target.value) || 1)))
+                      setRepsPerSet(
+                        Math.max(1, Math.min(100, Number(e.target.value) || 1)),
+                      )
                     }
                     className="reps-input"
                   />
@@ -305,7 +374,9 @@ function BicepPage() {
                     max={20}
                     value={totalSets}
                     onChange={(e) =>
-                      setTotalSets(Math.max(1, Math.min(20, Number(e.target.value) || 1)))
+                      setTotalSets(
+                        Math.max(1, Math.min(20, Number(e.target.value) || 1)),
+                      )
                     }
                     className="reps-input"
                   />
@@ -341,7 +412,8 @@ function BicepPage() {
               </div>
 
               <div className="builder-total">
-                {totalSets} × {repsPerSet} = <strong>{totalPlannedReps} reps total</strong>
+                {totalSets} × {repsPerSet} ={" "}
+                <strong>{totalPlannedReps} reps total</strong>
               </div>
 
               <button className="start-btn full-width" onClick={handleStart}>
@@ -352,7 +424,9 @@ function BicepPage() {
 
           {phase === "resting" && (
             <div className="rest-panel">
-              <div className="rest-panel-title">Set {currentSet} complete 🎉</div>
+              <div className="rest-panel-title">
+                Set {currentSet} complete 🎉
+              </div>
               <div className="rest-panel-big-countdown">{restRemaining}</div>
               <div className="rest-panel-caption">seconds of rest left</div>
 
@@ -360,15 +434,21 @@ function BicepPage() {
                 <div className="arm-grid rest-panel-grid">
                   <div className="arm-grid-item">
                     <span className="k">Reps</span>
-                    <span className="v">{setSummaries[setSummaries.length - 1].reps}</span>
+                    <span className="v">
+                      {setSummaries[setSummaries.length - 1].reps}
+                    </span>
                   </div>
                   <div className="arm-grid-item">
                     <span className="k">Good</span>
-                    <span className="v">{setSummaries[setSummaries.length - 1].goodReps}</span>
+                    <span className="v">
+                      {setSummaries[setSummaries.length - 1].goodReps}
+                    </span>
                   </div>
                   <div className="arm-grid-item">
                     <span className="k">Flawed</span>
-                    <span className="v">{setSummaries[setSummaries.length - 1].flawedReps}</span>
+                    <span className="v">
+                      {setSummaries[setSummaries.length - 1].flawedReps}
+                    </span>
                   </div>
                 </div>
               )}
@@ -381,10 +461,15 @@ function BicepPage() {
 
           {phase === "active" && armMode !== "both" && (
             <div className="single-arm-wrap">
-              <ArmStatsPanel label={MODE_LABELS[armMode]} data={singleArmData} />
+              <ArmStatsPanel
+                label={MODE_LABELS[armMode]}
+                data={singleArmData}
+              />
 
               {(lastCompletedRep.feedback || result.feedback) && (
-                <div className={`feedback-box ${lastCompletedRep.rep_form_quality ?? ""}`}>
+                <div
+                  className={`feedback-box ${lastCompletedRep.rep_form_quality ?? ""}`}
+                >
                   <strong>Coach Feedback</strong>
                   <p>{lastCompletedRep.feedback ?? result.feedback}</p>
                 </div>
@@ -395,8 +480,12 @@ function BicepPage() {
           {phase === "active" && armMode === "both" && (
             <div className="both-arm-wrap">
               <div className="sync-row">
-                <span className={`sync-badge ${result.sync_ok === false ? "bad" : "ok"}`}>
-                  {result.sync_ok === false ? "⚠️ Arms out of sync" : "✅ Arms synced"}
+                <span
+                  className={`sync-badge ${result.sync_ok === false ? "bad" : "ok"}`}
+                >
+                  {result.sync_ok === false
+                    ? "⚠️ Arms out of sync"
+                    : "✅ Arms synced"}
                 </span>
                 <span className={`stage-badge ${result.stage ?? "down"}`}>
                   {(result.stage ?? "down").toUpperCase()}
@@ -409,7 +498,9 @@ function BicepPage() {
               </div>
 
               {(lastCompletedRep.feedback || result.feedback) && (
-                <div className={`feedback-box ${lastCompletedRep.rep_form_quality ?? ""}`}>
+                <div
+                  className={`feedback-box ${lastCompletedRep.rep_form_quality ?? ""}`}
+                >
                   <strong>Coach Feedback</strong>
                   <p>{lastCompletedRep.feedback ?? result.feedback}</p>
                 </div>
@@ -461,7 +552,9 @@ function BicepPage() {
                 ))}
                 {setSummaries.length === 0 && (
                   <div className="results-row">
-                    <span className="empty-hint">Session ended before any set finished.</span>
+                    <span className="empty-hint">
+                      Session ended before any set finished.
+                    </span>
                   </div>
                 )}
               </div>
