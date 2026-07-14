@@ -10,6 +10,12 @@ function Layout() {
 
         <nav className="nav-pills">
           <NavLink
+            to="/exercises"
+            className={({ isActive }) => `nav-pill ${isActive ? "active" : ""}`}
+          >
+            🔍 Exercises
+          </NavLink>
+          <NavLink
             to="/fingers"
             className={({ isActive }) => `nav-pill ${isActive ? "active" : ""}`}
           >
