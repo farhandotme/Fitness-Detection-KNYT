@@ -1,3 +1,91 @@
+"""
+Push-up rep counting + strict floor-position gating.
+
+Design
+------
+`PushupAnalyzer` is a pure, stateful, whole-body analyzer, structured the
+same way as `SquatAnalyzer` — it knows nothing about the camera or the
+MediaPipe model; `PushupSession` owns a single shared `PoseEngine` and feeds
+it landmarks every frame.
+
+The one requirement that matters most here, stated explicitly by design:
+**a rep only ever counts while the user is genuinely on the floor in a
+push-up plank position.** If the user is standing (or the pose is anything
+other than a confident horizontal plank), the analyzer never advances the
+rep state machine — it just explains, every frame, what's wrong and what to
+do about it. This is checked before anything else, every single frame, and
+takes priority over all other feedback.
+
+Floor-position detection (camera-angle independent)
+-----------------------------------------------------
+A 2D pose model gives no direct "is this person horizontal in 3D" signal,
+so this combines three independent, cheap-to-compute cues and requires
+agreement between them (a simple voting scheme) rather than trusting any
+one signal alone:
+
+  1. `leg_vertical_ratio` — the image-space vertical gap between the hips
+     and the feet (or knees, as a fallback), normalized by torso length.
+     This is the strongest and most camera-agnostic signal: a standing leg
+     is vertical in the real world, so it projects a large vertical extent
+     in the image *regardless of whether the camera is facing the person
+     from the front or the side* (as long as the camera itself isn't tipped
+     way off level, which holds for a normal propped phone/laptop). A
+     horizontal (floor) leg, whether shot from the side (where it's
+     visibly horizontal in-frame) or from the front/foreshortened along
+     the camera axis (where its vertical projection collapses toward the
+     hip), produces a small ratio either way.
+  2. `torso_incline_deg` — the shoulder→hip line's angle off horizontal.
+     Very reliable from a side-on camera, weaker (but harmless as a second
+     vote) from a head-on camera.
+  3. `bbox_aspect` — width/height of the visible-landmark bounding box.
+     Wide-and-short reads as floor/horizontal; tall-and-narrow reads as
+     standing.
+
+None of these three needs to be perfect on its own — the vote requires two
+independent "floor" signals and zero "standing" signals (and the reverse
+for "standing"), so a single noisy/ambiguous cue can't flip the result.
+
+Once floor position is confirmed, it must hold for `STABLE_FLOOR_FRAMES`
+consecutive frames before counting turns on (`ready`), and it's allowed a
+short grace window (`GRACE_FRAMES`) of noisy/ambiguous frames before
+counting turns back off — long enough to survive normal tracking jitter,
+short enough that standing back up always cuts counting off quickly.
+
+Camera-view awareness
+----------------------
+`_view_mode` classifies each frame as "side", "front", or "angled" using
+shoulder width relative to torso length (shoulders overlap in a side
+profile, spread wide in a front-on shot). This is reported to the caller
+and also gates the body-alignment (hip sag/pike) check below, which needs
+real horizontal spread between the shoulders and legs to be meaningful —
+it's skipped in a near-front view where that spread collapses.
+
+Rep counting
+------------
+Driven by the average shoulder-elbow-wrist ("elbow") angle across both
+arms (falling back to whichever single arm is visible) — the same
+hysteresis-band state machine as the bicep curl / squat analyzers, so it
+reuses the shared frontend gauge/badge components unmodified. Extended arms
+(`DOWN_ANGLE`) is the rest/top-of-push-up stage; bent arms at or below
+`UP_ANGLE` is the bottom of the push-up.
+
+Posture correction
+-------------------
+One issue is actively detected: hip sag or hip pike — the hips dropping
+toward the floor (losing core tension) or rising up into an inverted-V
+(cheating the range of motion), instead of a straight line from shoulders
+to heels. It's measured as the hip's perpendicular deviation from the
+shoulder→leg line (interpolated in image space, sign-correct regardless of
+which way the person is facing), normalized by torso length — a fixed
+biomechanical reference (a straight line is a straight line), so unlike
+the squat's stance-width checks this needs no personal calibration.
+
+A rep still counts the moment it meets range-of-motion and tempo
+requirements even with a form issue flagged (a flawed rep still counts —
+"perfect or nothing" is discouraging), tagged `rep_form_quality:
+"needs_improvement"`.
+"""
+
 import math
 from typing import Any, Optional
 from src.engines.poseEngine import (  # type: ignore
@@ -631,17 +719,40 @@ class PushupAnalyzer:
 
 
 class PushupSession:
-    """Full push-up session: one shared pose model + one analyzer."""
+    """Full push-up session: one shared pose model + one analyzer.
 
-    def __init__(self, target_reps: Optional[int] = None):
+    `target_reps` / `target_sets` / `set_number` are the coach-assigned plan
+    for this user, supplied by the caller (the websocket route, from query
+    params) — same convention as the bicep curl and squat sessions. The
+    frontend does not decide on its own whether a set/exercise is done;
+    `session_complete` (this set's reps are done) and `exercise_complete`
+    (the whole assigned plan — all sets — is done) are computed here.
+    """
+
+    def __init__(
+        self,
+        target_reps: Optional[int] = None,
+        target_sets: int = 1,
+        set_number: int = 1,
+    ):
         self.engine = PoseEngine()
         self.analyzer = PushupAnalyzer(target_reps)
+        self.target_sets = max(1, target_sets)
+        self.set_number = max(1, min(set_number, self.target_sets))
 
     def detect(self, frame, timestamp_ms: int) -> dict[str, Any]:
         landmarks = self.engine.detect(frame, timestamp_ms)
         result = self.analyzer.update(landmarks, timestamp_ms)
         result["landmarks"] = (
             PoseEngine.landmarks_to_json(landmarks) if landmarks else []
+        )
+
+        # Backend-validated plan progress — frontend just reads these, it
+        # never computes them itself.
+        result["set_number"] = self.set_number
+        result["target_sets"] = self.target_sets
+        result["exercise_complete"] = bool(
+            result["session_complete"] and self.set_number >= self.target_sets
         )
         return result
 

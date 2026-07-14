@@ -65,9 +65,12 @@ function PushupPage() {
     (currentReps / Math.max(1, repsPerSet)) * 100,
   );
 
-  // ---- advance a set to completion once the user's target reps is hit ----
+  // ---- advance a set once the BACKEND confirms this set's reps are done ----
+  // `session_complete` is computed server-side (PushupAnalyzer._is_complete),
+  // from the target_reps the backend itself was given when the socket opened.
+  // We never derive this from currentReps/repsPerSet on the client.
   useEffect(() => {
-    if (phase !== "active" || currentReps < repsPerSet) return;
+    if (phase !== "active" || !result.session_complete) return;
 
     stop();
 
@@ -80,7 +83,10 @@ function PushupPage() {
     };
     setSetSummaries((prev) => [...prev, summary]);
 
-    if (currentSet >= totalSets) {
+    // exercise_complete is also backend-validated: true only once every
+    // set in the plan hit its target. This is the boolean that should
+    // trigger persisting "user completed this exercise" to the database.
+    if (result.exercise_complete) {
       setPhase("complete");
     } else {
       setRestRemaining(restSeconds);
@@ -89,8 +95,7 @@ function PushupPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     phase,
-    currentReps,
-    repsPerSet,
+    result.session_complete,
     currentSet,
     totalSets,
     restSeconds,
@@ -98,27 +103,47 @@ function PushupPage() {
     stop,
   ]);
 
+  // ---- persist completion once the backend confirms the whole plan is done ----
+  useEffect(() => {
+    if (!result.exercise_complete) return;
+    // TODO: wire this up to the real backend endpoint once it exists, e.g.
+    //   POST /api/workouts/complete { exercise: "pushup", repsPerSet, totalSets }
+    // That endpoint is what should write the "user completed this exercise"
+    // record to MongoDB. The frontend must only ever send what the backend
+    // already validated here (exercise_complete === true) — it must not
+    // decide completion on its own.
+    console.log(
+      "Exercise completed (backend-validated) — ready to persist to DB.",
+    );
+  }, [result.exercise_complete]);
+
   // ---- rest countdown between sets, then auto-start the next one ----
   useEffect(() => {
     if (phase !== "resting") return;
 
     if (restRemaining <= 0) {
-      setCurrentSet((s) => s + 1);
+      const nextSet = currentSet + 1;
+      setCurrentSet(nextSet);
       setPhase("active");
-      start();
+      start({
+        targetReps: repsPerSet,
+        targetSets: totalSets,
+        setNumber: nextSet,
+      });
       return;
     }
 
     const timer = window.setTimeout(() => setRestRemaining((r) => r - 1), 1000);
     return () => window.clearTimeout(timer);
-  }, [phase, restRemaining, start]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, restRemaining, start, currentSet, repsPerSet, totalSets]);
 
   function handleStart() {
     setCameraError(null);
     setSetSummaries([]);
     setCurrentSet(1);
     setPhase("active");
-    start();
+    start({ targetReps: repsPerSet, targetSets: totalSets, setNumber: 1 });
   }
 
   function handleSkipRest() {
@@ -269,6 +294,12 @@ function PushupPage() {
 
         <div className="bicep-stats-col">
           {phase === "setup" && (
+            // TODO(coach-assignment): once a coach/plan API exists, repsPerSet
+            // and totalSets should come from the user's assigned plan (fetched
+            // here) and this picker should become read-only display, not
+            // user-editable inputs. Whatever value is picked here is what
+            // actually gets sent to the backend as target_reps/target_sets —
+            // and the backend (not this component) decides when it's been met.
             <div className="session-builder">
               <div className="builder-row">
                 <span className="builder-label">Reps per set</span>

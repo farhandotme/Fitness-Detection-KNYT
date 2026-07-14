@@ -38,6 +38,16 @@ export interface PushupData {
   low_visibility: boolean;
   elapsed_time: number;
   landmarks: Landmark[];
+  /** Which set (of the coach-assigned plan) this connection is for. */
+  set_number?: number;
+  /** Total sets in the coach-assigned plan. */
+  target_sets?: number;
+  /**
+   * Backend-validated: true only once every set in the plan has hit its
+   * target reps. The frontend must treat this as the source of truth for
+   * "the user completed this exercise" — it must not compute this itself.
+   */
+  exercise_complete?: boolean;
 }
 
 const EMPTY_RESULT: PushupData = {
@@ -70,6 +80,9 @@ const EMPTY_RESULT: PushupData = {
   low_visibility: false,
   elapsed_time: 0,
   landmarks: [],
+  set_number: undefined,
+  target_sets: undefined,
+  exercise_complete: false,
 };
 
 const WS_BASE =
@@ -103,55 +116,73 @@ export default function usePushupSocket() {
     socketRef.current = null;
   }, []);
 
-  const start = useCallback(() => {
-    socketRef.current?.close();
+  const start = useCallback(
+    (plan?: {
+      targetReps?: number;
+      targetSets?: number;
+      setNumber?: number;
+    }) => {
+      socketRef.current?.close();
 
-    setResult(EMPTY_RESULT);
-    setLastCompletedRep({
-      rep_duration: null,
-      rep_avg_speed: null,
-      rep_classification: null,
-      rep_form_quality: null,
-      feedback: null,
-    });
-    setSocketError(null);
+      setResult(EMPTY_RESULT);
+      setLastCompletedRep({
+        rep_duration: null,
+        rep_avg_speed: null,
+        rep_classification: null,
+        rep_form_quality: null,
+        feedback: null,
+      });
+      setSocketError(null);
 
-    let ws: WebSocket;
-    try {
-      ws = new WebSocket(`${WS_BASE}/ws/pushup`);
-    } catch {
-      setSocketError("Couldn't reach the detection server. Is it running?");
-      return;
-    }
+      // The coach-assigned plan is sent to the backend; the backend — not
+      // this hook — decides when a set / the whole exercise is complete.
+      const params = new URLSearchParams();
+      if (plan?.targetReps != null)
+        params.set("target_reps", String(plan.targetReps));
+      if (plan?.targetSets != null)
+        params.set("target_sets", String(plan.targetSets));
+      if (plan?.setNumber != null)
+        params.set("set_number", String(plan.setNumber));
+      const query = params.toString();
 
-    socketRef.current = ws;
-
-    ws.onopen = () => setConnected(true);
-
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data) as PushupData;
-      setResult(data);
-
-      if (data.rep_completed) {
-        setLastCompletedRep({
-          rep_duration: data.rep_duration,
-          rep_avg_speed: data.rep_avg_speed,
-          rep_classification: data.rep_classification,
-          rep_form_quality: data.rep_form_quality,
-          feedback: data.feedback,
-        });
+      let ws: WebSocket;
+      try {
+        ws = new WebSocket(`${WS_BASE}/ws/pushup${query ? `?${query}` : ""}`);
+      } catch {
+        setSocketError("Couldn't reach the detection server. Is it running?");
+        return;
       }
-    };
 
-    ws.onclose = () => {
-      setConnected(false);
-      socketRef.current = null;
-    };
+      socketRef.current = ws;
 
-    ws.onerror = () => {
-      setSocketError("Connection error — check that the backend is running.");
-    };
-  }, []);
+      ws.onopen = () => setConnected(true);
+
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data) as PushupData;
+        setResult(data);
+
+        if (data.rep_completed) {
+          setLastCompletedRep({
+            rep_duration: data.rep_duration,
+            rep_avg_speed: data.rep_avg_speed,
+            rep_classification: data.rep_classification,
+            rep_form_quality: data.rep_form_quality,
+            feedback: data.feedback,
+          });
+        }
+      };
+
+      ws.onclose = () => {
+        setConnected(false);
+        socketRef.current = null;
+      };
+
+      ws.onerror = () => {
+        setSocketError("Connection error — check that the backend is running.");
+      };
+    },
+    [],
+  );
 
   const sendFrame = useCallback((image: string) => {
     const ws = socketRef.current;
