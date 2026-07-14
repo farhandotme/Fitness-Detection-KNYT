@@ -1,3 +1,53 @@
+"""
+Squat rep counting + posture correction.
+
+Design
+------
+`SquatAnalyzer` is a pure, stateful, whole-body analyzer (unlike the bicep
+curl analyzer, a squat is inherently bilateral — both legs move together —
+so there's no "left/right/both" split here, just one analyzer fed the
+33-point pose landmark list each frame). It knows nothing about the camera
+or the MediaPipe model — `SquatSession` owns a single shared `PoseEngine`
+and feeds it landmarks every frame, exactly like the bicep curl sessions.
+
+Rep counting
+------------
+Driven by the average hip-knee-ankle angle across both legs (falling back
+to whichever single leg is visible). Standing tall is the "down"/rest
+stage (angle near 180°); squatting to at least parallel is the "up"/
+contracted stage (angle at or below `UP_ANGLE`) — the same hysteresis
+naming convention as the bicep curl analyzer, so the shared frontend
+components (AngleGauge, stage badges) work unmodified.
+
+Posture correction
+-------------------
+Three form issues are actively detected, each calibrated against the
+person's own relaxed standing posture (captured automatically during the
+first ~15 "standing" frames, so it works regardless of body type, distance
+from camera, or camera angle):
+
+  * knee_valgus       — knees caving inward toward each other during the
+                         descent instead of tracking over the toes (a very
+                         common, injury-risk squat mistake).
+  * heel_lift         — heels rising off the ground, which shifts the load
+                         onto the toes and reduces stability/depth.
+  * excessive_forward_lean — the torso pitching too far forward / the back
+                         rounding, instead of keeping a proud chest and a
+                         (mostly) neutral spine.
+
+A rep is still counted the moment it meets the range-of-motion and tempo
+requirements (a flawed-form rep still counts as a rep — "perfect or
+nothing" counting is discouraging), but it's tagged
+`rep_form_quality: "needs_improvement"` with the specific issue(s), and a
+running `good_reps` / `flawed_reps` split is kept for the session summary.
+
+A "partial rep" heuristic also fires live coaching ("squat lower") when the
+user visibly starts a descent but reverses direction before reaching real
+depth — this does NOT get counted (correctly — it never crosses the
+rep-completion threshold), it just adds an explanatory feedback message
+instead of silence.
+"""
+
 import math
 from typing import Any, Optional
 from src.engines.poseEngine import (  # type: ignore
@@ -560,17 +610,40 @@ class SquatAnalyzer:
 
 
 class SquatSession:
-    """Full squat session: one shared pose model + one bilateral analyzer."""
+    """Full squat session: one shared pose model + one bilateral analyzer.
 
-    def __init__(self, target_reps: Optional[int] = None):
+    `target_reps` / `target_sets` / `set_number` are the coach-assigned plan
+    for this user, supplied by the caller (the websocket route, from query
+    params) — same convention as the bicep curl sessions. The frontend does
+    not decide on its own whether a set/exercise is done; `session_complete`
+    (this set's reps are done) and `exercise_complete` (the whole assigned
+    plan — all sets — is done) are computed here.
+    """
+
+    def __init__(
+        self,
+        target_reps: Optional[int] = None,
+        target_sets: int = 1,
+        set_number: int = 1,
+    ):
         self.engine = PoseEngine()
         self.analyzer = SquatAnalyzer(target_reps)
+        self.target_sets = max(1, target_sets)
+        self.set_number = max(1, min(set_number, self.target_sets))
 
     def detect(self, frame, timestamp_ms: int) -> dict[str, Any]:
         landmarks = self.engine.detect(frame, timestamp_ms)
         result = self.analyzer.update(landmarks, timestamp_ms)
         result["landmarks"] = (
             PoseEngine.landmarks_to_json(landmarks) if landmarks else []
+        )
+
+        # Backend-validated plan progress — frontend just reads these, it
+        # never computes them itself.
+        result["set_number"] = self.set_number
+        result["target_sets"] = self.target_sets
+        result["exercise_complete"] = bool(
+            result["session_complete"] and self.set_number >= self.target_sets
         )
         return result
 
