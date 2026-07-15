@@ -141,7 +141,8 @@ export const EXERCISES: ExerciseMeta[] = [
     emoji: "🧘",
     description: "Measures hold duration and body alignment.",
     tags: ["core", "abs", "isometric"],
-    status: "coming_soon",
+    status: "available",
+    route: "/exercises/plank-hold",
   },
   {
     id: "shoulder-press",
