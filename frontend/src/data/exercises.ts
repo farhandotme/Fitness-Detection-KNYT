@@ -117,7 +117,8 @@ export const EXERCISES: ExerciseMeta[] = [
     description:
       "Counts high-knee reps while monitoring knee height and cadence.",
     tags: ["cardio", "warmup", "running"],
-    status: "coming_soon",
+    status: "available",
+    route: "/exercises/high-knees",
   },
   {
     id: "mountain-climber",
