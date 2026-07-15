@@ -104,7 +104,8 @@ export const EXERCISES: ExerciseMeta[] = [
     emoji: "🚶",
     description: "Tracks forward lunges with balance and knee alignment.",
     tags: ["legs", "glutes", "lunges"],
-    status: "coming_soon",
+    status: "available",
+    route: "/exercises/lunge",
   },
   {
     id: "high-knees",

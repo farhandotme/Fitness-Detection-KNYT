@@ -16,30 +16,6 @@ function Layout() {
             🔍 Exercises
           </NavLink>
           <NavLink
-            to="/fingers"
-            className={({ isActive }) => `nav-pill ${isActive ? "active" : ""}`}
-          >
-            Fingers
-          </NavLink>
-          <NavLink
-            to="/reps"
-            className={({ isActive }) => `nav-pill ${isActive ? "active" : ""}`}
-          >
-            Bicep
-          </NavLink>
-          <NavLink
-            to="/squat"
-            className={({ isActive }) => `nav-pill ${isActive ? "active" : ""}`}
-          >
-            Squat
-          </NavLink>
-          <NavLink
-            to="/pushup"
-            className={({ isActive }) => `nav-pill ${isActive ? "active" : ""}`}
-          >
-            Push-ups
-          </NavLink>
-          <NavLink
             to="/body-scan"
             className={({ isActive }) => `nav-pill ${isActive ? "active" : ""}`}
           >

@@ -8,6 +8,7 @@ import PushupPage from "./pages/PushupPage";
 import BodyAnalysisPage from "./pages/BodyAnalysisPage";
 import ExerciseLibraryPage from "./pages/ExerciseLibraryPage";
 import JumpingJackPage from "./pages/JumpingJackPage";
+import LungePage from "./pages/LungePage";
 
 function App() {
   return (
@@ -17,6 +18,7 @@ function App() {
           <Route index element={<Navigate to="/exercises" replace />} />
           <Route path="exercises" element={<ExerciseLibraryPage />} />
           <Route path="exercises/jumping-jacks" element={<JumpingJackPage />} />
+          <Route path="exercises/lunge" element={<LungePage />} />
           <Route path="fingers" element={<FingerPage />} />
           <Route path="reps" element={<BicepPage />} />
           <Route path="squat" element={<SquatPage />} />
