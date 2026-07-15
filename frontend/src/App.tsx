@@ -10,6 +10,7 @@ import ExerciseLibraryPage from "./pages/ExerciseLibraryPage";
 import JumpingJackPage from "./pages/JumpingJackPage";
 import LungePage from "./pages/LungePage";
 import HighKneesPage from "./pages/HighKneesPage";
+import MountainClimberPage from "./pages/MountainClimberPage";
 
 function App() {
   return (
@@ -21,6 +22,10 @@ function App() {
           <Route path="exercises/jumping-jacks" element={<JumpingJackPage />} />
           <Route path="exercises/lunge" element={<LungePage />} />
           <Route path="exercises/high-knees" element={<HighKneesPage />} />
+          <Route
+            path="exercises/mountain-climber"
+            element={<MountainClimberPage />}
+          />
           <Route path="fingers" element={<FingerPage />} />
           <Route path="reps" element={<BicepPage />} />
           <Route path="squat" element={<SquatPage />} />

@@ -129,7 +129,8 @@ export const EXERCISES: ExerciseMeta[] = [
     emoji: "🧗",
     description: "Tracks alternating knee drives from a plank position.",
     tags: ["core", "cardio", "hiit"],
-    status: "coming_soon",
+    status: "available",
+    route: "/exercises/mountain-climber",
   },
   {
     id: "plank",
