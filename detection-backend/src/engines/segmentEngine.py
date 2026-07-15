@@ -40,7 +40,7 @@ class SegmentEngine:
             "FOUND" if self.available else "NOT FOUND",
             MODEL_PATH,
         )
-        self.segmenter: Optional[vision.ImageSegmenter] = None
+        self.segmenter = None
 
         if self.available:
             base_options = mp_python.BaseOptions(model_asset_path=MODEL_PATH)

@@ -1,7 +1,7 @@
 import logging
 import os
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 import numpy as np
 import mediapipe as mp
@@ -106,7 +106,7 @@ class FaceEngine:
             "FOUND" if self.available else "NOT FOUND",
             MODEL_PATH,
         )
-        self.landmarker: Optional[vision.FaceLandmarker] = None
+        self.landmarker: Optional[Any] = None
 
         if self.available:
             base_options = mp_python.BaseOptions(model_asset_path=MODEL_PATH)
