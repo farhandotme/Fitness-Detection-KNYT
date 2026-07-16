@@ -1,3 +1,61 @@
+"""
+Lateral (side) raise rep counting + full-body form correction.
+
+Design
+------
+`LateralRaiseAnalyzer` is a pure, stateful, whole-body analyzer, structured
+the same way as the other detectors in this package (`shoulder_press.py`,
+`high_knees.py`) — it knows nothing about the camera or the MediaPipe
+model; `LateralRaiseSession` owns a single shared `PoseEngine` and feeds it
+landmarks every frame.
+
+Rep counting
+------------
+Driven by the average shoulder-abduction angle across both arms (the angle
+at the shoulder between the torso line, shoulder->hip, and the upper arm,
+shoulder->elbow — falling back to whichever single arm is visible). Arms
+hanging at the sides is the rest position (`REST_ANGLE`, upper arm roughly
+parallel to the torso); a rep is raising both arms out to the sides up to
+shoulder height (`RAISE_ANGLE`, upper arm roughly perpendicular to the
+torso) and back down. Same "start grounded, drive up, return completes the
+rep" state machine as `high_knees.py`/`shoulder_press.py`.
+
+Form tracking — this is the point of the exercise, so it's checked hard
+------------------------------------------------------------------------
+Four independent issues are tracked every single frame, each with its own
+plain-language correction, and each contributes to a per-rep `form_score`:
+
+  1. **`poor_posture`** — leaning or swinging the torso to sling the
+     weights up with momentum instead of raising them under control.
+     Measured the same way as `high_knees.py`/`shoulder_press.py`: the
+     shoulder-hip line's angle off vertical, compared against a personal
+     baseline captured at rest, so it adapts to each person's stance and
+     camera angle.
+  2. **`shrugging`** — hiking the shoulders up toward the ears to help
+     lift the weight (letting the traps do the work instead of the
+     deltoids), instead of keeping the shoulders down and raising purely
+     from the arms. Measured as the nose-to-shoulder vertical gap
+     shrinking below a personal baseline captured at rest.
+  3. **`elbows_too_bent`** — the elbows should stay soft but essentially
+     straight throughout; bending them a lot turns the movement into an
+     upright row and shifts the work off the target muscle. Measured as
+     the shoulder-elbow-wrist angle dropping too far from straight at the
+     top of the rep.
+  4. **`asymmetric_raise`** — both arms should rise together. Measured as
+     the max gap between the left and right abduction angle during the
+     "up" phase of a rep; one arm lagging/leading the other means the
+     weights are tilting or one side is compensating for the other.
+
+A rep still counts the moment it meets range-of-motion and tempo
+requirements even with a form issue flagged (a flawed rep still counts —
+"perfect or nothing" is discouraging), tagged `rep_form_quality:
+"needs_improvement"`, with `posture_issues`/`posture_messages` telling the
+user exactly what to fix on the next rep. A raise that never reaches
+shoulder height is tracked as a "half rep" (same bounce-detection
+heuristic as `high_knees.py`/`shoulder_press.py`) instead of being
+silently dropped.
+"""
+
 import math
 from collections import deque
 from typing import Any, Optional
@@ -7,6 +65,7 @@ from src.engines.poseEngine import (  # type: ignore
     LEFT_HIP,
     LEFT_SHOULDER,
     LEFT_WRIST,
+    NOSE,
     PoseEngine,
     RIGHT_ELBOW,
     RIGHT_HIP,
@@ -14,49 +73,69 @@ from src.engines.poseEngine import (  # type: ignore
     RIGHT_WRIST,
 )
 
+# -------------------------------------------------------------------------
+# Tunable constants
+# -------------------------------------------------------------------------
+
 MIN_LANDMARK_VISIBILITY = 0.4
 CORE_LANDMARKS = (LEFT_SHOULDER, RIGHT_SHOULDER, LEFT_HIP, RIGHT_HIP)
 
-FRAME_EDGE_MARGIN = 0.03
-TORSO_SPAN_TOO_CLOSE = 0.55
-TORSO_SPAN_TOO_FAR = 0.10
-CENTER_X_TOLERANCE = 0.28
+
+def _looks_like_a_person(landmarks) -> bool:
+    visible_core = sum(
+        1
+        for i in CORE_LANDMARKS
+        if landmarks[i].visibility is not None and landmarks[i].visibility > 0.6
+    )
+    return visible_core >= 3
+
+
+# Shoulder-abduction angle (hip-shoulder-elbow), degrees. Arms hanging at
+# the sides => upper arm roughly parallel to the torso => angle near 0-20.
+# Arms raised out to shoulder height => upper arm roughly perpendicular to
+# the torso => angle near 80-90.
+REST_ANGLE = 20.0
+RAISE_ANGLE = 80.0
+
+LIFT_RAISED_THRESH = 99.5  # lift score at/above this = genuinely at shoulder height
+LIFT_GROUNDED_THRESH = 15.0
+MIN_ANGLE_DELTA = 30.0  # total travel required for a rep to "count"
+MIN_REP_DURATION = 0.25  # seconds — faster than this = uncontrolled/momentum
+MAX_REP_DURATION = 6.0  # seconds — slower than this = probably a pause
 
 CALIBRATION_FRAMES = 15
 
-# Raise is side-dominant: arms start down and move to roughly shoulder height.
-DOWN_SCORE = 12.0
-TOP_SCORE = 88.0
-MIN_SCORE_DELTA = 25.0
-MIN_REP_DURATION = 0.30
-MAX_REP_DURATION = 8.0
+# "Half rep" partial-rep heuristic (same family as high_knees.py).
+PARTIAL_REP_MARGIN = 10.0
+PARTIAL_REP_MIN_RISE = 18.0
+PARTIAL_REP_BOUNCE = 7.0
 
-# Lateral raise form thresholds
-TORSO_SWAY_DELTA_DEG = 10.0
-SHRUG_DELTA_RATIO = 0.08
-ELBOW_SLIGHT_BEND_MIN = 145.0
-ELBOW_SLIGHT_BEND_MAX = 178.0
-TOP_SHOULDER_HEIGHT_TOL = 0.06
-TOP_WRIST_HEIGHT_TOL = 0.08
-ASYMMETRY_DEG = 18.0
-MOMENTUM_MIN_ACC = 0.12
+# ---- form-correction thresholds ----
+TORSO_LEAN_DELTA_DEG = 14.0  # leaning/swinging off your calibrated baseline
+SHRUG_DELTA_RATIO = 0.10  # (baseline nose-shoulder gap - current gap) / torso_length
+ELBOW_STRAIGHT_MIN_DEG = 150.0  # shoulder-elbow-wrist angle at the top of the rep
+ASYMMETRY_DEG = 18.0  # max allowed gap between left/right abduction angle mid-raise
 
-PACE_SLOW_RPM = 14.0
-PACE_FAST_RPM = 38.0
+PACE_SLOW_RPM = 15.0
+PACE_FAST_RPM = 55.0
 
 MISTAKE_PENALTY = {
     "poor_posture": 15,
-    "shrugging": 10,
-    "over_shoot": 10,
-    "under_raise": 15,
-    "asymmetric_raise": 15,
-    "elbows_locked": 10,
+    "shrugging": 15,
     "elbows_too_bent": 10,
-    "momentum": 15,
+    "asymmetric_raise": 15,
 }
 
 SCORE_HISTORY = 10
 RPM_WINDOW = 6
+
+# -------------------------------------------------------------------------
+# Camera framing thresholds
+# -------------------------------------------------------------------------
+FRAME_EDGE_MARGIN = 0.03
+TORSO_SPAN_TOO_CLOSE = 0.60
+TORSO_SPAN_TOO_FAR = 0.10
+CENTER_X_TOLERANCE = 0.28
 
 
 class _Point:
@@ -82,6 +161,7 @@ def _visible(points) -> bool:
 
 
 def _angle_deg(a, b, c) -> float:
+    """Angle at vertex `b`, between rays b->a and b->c, in degrees."""
     ang = math.degrees(
         math.atan2(c.y - b.y, c.x - b.x) - math.atan2(a.y - b.y, a.x - b.x)
     )
@@ -99,17 +179,9 @@ def _clip(v: float, lo: float = 0.0, hi: float = 1.0) -> float:
     return max(lo, min(hi, v))
 
 
-def _raise_score(angle: float) -> float:
-    return 100.0 * _clip((angle - DOWN_SCORE) / (TOP_SCORE - DOWN_SCORE))
-
-
-def _looks_like_a_person(landmarks) -> bool:
-    visible_core = sum(
-        1
-        for i in CORE_LANDMARKS
-        if landmarks[i].visibility is not None and landmarks[i].visibility > 0.6
-    )
-    return visible_core >= 3
+def _lift_score(angle: float) -> float:
+    """Map an abduction angle to a 0-100 'how close to shoulder height' score."""
+    return 100.0 * _clip((angle - REST_ANGLE) / (RAISE_ANGLE - REST_ANGLE))
 
 
 def _framing_feedback(l_shoulder, r_shoulder, l_hip, r_hip) -> Optional[str]:
@@ -122,13 +194,13 @@ def _framing_feedback(l_shoulder, r_shoulder, l_hip, r_hip) -> Optional[str]:
             or p.x > 1 - FRAME_EDGE_MARGIN
             or p.y < FRAME_EDGE_MARGIN
         ):
-            return "You're partly out of frame — leave space around both arms."
+            return "You're partly out of frame — center yourself with space on both sides."
 
     torso_span = abs(mid_hip.y - mid_shoulder.y)
     if torso_span > TORSO_SPAN_TOO_CLOSE:
-        return "You're too close to the camera — step back so both arms fit in frame."
+        return "You're too close to the camera — step back so your arms fit fully out to the sides in frame."
     if torso_span < TORSO_SPAN_TOO_FAR:
-        return "You're too far from the camera — move closer for accurate tracking."
+        return "You're too far from the camera — move a bit closer for accurate tracking."
 
     if abs(mid_hip.x - 0.5) > CENTER_X_TOLERANCE:
         side = "left" if mid_hip.x < 0.5 else "right"
@@ -138,52 +210,57 @@ def _framing_feedback(l_shoulder, r_shoulder, l_hip, r_hip) -> Optional[str]:
 
 
 class LateralRaiseAnalyzer:
-    """Stateful lateral-raise rep counter + posture/form checker."""
+    """Stateful lateral-raise rep counter + posture/shrug/elbow/symmetry checker."""
 
     def __init__(self, target_reps: Optional[int] = None):
         self.target_reps = target_reps
 
-        self.stage = "down"
+        self.stage = "down"  # "down" = arms at sides, "up" = raised to shoulder height
         self.rep_count = 0
         self.good_reps = 0
         self.flawed_reps = 0
         self.partial_rep_count = 0
 
-        self.left_score: Optional[float] = None
-        self.right_score: Optional[float] = None
-        self.smoothed_raise: Optional[float] = None
-        self.last_raise: Optional[float] = None
+        self.smoothed_lift: Optional[float] = None
+        self.last_lift: Optional[float] = None
         self.last_timestamp_s: Optional[float] = None
-        self.raise_smooth_alpha = 0.5
+        self.lift_smooth_alpha = 0.5
 
         self.rep_start_time: Optional[float] = None
-        self._raise_acc = 0.0
+        self._lift_acc = 0.0
+
         self.session_start_time: Optional[float] = None
 
-        self._attempt_peak_raise: Optional[float] = None
+        # "Half rep" partial-rep detection (tracked while stage == "down")
+        self._attempt_peak_lift: Optional[float] = None
         self._attempt_flagged = False
 
-        self._calib_samples: list[float] = []
+        # Personal baselines, captured at rest (arms at sides).
+        self._calib_lean_samples: list[float] = []
+        self._calib_shrug_samples: list[float] = []
         self.calibrated = False
         self._baseline_torso_lean = 0.0
+        self._baseline_shrug_gap = 0.0
 
         self._current_rep_issues: set[str] = set()
-        self._rep_max_torso_delta = 0.0
+        self._rep_max_torso_lean_delta = 0.0
         self._rep_max_shrug_delta = 0.0
+        self._rep_min_elbow_angle = 180.0
         self._rep_max_asymmetry = 0.0
-        self._rep_max_top_error = 0.0
-        self._rep_has_locked_elbows = False
-        self._rep_has_over_bent = False
 
         self.form_scores: deque = deque(maxlen=SCORE_HISTORY)
         self._rep_complete_times: deque = deque(maxlen=RPM_WINDOW)
 
+    # ---------------------------------------------------------------
     def _is_complete(self) -> bool:
         return self.target_reps is not None and self.rep_count >= self.target_reps
 
     def _finish_calibration(self):
-        n = len(self._calib_samples)
-        self._baseline_torso_lean = sum(self._calib_samples) / n
+        n = len(self._calib_lean_samples)
+        self._baseline_torso_lean = sum(self._calib_lean_samples) / n
+        self._baseline_shrug_gap = sum(self._calib_shrug_samples) / len(
+            self._calib_shrug_samples
+        )
         self.calibrated = True
 
     @staticmethod
@@ -195,9 +272,9 @@ class LateralRaiseAnalyzer:
             return None
         if duration < 0.5:
             return "fast"
-        if duration < 1.4:
+        if duration < 1.3:
             return "good"
-        if duration < 2.8:
+        if duration < 2.5:
             return "slow"
         return "too_slow"
 
@@ -210,6 +287,7 @@ class LateralRaiseAnalyzer:
             return "fast"
         return "steady"
 
+    # ---------------------------------------------------------------
     def update(self, landmarks, timestamp_ms: int) -> dict[str, Any]:
         t = timestamp_ms / 1000.0
         if self.session_start_time is None:
@@ -218,11 +296,11 @@ class LateralRaiseAnalyzer:
 
         response: dict[str, Any] = {
             "pose_detected": False,
-            "left_raise": None,
-            "right_raise": None,
+            "left_abduction_angle": None,
+            "right_abduction_angle": None,
             "angle": None,
-            "raise_score": None,
-            "smoothed_raise": None,
+            "lift": None,
+            "smoothed_lift": None,
             "stage": self.stage,
             "rep_count": self.rep_count,
             "good_reps": self.good_reps,
@@ -231,7 +309,6 @@ class LateralRaiseAnalyzer:
             "target_reps": self.target_reps,
             "session_complete": self._is_complete(),
             "rep_completed": False,
-            "rep_side": None,
             "rep_duration": None,
             "rep_classification": None,
             "rep_form_quality": None,
@@ -248,7 +325,6 @@ class LateralRaiseAnalyzer:
             "feedback": None,
             "low_visibility": False,
             "elapsed_time": round(elapsed, 2),
-            "exercise_complete": False,
         }
 
         if landmarks is None or not _looks_like_a_person(landmarks):
@@ -259,16 +335,18 @@ class LateralRaiseAnalyzer:
         l_elbow, r_elbow = landmarks[LEFT_ELBOW], landmarks[RIGHT_ELBOW]
         l_wrist, r_wrist = landmarks[LEFT_WRIST], landmarks[RIGHT_WRIST]
         l_hip, r_hip = landmarks[LEFT_HIP], landmarks[RIGHT_HIP]
+        nose = landmarks[NOSE]
 
-        left_ok = _visible((l_shoulder, l_elbow, l_wrist))
-        right_ok = _visible((r_shoulder, r_elbow, r_wrist))
+        left_arm_ok = _visible((l_shoulder, l_elbow, l_wrist, l_hip))
+        right_arm_ok = _visible((r_shoulder, r_elbow, r_wrist, r_hip))
         torso_visible = _visible((l_shoulder, r_shoulder, l_hip, r_hip))
 
-        if not left_ok and not right_ok:
+        if not left_arm_ok and not right_arm_ok:
             response["pose_detected"] = True
             response["low_visibility"] = True
             response["feedback"] = (
-                "Can't see your arms clearly — keep both shoulders, elbows, and wrists in frame."
+                "Can't see your arms clearly — adjust the camera so your "
+                "shoulders, elbows, and wrists are all in frame."
             )
             return response
 
@@ -276,152 +354,149 @@ class LateralRaiseAnalyzer:
             response["pose_detected"] = True
             response["low_visibility"] = True
             response["feedback"] = (
-                "Can't see your torso clearly — keep your shoulders and hips visible."
+                "Can't see your torso — make sure your shoulders and hips "
+                "are both in frame."
             )
             return response
 
         response["pose_detected"] = True
 
+        mid_shoulder = _midpoint(l_shoulder, r_shoulder)
+        mid_hip = _midpoint(l_hip, r_hip)
+        torso_length = max(_dist(mid_shoulder, mid_hip), 1e-6)
+
+        # ---- camera framing (every frame) ----
         framing_message = _framing_feedback(l_shoulder, r_shoulder, l_hip, r_hip)
         response["framing_ok"] = framing_message is None
         response["framing_message"] = framing_message
 
-        shoulder_width = max(_dist(l_shoulder, r_shoulder), 1e-6)
-        mid_shoulder = _midpoint(l_shoulder, r_shoulder)
-        mid_hip = _midpoint(l_hip, r_hip)
+        # ---- shoulder-abduction angle per arm (drives rep counting) ----
+        left_angle = (
+            _angle_deg(l_hip, l_shoulder, l_elbow) if left_arm_ok else None
+        )
+        right_angle = (
+            _angle_deg(r_hip, r_shoulder, r_elbow) if right_arm_ok else None
+        )
+        response["left_abduction_angle"] = (
+            round(left_angle, 1) if left_angle is not None else None
+        )
+        response["right_abduction_angle"] = (
+            round(right_angle, 1) if right_angle is not None else None
+        )
+
+        angles = [a for a in (left_angle, right_angle) if a is not None]
+        raw_angle = sum(angles) / len(angles)
+        response["angle"] = round(raw_angle, 1)
+
+        arm_gap = (
+            abs(left_angle - right_angle)
+            if left_angle is not None and right_angle is not None
+            else 0.0
+        )
+
+        raw_lift = _lift_score(raw_angle)
+        if self.smoothed_lift is None:
+            self.smoothed_lift = raw_lift
+        else:
+            self.smoothed_lift = (
+                self.lift_smooth_alpha * raw_lift
+                + (1 - self.lift_smooth_alpha) * self.smoothed_lift
+            )
+
+        # ---- elbow straightness (every frame) ----
+        elbow_angles = []
+        if left_arm_ok:
+            elbow_angles.append(_angle_deg(l_shoulder, l_elbow, l_wrist))
+        if right_arm_ok:
+            elbow_angles.append(_angle_deg(r_shoulder, r_elbow, r_wrist))
+        min_elbow_angle = min(elbow_angles) if elbow_angles else 180.0
+
+        # ---- torso lean/swing + calibration (captured at rest) ----
         vertical_ref = _Point(mid_hip.x, mid_hip.y - 1.0)
         torso_lean = _angle_deg(vertical_ref, mid_hip, mid_shoulder)
 
+        # ---- shrug metric: nose-to-shoulder vertical gap, normalized ----
+        nose_ok = _visible((nose,))
+        shrug_gap = (
+            (mid_shoulder.y - nose.y) / torso_length if nose_ok else None
+        )
+
         if self.stage == "down" and not self.calibrated:
-            self._calib_samples.append(torso_lean)
-            if len(self._calib_samples) >= CALIBRATION_FRAMES:
+            self._calib_lean_samples.append(torso_lean)
+            if shrug_gap is not None:
+                self._calib_shrug_samples.append(shrug_gap)
+            if len(self._calib_lean_samples) >= CALIBRATION_FRAMES and len(
+                self._calib_shrug_samples
+            ) >= min(CALIBRATION_FRAMES, 5):
                 self._finish_calibration()
 
         lean_delta = (
             abs(torso_lean - self._baseline_torso_lean) if self.calibrated else 0.0
         )
-
-        def side_score(side_shoulder, side_elbow, side_wrist, side_name: str) -> float:
-            arm_len = max(_dist(side_shoulder, side_wrist), 1e-6)
-            shoulder_rise = (side_shoulder.y - mid_shoulder.y) / shoulder_width
-            elbow_rise = (side_elbow.y - mid_shoulder.y) / shoulder_width
-            wrist_rise = (side_wrist.y - mid_shoulder.y) / shoulder_width
-            raise_val = max(0.0, (mid_shoulder.y - side_wrist.y) / shoulder_width)
-            elbow_angle = _angle_deg(side_shoulder, side_elbow, side_wrist)
-            if side_name == "left":
-                response["left_raise"] = round(raise_val, 3)
-            else:
-                response["right_raise"] = round(raise_val, 3)
-            if elbow_angle < ELBOW_SLIGHT_BEND_MIN:
-                self._rep_has_locked_elbows = True
-            if elbow_angle > ELBOW_SLIGHT_BEND_MAX:
-                self._rep_has_over_bent = True
-            if raise_val > self._rep_max_top_error:
-                self._rep_max_top_error = raise_val
-            return raise_val
-
-        left_raise = (
-            side_score(l_shoulder, l_elbow, l_wrist, "left") if left_ok else None
-        )
-        right_raise = (
-            side_score(r_shoulder, r_elbow, r_wrist, "right") if right_ok else None
-        )
-
-        raises = [v for v in (left_raise, right_raise) if v is not None]
-        raw_raise = sum(raises) / len(raises)
-        response["angle"] = round(raw_raise, 1)
-
-        raw_score = _raise_score(raw_raise)
-        if self.smoothed_raise is None:
-            self.smoothed_raise = raw_score
-        else:
-            self.smoothed_raise = (
-                self.raise_smooth_alpha * raw_score
-                + (1 - self.raise_smooth_alpha) * self.smoothed_raise
-            )
-
-        shoulder_height_error = 0.0
-        if left_ok and right_ok:
-            left_shoulder_to_wrist = abs(l_wrist.y - l_shoulder.y) / shoulder_width
-            right_shoulder_to_wrist = abs(r_wrist.y - r_shoulder.y) / shoulder_width
-            shoulder_height_error = max(left_shoulder_to_wrist, right_shoulder_to_wrist)
-
-        arm_gap = (
-            abs(left_raise - right_raise)
-            if left_raise is not None and right_raise is not None
+        shrug_delta = (
+            (self._baseline_shrug_gap - shrug_gap) / torso_length
+            if self.calibrated and shrug_gap is not None
             else 0.0
         )
 
+        rep_completed = False
+
         if self.stage == "down":
             if (
-                self._attempt_peak_raise is None
-                or self.smoothed_raise > self._attempt_peak_raise
+                self._attempt_peak_lift is None
+                or self.smoothed_lift > self._attempt_peak_lift
             ):
-                self._attempt_peak_raise = self.smoothed_raise
+                self._attempt_peak_lift = self.smoothed_lift
             elif (
                 not self._attempt_flagged
-                and self._attempt_peak_raise is not None
-                and self._attempt_peak_raise - self.smoothed_raise > 7.0
-                and self._attempt_peak_raise < TOP_SCORE - 10.0
-                and self._attempt_peak_raise > 20.0
+                and self._attempt_peak_lift is not None
+                and self._attempt_peak_lift - self.smoothed_lift > PARTIAL_REP_BOUNCE
+                and self._attempt_peak_lift < LIFT_RAISED_THRESH - PARTIAL_REP_MARGIN
+                and self._attempt_peak_lift - LIFT_GROUNDED_THRESH
+                > PARTIAL_REP_MIN_RISE
             ):
                 self._attempt_flagged = True
                 self.partial_rep_count += 1
                 response["feedback"] = (
-                    f"Half rep — you only raised to about {self._attempt_peak_raise:.0f}/100. "
-                    "Lift to shoulder height with control."
+                    f"Half rep — only got to {self._attempt_peak_lift:.0f}/100 of "
+                    "shoulder height, raise all the way up."
                 )
 
-            if self.smoothed_raise < DOWN_SCORE + 3:
-                self._attempt_peak_raise = None
+            if self.smoothed_lift < LIFT_GROUNDED_THRESH - 3:
+                self._attempt_peak_lift = None
                 self._attempt_flagged = False
 
-            if self.smoothed_raise >= TOP_SCORE:
+            if self.smoothed_lift >= LIFT_RAISED_THRESH:
                 self.stage = "up"
                 self.rep_start_time = t
-                self._raise_acc = 0.0
+                self._lift_acc = 0.0
                 self._current_rep_issues = set()
-                self._rep_max_torso_delta = lean_delta
-                self._rep_max_shrug_delta = 0.0
+                self._rep_max_torso_lean_delta = lean_delta
+                self._rep_max_shrug_delta = shrug_delta
+                self._rep_min_elbow_angle = min_elbow_angle
                 self._rep_max_asymmetry = arm_gap
-                self._rep_max_top_error = shoulder_height_error
 
-        else:
-            self._rep_max_torso_delta = max(self._rep_max_torso_delta, lean_delta)
-            self._rep_max_shrug_delta = max(
-                self._rep_max_shrug_delta, abs(torso_lean - self._baseline_torso_lean)
+        else:  # self.stage == "up"
+            self._rep_max_torso_lean_delta = max(
+                self._rep_max_torso_lean_delta, lean_delta
             )
+            self._rep_max_shrug_delta = max(self._rep_max_shrug_delta, shrug_delta)
+            self._rep_min_elbow_angle = min(self._rep_min_elbow_angle, min_elbow_angle)
             self._rep_max_asymmetry = max(self._rep_max_asymmetry, arm_gap)
-            self._rep_max_top_error = max(
-                self._rep_max_top_error, shoulder_height_error
-            )
 
-            if self.last_raise is not None:
-                self._raise_acc += abs(self.smoothed_raise - self.last_raise)
+            if self.last_lift is not None:
+                self._lift_acc += abs(self.smoothed_lift - self.last_lift)
 
-            if self.smoothed_raise <= DOWN_SCORE:
+            if self.smoothed_lift <= LIFT_GROUNDED_THRESH:
                 self.stage = "down"
                 rep_completed = True
-            else:
-                rep_completed = False
 
-        response["raise_score"] = round(raw_score, 1)
-        response["smoothed_raise"] = round(self.smoothed_raise, 1)
+        response["lift"] = round(raw_lift, 1)
+        response["smoothed_lift"] = round(self.smoothed_lift, 1)
 
-        rep_completed = response["rep_completed"]
         rep_duration = rep_class = rep_form_quality = None
         form_score = None
         feedback = response.get("feedback") or framing_message
-
-        if self.stage == "up":
-            if self._rep_max_torso_delta > TORSO_SWAY_DELTA_DEG:
-                self._current_rep_issues.add("poor_posture")
-            if self._rep_max_asymmetry > ASYMMETRY_DEG:
-                self._current_rep_issues.add("asymmetric_raise")
-            if self._rep_has_locked_elbows:
-                self._current_rep_issues.add("elbows_locked")
-            if self._rep_has_over_bent:
-                self._current_rep_issues.add("elbows_too_bent")
 
         if rep_completed:
             rep_duration = (
@@ -430,43 +505,34 @@ class LateralRaiseAnalyzer:
             valid = (
                 rep_duration is not None
                 and MIN_REP_DURATION <= rep_duration <= MAX_REP_DURATION
-                and self._raise_acc >= MIN_SCORE_DELTA
+                and self._lift_acc >= MIN_ANGLE_DELTA
             )
 
             if valid:
                 self.rep_count += 1
                 rep_class = self._classify_tempo(rep_duration)
 
-                if self._rep_max_torso_delta > TORSO_SWAY_DELTA_DEG:
+                if self._rep_max_torso_lean_delta > TORSO_LEAN_DELTA_DEG:
                     self._current_rep_issues.add("poor_posture")
+                if self._rep_max_shrug_delta > SHRUG_DELTA_RATIO:
+                    self._current_rep_issues.add("shrugging")
+                if self._rep_min_elbow_angle < ELBOW_STRAIGHT_MIN_DEG:
+                    self._current_rep_issues.add("elbows_too_bent")
                 if self._rep_max_asymmetry > ASYMMETRY_DEG:
                     self._current_rep_issues.add("asymmetric_raise")
-                if self._rep_max_top_error < 0.02:
-                    self._current_rep_issues.add("under_raise")
-                if self._rep_max_top_error > TOP_SHOULDER_HEIGHT_TOL:
-                    self._current_rep_issues.add("over_shoot")
-                if self._rep_has_locked_elbows:
-                    self._current_rep_issues.add("elbows_locked")
-                if self._rep_has_over_bent:
-                    self._current_rep_issues.add("elbows_too_bent")
 
                 form_score = 100
                 for issue in self._current_rep_issues:
                     form_score -= MISTAKE_PENALTY.get(issue, 10)
                 form_score = max(0, form_score)
-
                 self.form_scores.append(form_score)
                 self._rep_complete_times.append(t)
 
                 issue_messages = {
-                    "poor_posture": "Keep your torso steady — don't swing your body to lift the weights.",
-                    "shrugging": "Keep your shoulders down — don't shrug up toward your ears.",
-                    "over_shoot": "Stop around shoulder height — don't raise the dumbbells too high.",
-                    "under_raise": "Lift to shoulder height before lowering.",
-                    "asymmetric_raise": "Raise both sides evenly — one arm is leading too much.",
-                    "elbows_locked": "Keep a slight bend in your elbows — don't lock them out.",
-                    "elbows_too_bent": "Keep only a slight bend in your elbows — don't curl the weights.",
-                    "momentum": "Use control — don't swing the weights with momentum.",
+                    "poor_posture": "Keep your torso still — don't lean or swing to sling the weight up.",
+                    "shrugging": "Keep your shoulders down — you're hiking them up toward your ears.",
+                    "elbows_too_bent": "Keep your elbows softer but straighter — you're bending them too much.",
+                    "asymmetric_raise": "Raise both arms together evenly — one side is leading the other.",
                 }
                 messages = [issue_messages[i] for i in sorted(self._current_rep_issues)]
 
@@ -480,7 +546,7 @@ class LateralRaiseAnalyzer:
                 else:
                     rep_form_quality = "good"
                     self.good_reps += 1
-                    feedback = "Clean lateral raise — shoulder-height control and good symmetry."
+                    feedback = f"Clean lateral raise — {rep_class} tempo, full range."
 
                 response["posture_ok"] = len(self._current_rep_issues) == 0
                 response["posture_issues"] = sorted(self._current_rep_issues)
@@ -488,48 +554,46 @@ class LateralRaiseAnalyzer:
             else:
                 rep_completed = False
                 if rep_duration is not None and rep_duration < MIN_REP_DURATION:
-                    feedback = (
-                        "Too fast — that rep wasn't counted, control the movement."
-                    )
+                    feedback = "Too fast — that one wasn't counted, control the movement."
                 elif rep_duration is not None and rep_duration > MAX_REP_DURATION:
                     feedback = "That rep took too long — not counted. Keep moving."
                 else:
-                    feedback = "Not enough range of motion — raise to shoulder height."
+                    feedback = "Not enough range — not counted."
 
             self.rep_start_time = None
-            self._raise_acc = 0.0
+            self._lift_acc = 0.0
             self._current_rep_issues = set()
-            self._rep_max_torso_delta = 0.0
+            self._rep_max_torso_lean_delta = 0.0
             self._rep_max_shrug_delta = 0.0
+            self._rep_min_elbow_angle = 180.0
             self._rep_max_asymmetry = 0.0
-            self._rep_max_top_error = 0.0
-            self._rep_has_locked_elbows = False
-            self._rep_has_over_bent = False
         else:
+            # Live, every-frame posture feedback even mid-rep, so the user
+            # gets corrected in real time instead of only after the fact.
             live_issues = []
             live_messages = []
-
-            if lean_delta > TORSO_SWAY_DELTA_DEG:
+            if lean_delta > TORSO_LEAN_DELTA_DEG:
                 live_issues.append("poor_posture")
-                live_messages.append("Keep your torso steady — don't swing your body.")
-
-            if self.stage == "up" and arm_gap > ASYMMETRY_DEG:
-                live_issues.append("asymmetric_raise")
                 live_messages.append(
-                    "Raise both sides evenly — one arm is leading too much."
+                    "Keep your torso still — don't lean or swing to sling the weight up."
                 )
-
-            if shoulder_height_error > TOP_SHOULDER_HEIGHT_TOL and self.stage == "up":
-                live_issues.append("under_raise")
-                live_messages.append("Lift to shoulder height before lowering.")
-
+            if shrug_delta > SHRUG_DELTA_RATIO:
+                live_issues.append("shrugging")
+                live_messages.append(
+                    "Keep your shoulders down — you're hiking them up toward your ears."
+                )
+            if self.stage == "up" and min_elbow_angle < ELBOW_STRAIGHT_MIN_DEG:
+                live_issues.append("elbows_too_bent")
+                live_messages.append(
+                    "Keep your elbows softer but straighter as you raise."
+                )
             response["posture_ok"] = len(live_issues) == 0
             response["posture_issues"] = live_issues
             response["posture_messages"] = live_messages
             if feedback is None and live_messages:
                 feedback = live_messages[0]
 
-        self.last_raise = self.smoothed_raise
+        self.last_lift = self.smoothed_lift
         self.last_timestamp_s = t
 
         reps_per_minute = None
@@ -539,23 +603,20 @@ class LateralRaiseAnalyzer:
                 reps_per_minute = round(
                     (len(self._rep_complete_times) - 1) / span * 60.0, 1
                 )
-
         pace_classification = self._classify_pace(reps_per_minute)
 
         if feedback is None and not self.calibrated:
             feedback = (
-                "Hold the start position for a moment — calibrating your baseline."
+                "Stand tall with your arms relaxed at your sides for a "
+                "second — calibrating your posture."
             )
         if feedback is None:
-            feedback = "Raise straight out to the side, lead with the elbows, and stop at shoulder height."
+            feedback = "Good position — raise both arms out to shoulder height."
 
         response.update(
             {
-                "pose_detected": True,
                 "rep_completed": rep_completed,
-                "rep_duration": (
-                    round(rep_duration, 2) if rep_duration is not None else None
-                ),
+                "rep_duration": round(rep_duration, 2) if rep_duration is not None else None,
                 "rep_classification": rep_class,
                 "rep_form_quality": rep_form_quality,
                 "form_score": form_score,
@@ -563,7 +624,6 @@ class LateralRaiseAnalyzer:
                 "reps_per_minute": reps_per_minute,
                 "pace_classification": pace_classification,
                 "session_complete": self._is_complete(),
-                "exercise_complete": False,
                 "stage": self.stage,
                 "feedback": feedback,
                 "rep_count": self.rep_count,
@@ -576,7 +636,15 @@ class LateralRaiseAnalyzer:
 
 
 class LateralRaiseSession:
-    """Full lateral raise session: one shared pose model + one analyzer."""
+    """Full lateral-raise session: one shared pose model + one analyzer.
+
+    `target_reps` / `target_sets` / `set_number` are the coach-assigned plan
+    for this user, supplied by the caller (the websocket route, from query
+    params) — same convention as the other exercises. The frontend does not
+    decide on its own whether a set/exercise is done; `session_complete`
+    (this set's reps are done) and `exercise_complete` (the whole assigned
+    plan — all sets — is done) are computed here.
+    """
 
     def __init__(
         self,
@@ -595,6 +663,7 @@ class LateralRaiseSession:
         result["landmarks"] = (
             PoseEngine.landmarks_to_json(landmarks) if landmarks else []
         )
+
         result["set_number"] = self.set_number
         result["target_sets"] = self.target_sets
         result["exercise_complete"] = bool(
