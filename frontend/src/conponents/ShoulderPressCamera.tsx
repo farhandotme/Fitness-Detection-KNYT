@@ -15,10 +15,10 @@ interface Props {
 }
 
 /**
- * Same capture pipeline as SquatCamera/JumpingJackCamera, scoped to its own
- * class names (`sp-viewfinder*`). Portrait framing — a shoulder press is a
- * standing exercise with the dumbbells pressing straight overhead, so the
- * extra vertical headroom above the shoulders matters more than width.
+ * Same capture pipeline as SquatCamera/JumpingJackCamera/LungeCamera — always opens
+ * the browser's default camera, no device picker — scoped to its own
+ * `shoulderpress-viewfinder` class names so it can live alongside the other
+ * exercise pages without style collisions.
  */
 export default function ShoulderPressCamera({
   active,
@@ -59,7 +59,7 @@ export default function ShoulderPressCamera({
           video: {
             facingMode: "user",
             width: { ideal: 480 },
-            height: { ideal: 854 }, // portrait — extra headroom above the shoulders for the overhead press
+            height: { ideal: 854 }, // portrait — more vertical FOV
             aspectRatio: { ideal: 9 / 16 },
           },
           audio: false,
@@ -172,7 +172,7 @@ export default function ShoulderPressCamera({
   }
 
   return (
-    <div className="sp-viewfinder">
+    <div className="shoulderpress-viewfinder">
       {active ? (
         <>
           <video
@@ -180,17 +180,17 @@ export default function ShoulderPressCamera({
             autoPlay
             muted
             playsInline
-            className="sp-viewfinder-video"
+            className="shoulderpress-viewfinder-video"
           />
-          <canvas ref={overlayRef} className="sp-viewfinder-overlay" />
+          <canvas ref={overlayRef} className="shoulderpress-viewfinder-overlay" />
           <canvas ref={canvasRef} style={{ display: "none" }} />
         </>
       ) : (
-        <div className="sp-viewfinder-placeholder">
+        <div className="shoulderpress-viewfinder-placeholder">
           <span>📷</span>
           <p>
-            Camera turns on when you hit Start — step back so your arms stay
-            in frame fully extended overhead
+            Camera turns on when you hit Start — step back so your arms fit
+            fully overhead, above your head, in frame
           </p>
         </div>
       )}

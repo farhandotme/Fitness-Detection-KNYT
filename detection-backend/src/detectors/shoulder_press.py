@@ -195,9 +195,7 @@ def _framing_feedback(l_shoulder, r_shoulder, l_hip, r_hip) -> Optional[str]:
     if torso_span > TORSO_SPAN_TOO_CLOSE:
         return "You're too close to the camera — step back so your arms fit fully overhead in frame."
     if torso_span < TORSO_SPAN_TOO_FAR:
-        return (
-            "You're too far from the camera — move a bit closer for accurate tracking."
-        )
+        return "You're too far from the camera — move a bit closer for accurate tracking."
 
     if abs(mid_hip.x - 0.5) > CENTER_X_TOLERANCE:
         side = "left" if mid_hip.x < 0.5 else "right"
@@ -363,7 +361,9 @@ class ShoulderPressAnalyzer:
 
         # ---- elbow angle per arm (drives rep counting) ----
         left_angle = _angle_deg(l_shoulder, l_elbow, l_wrist) if left_arm_ok else None
-        right_angle = _angle_deg(r_shoulder, r_elbow, r_wrist) if right_arm_ok else None
+        right_angle = (
+            _angle_deg(r_shoulder, r_elbow, r_wrist) if right_arm_ok else None
+        )
         response["left_elbow_angle"] = (
             round(left_angle, 1) if left_angle is not None else None
         )
@@ -412,8 +412,12 @@ class ShoulderPressAnalyzer:
         wrist_offset = max(wrist_offsets) if wrist_offsets else 0.0
 
         # ---- elbow-flare check (only meaningful near the rack) ----
-        elbow_width = _dist(l_elbow, r_elbow) if left_arm_ok and right_arm_ok else None
-        flare_ratio = elbow_width / shoulder_width if elbow_width is not None else None
+        elbow_width = (
+            _dist(l_elbow, r_elbow) if left_arm_ok and right_arm_ok else None
+        )
+        flare_ratio = (
+            elbow_width / shoulder_width if elbow_width is not None else None
+        )
 
         rep_completed = False
 
@@ -523,9 +527,7 @@ class ShoulderPressAnalyzer:
                 else:
                     rep_form_quality = "good"
                     self.good_reps += 1
-                    feedback = (
-                        f"Clean overhead press — {rep_class} tempo, full lockout."
-                    )
+                    feedback = f"Clean overhead press — {rep_class} tempo, full lockout."
 
                 response["posture_ok"] = len(self._current_rep_issues) == 0
                 response["posture_issues"] = sorted(self._current_rep_issues)
@@ -533,9 +535,7 @@ class ShoulderPressAnalyzer:
             else:
                 rep_completed = False
                 if rep_duration is not None and rep_duration < MIN_REP_DURATION:
-                    feedback = (
-                        "Too fast — that one wasn't counted, control the movement."
-                    )
+                    feedback = "Too fast — that one wasn't counted, control the movement."
                 elif rep_duration is not None and rep_duration > MAX_REP_DURATION:
                     feedback = "That rep took too long — not counted. Keep moving."
                 else:
@@ -601,9 +601,7 @@ class ShoulderPressAnalyzer:
         response.update(
             {
                 "rep_completed": rep_completed,
-                "rep_duration": (
-                    round(rep_duration, 2) if rep_duration is not None else None
-                ),
+                "rep_duration": round(rep_duration, 2) if rep_duration is not None else None,
                 "rep_classification": rep_class,
                 "rep_form_quality": rep_form_quality,
                 "form_score": form_score,

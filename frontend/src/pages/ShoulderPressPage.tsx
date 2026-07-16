@@ -15,6 +15,10 @@ const POSE_CONNECTIONS: [number, number][] = [
   [23, 24],
   [11, 23],
   [12, 24],
+  [23, 25],
+  [25, 27],
+  [24, 26],
+  [26, 28],
 ];
 
 const REP_PRESETS = [8, 10, 12, 15];
@@ -65,11 +69,9 @@ function ShoulderPressPage() {
   );
 
   // ---- advance a set once the BACKEND confirms this set's reps are done ----
-  // `session_complete` is computed server-side (ShoulderPressAnalyzer's
-  // completion check), from the target_reps the backend itself was given
-  // when the socket opened. We never derive this from
-  // currentReps/repsPerSet on the client — same rule as every other
-  // exercise in this codebase.
+  // `session_complete` is computed server-side (ShoulderPressAnalyzer._is_complete),
+  // from the target_reps the backend itself was given when the socket opened.
+  // We never derive this from currentReps/repsPerSet on the client.
   useEffect(() => {
     if (phase !== "active" || !result.session_complete) return;
 
@@ -108,12 +110,14 @@ function ShoulderPressPage() {
   useEffect(() => {
     if (!result.exercise_complete) return;
     // TODO: wire this up to the real backend endpoint once it exists, e.g.
-    //   POST /api/workouts/complete { exercise: "shoulder_press", repsPerSet, totalSets }
+    //   POST /api/workouts/complete { exercise: "shoulder-press", repsPerSet, totalSets }
     // That endpoint is what should write the "user completed this exercise"
     // record to MongoDB. The frontend must only ever send what the backend
     // already validated here (exercise_complete === true) — it must not
     // decide completion on its own.
-    console.log("Exercise completed (backend-validated) — ready to persist to DB.");
+    console.log(
+      "Exercise completed (backend-validated) — ready to persist to DB.",
+    );
   }, [result.exercise_complete]);
 
   // ---- rest countdown between sets, then auto-start the next one ----
@@ -124,7 +128,11 @@ function ShoulderPressPage() {
       const nextSet = currentSet + 1;
       setCurrentSet(nextSet);
       setPhase("active");
-      start({ targetReps: repsPerSet, targetSets: totalSets, setNumber: nextSet });
+      start({
+        targetReps: repsPerSet,
+        targetSets: totalSets,
+        setNumber: nextSet,
+      });
       return;
     }
 
@@ -177,13 +185,16 @@ function ShoulderPressPage() {
   const totalPlannedReps = repsPerSet * totalSets;
 
   return (
-    <div className="bicep-page sp-page">
+    <div className="bicep-page shoulderpress-page">
       <div className="bicep-header">
         <div className="bicep-header-left">
-          <button className="sp-back-btn" onClick={() => navigate("/exercises")}>
+          <button
+            className="shoulderpress-back-btn"
+            onClick={() => navigate("/exercises")}
+          >
             ← Library
           </button>
-          <h1 className="bicep-title">Shoulder Press</h1>
+          <h1 className="bicep-title">Shoulder Press Trainer</h1>
         </div>
 
         <div className="bicep-header-right">
@@ -253,7 +264,7 @@ function ShoulderPressPage() {
               <div className="progress-caption">
                 {phase === "active"
                   ? `${currentReps} / ${repsPerSet} reps`
-                  : "Set complete"}
+                  : "Set complete — resting"}
               </div>
 
               <div className="set-dots">
@@ -261,7 +272,8 @@ function ShoulderPressPage() {
                   <span
                     key={n}
                     className={`set-dot ${
-                      n < currentSet || (n === currentSet && phase === "resting")
+                      n < currentSet ||
+                      (n === currentSet && phase === "resting")
                         ? "done"
                         : n === currentSet
                           ? "current"
@@ -378,10 +390,13 @@ function ShoulderPressPage() {
                 <strong>{totalPlannedReps} reps total</strong>
               </div>
 
-              <div className="squat-setup-tip">
-                Stand facing the camera with dumbbells racked at shoulder
-                height, elbows bent, and hold still for a second so the
-                coach can calibrate before you start pressing overhead.
+              <div className="shoulderpress-setup-tip">
+                Stand tall facing the camera with your whole torso and both
+                arms in frame, space above your head. Start each rep at the
+                rack (elbows bent, hands near shoulder height) and press
+                straight up to a full lockout overhead — the coach checks
+                your posture, wrist position, elbow flare, and left/right
+                symmetry on every single rep.
               </div>
 
               <button className="start-btn full-width" onClick={handleStart}>
@@ -416,6 +431,12 @@ function ShoulderPressPage() {
                     <span className="k">Flawed</span>
                     <span className="v">
                       {setSummaries[setSummaries.length - 1].flawedReps}
+                    </span>
+                  </div>
+                  <div className="arm-grid-item">
+                    <span className="k">Time</span>
+                    <span className="v">
+                      {setSummaries[setSummaries.length - 1].elapsedTime.toFixed(0)}s
                     </span>
                   </div>
                 </div>
