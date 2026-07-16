@@ -12,6 +12,7 @@ from src.routes.plankRoutes import router as plankRouter
 from src.routes.bodyAnalysisRoutes import router as bodyAnalysisRouter
 from src.routes.mountainClimberRoutes import router as mountainClimberRouter
 from src.routes.shoulderPressRoutes import router as shoulderPressRouter
+from src.routes.lateralRaiseRoutes import router as lateralRaiseRouter
 
 app = FastAPI()
 
@@ -38,4 +39,5 @@ app.include_router(highKneesRouter, prefix="/ws", tags="high-knees")
 app.include_router(plankRouter, prefix="/ws", tags="plank-hold")
 app.include_router(mountainClimberRouter, prefix="/ws", tags="mountain-climber")
 app.include_router(bodyAnalysisRouter, prefix="/api", tags="body-analysis")
-app.include_router(bodyAnalysisRouter, prefix="/ws", tags="shoulder-press")
+app.include_router(shoulderPressRouter, prefix="/ws", tags="shoulder-press")
+app.include_router(lateralRaiseRouter, prefix="/ws", tags="lateral-raise")
