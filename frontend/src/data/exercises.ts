@@ -165,7 +165,8 @@ export const EXERCISES: ExerciseMeta[] = [
     emoji: "🙆",
     description: "Tracks shoulder abduction and arm symmetry.",
     tags: ["shoulders", "arms"],
-    status: "coming_soon",
+    status: "available",
+    route: "/exercises/lateral-raise",
   },
   {
     id: "arm-circles",
