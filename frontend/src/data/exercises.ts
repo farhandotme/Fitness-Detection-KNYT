@@ -153,7 +153,8 @@ export const EXERCISES: ExerciseMeta[] = [
     emoji: "🏋️‍♀️",
     description: "Tracks overhead shoulder press repetitions.",
     tags: ["shoulders", "arms", "press"],
-    status: "coming_soon",
+    status: "available",
+    route: "/exercises/shoulder-press",
   },
   {
     id: "lateral-raise",
