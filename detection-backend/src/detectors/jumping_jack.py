@@ -16,46 +16,65 @@ from src.engines.poseEngine import (  # type: ignore
     RIGHT_WRIST,
 )
 
-MIN_LANDMARK_VISIBILITY = 0.18
+# -------------------------
+# Tunable constants
+# -------------------------
+
+MIN_LANDMARK_VISIBILITY = 0.12
+
 CORE_LANDMARKS = (LEFT_SHOULDER, RIGHT_SHOULDER, LEFT_HIP, RIGHT_HIP)
 
-ARM_ANGLE_CLOSED = 45.0
-ARM_ANGLE_OPEN = 100.0
-ELBOW_STRAIGHT_MIN = 100.0  # was 105 — a little more forgiving for beginners
+# Arm / leg geometry
+ARM_ANGLE_CLOSED = 55.0
+ARM_ANGLE_OPEN = 92.0
 
-LEG_SPREAD_RATIO_CLOSED = 0.35
-LEG_SPREAD_RATIO_OPEN = 0.85
+LEG_SPREAD_RATIO_CLOSED = 0.28
+LEG_SPREAD_RATIO_OPEN = 0.72
 
-OPENNESS_CLOSED_THRESH = 16.0
-OPENNESS_OPEN_THRESH = 30.0
-MIN_OPENNESS_DELTA = 8.0
-MIN_REP_DURATION = 0.08
-MAX_REP_DURATION = 4.5
+OPENNESS_CLOSED_THRESH = 14.0
+OPENNESS_OPEN_THRESH = 24.0
 
+MIN_REP_DURATION = 0.12
+MAX_REP_DURATION = 5.0
+
+# Calibration / posture
 CALIBRATION_FRAMES = 3
-
-TORSO_LEAN_DELTA_DEG = 52.0  # was 45 — more forgiving for beginners
+TORSO_LEAN_DELTA_DEG = 50.0
 TORSO_LEAN_HARD_MAX_DEG = 75.0
 
-ARM_SYNC_MAX_DIFF_DEG = 130.0  # was 110 — beginners rarely move perfectly symmetrically
-LEG_SYNC_MAX_DIFF_RATIO = 0.95
+# Framing (much looser)
+FRAME_EDGE_MARGIN = 0.015
+TORSO_SPAN_TOO_CLOSE = 0.80
+TORSO_SPAN_TOO_FAR = 0.03
+CENTER_X_TOLERANCE = 0.65
 
-# --- Noise handling ---
-# MediaPipe briefly loses confident tracking of a hand or foot for a frame or two during fast
-# motion (motion blur), especially right at the top of a jumping jack. Treating every single
-# frame as ground truth used to mark almost every rep as "flawed" because of momentary tracking
-# glitches rather than actual bad form. These settings make the detector tolerant of brief
-# glitches while still catching form issues that are actually real (i.e. that persist).
+# Rep quality thresholds
+ARM_OPENNESS_MIN_GOOD = 0.35
+LEG_OPENNESS_MIN_GOOD = 0.35
 
-MAX_LANDMARK_HOLD_FRAMES = 4  # bridge brief MediaPipe dropouts (~130ms at 30fps)
-ISSUE_MIN_FRAMES = 2  # an issue must show up in at least this many frames...
-ISSUE_FREQUENCY_THRESHOLD = (
-    0.34  # ...and in at least a third of the rep's frames to count
-)
+MISTAKE_PENALTY = {
+    "arms_not_fully_raised": 5,
+    "legs_not_spread_enough": 5,
+    "bent_elbows": 3,
+    "poor_posture": 3,
+    "asymmetrical_movement": 3,
+}
 
-ARM_OPENNESS_MIN_GOOD = 0.30  # was hardcoded at 0.35 — a bit more forgiving
-LEG_OPENNESS_MIN_GOOD = 0.30  # was hardcoded at 0.35
+ISSUE_TIPS = {
+    "arms_not_fully_raised": "try raising your arms a bit higher",
+    "legs_not_spread_enough": "try spreading your legs a little wider",
+    "bent_elbows": "try keeping your arms a bit straighter",
+    "poor_posture": "try keeping your back a little straighter",
+    "asymmetrical_movement": "try moving your arms and legs together",
+}
 
+SCORE_HISTORY = 10
+TEMPO_HISTORY = 5
+FPS_WINDOW = 30
+
+STABILITY_MAX_DRIFT_RATIO = 1.20
+
+# Stabilized indices (same as before)
 STABILIZED_LANDMARK_INDICES = (
     LEFT_SHOULDER,
     RIGHT_SHOULDER,
@@ -68,40 +87,6 @@ STABILIZED_LANDMARK_INDICES = (
     LEFT_ANKLE,
     RIGHT_ANKLE,
 )
-
-# --- Plain-language feedback ---
-# These are shown directly to beginners, so they're written as simple coaching tips rather than
-# technical labels.
-ISSUE_TIPS = {
-    "arms_not_fully_raised": "try raising your arms all the way up",
-    "legs_not_spread_enough": "try spreading your legs a little wider",
-    "bent_elbows": "try keeping your arms a bit straighter",
-    "poor_posture": "try keeping your back a little straighter",
-    "asymmetrical_movement": "try moving your arms and legs together",
-}
-
-STABILITY_MAX_DRIFT_RATIO = 1.20
-
-PARTIAL_REP_MARGIN = 12.0
-PARTIAL_REP_MIN_RISE = 6.0
-PARTIAL_REP_BOUNCE = 3.0
-
-MISTAKE_PENALTY = {
-    "arms_not_fully_raised": 5,
-    "legs_not_spread_enough": 5,
-    "bent_elbows": 3,
-    "poor_posture": 3,
-    "asymmetrical_movement": 3,
-}
-
-SCORE_HISTORY = 10
-TEMPO_HISTORY = 5
-FPS_WINDOW = 30
-
-FRAME_EDGE_MARGIN = 0.02
-TORSO_SPAN_TOO_CLOSE = 0.60
-TORSO_SPAN_TOO_FAR = 0.06
-CENTER_X_TOLERANCE = 0.40
 
 
 def _looks_like_a_person(landmarks) -> bool:
@@ -159,9 +144,9 @@ def _combine_openness(
 ) -> Optional[float]:
     parts = []
     if arm_frac is not None:
-        parts.append((_clip(arm_frac), 0.7))
+        parts.append((_clip(arm_frac), 0.6))
     if leg_frac is not None:
-        parts.append((_clip(leg_frac), 0.3))
+        parts.append((_clip(leg_frac), 0.4))
     if not parts:
         return None
     total = sum(w for _, w in parts)
@@ -217,7 +202,7 @@ class JumpingJackAnalyzer:
         self.last_timestamp_s: Optional[float] = None
         self.rep_start_time: Optional[float] = None
         self._openness_acc = 0.0
-        self.openness_smooth_alpha = 0.20
+        self.openness_smooth_alpha = 0.22
 
         self.session_start_time: Optional[float] = None
         self._attempt_peak_openness: Optional[float] = None
@@ -233,9 +218,6 @@ class JumpingJackAnalyzer:
 
         self._rep_peak_arm_frac = 0.0
         self._rep_peak_leg_frac = 0.0
-        self._rep_min_elbow_angle = 180.0
-        self._rep_max_arm_diff = 0.0
-        self._rep_max_leg_diff = 0.0
         self._rep_hip_x_start: Optional[float] = None
         self._rep_hip_x_max_dev = 0.0
         self._current_rep_issues: set = set()
@@ -267,36 +249,23 @@ class JumpingJackAnalyzer:
         self._baseline_torso_lean = sum(self._calib_samples) / len(self._calib_samples)
         self.calibrated = True
 
-    def _reset_rep_trackers(self, arm_frac, leg_frac, elbow_angle, hip_x):
+    def _reset_rep_trackers(self, arm_frac, leg_frac, hip_x):
         self._rep_peak_arm_frac = arm_frac if arm_frac is not None else 0.0
         self._rep_peak_leg_frac = leg_frac if leg_frac is not None else 0.0
-        self._rep_min_elbow_angle = elbow_angle if elbow_angle is not None else 180.0
-        self._rep_max_arm_diff = 0.0
-        self._rep_max_leg_diff = 0.0
         self._rep_hip_x_start = hip_x
         self._rep_hip_x_max_dev = 0.0
         self._rep_open_frames = 0
         self._rep_issue_frame_counts = {}
 
     def _stabilize(self, landmarks, indices) -> dict:
-        """
-        MediaPipe sometimes briefly "loses" confident tracking of a hand or foot for a frame or
-        two, especially during fast motion (motion blur) — most commonly right at the top of a
-        jumping jack, exactly when we most need an accurate reading. Reacting to every single
-        frame meant a good rep could get missed just because tracking blinked for a moment.
-
-        This holds onto the last confidently-tracked position for a few frames when a landmark's
-        visibility temporarily drops, so a brief glitch doesn't throw off rep counting or
-        feedback. If a landmark stays low-confidence for too long, we stop trusting the cache and
-        fall back to the raw (low-confidence) reading, same as before.
-        """
         out = {}
         for i in indices:
             lm = landmarks[i]
             vis = getattr(lm, "visibility", None)
+            # Very permissive: only cache short glitches
             if vis is not None and vis < MIN_LANDMARK_VISIBILITY:
                 cached = self._landmark_cache.get(i)
-                if cached is not None and cached[1] < MAX_LANDMARK_HOLD_FRAMES:
+                if cached is not None and cached[1] < 3:
                     point, age = cached
                     out[i] = point
                     self._landmark_cache[i] = (point, age + 1)
@@ -384,10 +353,12 @@ class JumpingJackAnalyzer:
             "elapsed_time": round(elapsed, 2),
         }
 
+        # --- basic person check ---
         if landmarks is None or not _looks_like_a_person(landmarks):
             response["feedback"] = "Step into the camera view to get started"
             return response
 
+        # --- stable landmarks ---
         stable = self._stabilize(landmarks, STABILIZED_LANDMARK_INDICES)
         l_shoulder, r_shoulder = stable[LEFT_SHOULDER], stable[RIGHT_SHOULDER]
         l_elbow, r_elbow = stable[LEFT_ELBOW], stable[RIGHT_ELBOW]
@@ -399,7 +370,8 @@ class JumpingJackAnalyzer:
         right_arm_ok = _visible((r_hip, r_shoulder, r_elbow, r_wrist))
         legs_visible = _visible((l_hip, r_hip, l_ankle, r_ankle))
 
-        if not left_arm_ok and not right_arm_ok and not legs_visible:
+        # Only fail if we truly cannot see anything useful
+        if not (left_arm_ok or right_arm_ok or legs_visible):
             response["pose_detected"] = True
             response["low_visibility"] = True
             response["feedback"] = "Make sure your whole body is visible in the frame"
@@ -407,6 +379,7 @@ class JumpingJackAnalyzer:
 
         shoulder_width = max(_dist(l_shoulder, r_shoulder), 1e-6)
 
+        # --- arm angles ---
         left_arm_angle = _angle_deg(l_hip, l_shoulder, l_wrist) if left_arm_ok else None
         right_arm_angle = (
             _angle_deg(r_hip, r_shoulder, r_wrist) if right_arm_ok else None
@@ -419,6 +392,7 @@ class JumpingJackAnalyzer:
                 ARM_ANGLE_OPEN - ARM_ANGLE_CLOSED
             )
 
+        # --- elbow angles (optional, lightweight) ---
         left_elbow_angle = (
             _angle_deg(l_shoulder, l_elbow, l_wrist) if left_arm_ok else None
         )
@@ -432,6 +406,7 @@ class JumpingJackAnalyzer:
             sum(elbow_angles) / len(elbow_angles) if elbow_angles else None
         )
 
+        # --- leg spread ---
         leg_frac = None
         leg_spread_ratio = None
         if legs_visible:
@@ -440,6 +415,7 @@ class JumpingJackAnalyzer:
                 LEG_SPREAD_RATIO_OPEN - LEG_SPREAD_RATIO_CLOSED
             )
 
+        # --- torso lean (posture) ---
         torso_visible = _visible((l_shoulder, r_shoulder, l_hip, r_hip))
         torso_lean = None
         mid_hip = None
@@ -451,11 +427,15 @@ class JumpingJackAnalyzer:
 
         raw_openness = _combine_openness(arm_frac, leg_frac)
         if raw_openness is None:
+            # Not enough to compute openness, but we still have a person
             response["pose_detected"] = True
             response["low_visibility"] = True
-            response["feedback"] = "Make sure your whole body is visible in the frame"
+            response["feedback"] = (
+                "Keep moving; I'll start counting once I see full jumps."
+            )
             return response
 
+        # --- smooth openness ---
         if self.smoothed_openness is None:
             self.smoothed_openness = raw_openness
         else:
@@ -470,12 +450,14 @@ class JumpingJackAnalyzer:
             if dt > 0:
                 openness_velocity = (self.smoothed_openness - self.last_openness) / dt
 
+        # --- framing (non‑blocking) ---
         framing_message = None
         if torso_visible:
             framing_message = _framing_feedback(
                 l_shoulder, r_shoulder, l_hip, r_hip, l_wrist, r_wrist, legs_visible
             )
 
+        # --- posture calibration ---
         if self.stage == "closed" and not self.calibrated and torso_lean is not None:
             self._calib_samples.append(torso_lean)
             if len(self._calib_samples) >= CALIBRATION_FRAMES:
@@ -492,45 +474,24 @@ class JumpingJackAnalyzer:
                 issues.append("poor_posture")
                 messages.append("Try keeping your back a little straighter")
 
-        if (
-            self.stage == "open"
-            and avg_elbow_angle is not None
-            and avg_elbow_angle < ELBOW_STRAIGHT_MIN
-        ):
-            issues.append("bent_elbows")
-            messages.append("Try straightening your arms a bit more")
+        # --- stage transitions (simple & robust) ---
+        rep_completed = False
 
-        arm_diff = (
-            abs(left_arm_angle - right_arm_angle)
-            if left_arm_angle is not None and right_arm_angle is not None
-            else None
-        )
+        if self.stage == "closed" and self.smoothed_openness > OPENNESS_OPEN_THRESH:
+            self.stage = "open"
+            self.rep_start_time = t
+            self._openness_acc = 0.0
+            self._reset_rep_trackers(arm_frac, leg_frac, mid_hip.x if mid_hip else None)
+        elif self.stage == "open" and self.smoothed_openness < OPENNESS_CLOSED_THRESH:
+            self.stage = "closed"
+            rep_completed = True
 
-        leg_diff_ratio = None
-        if legs_visible and mid_hip is not None:
-            l_dev = abs(l_ankle.x - mid_hip.x) / shoulder_width
-            r_dev = abs(r_ankle.x - mid_hip.x) / shoulder_width
-            leg_diff_ratio = abs(l_dev - r_dev)
-
-        if (arm_diff is not None and arm_diff > ARM_SYNC_MAX_DIFF_DEG) or (
-            leg_diff_ratio is not None and leg_diff_ratio > LEG_SYNC_MAX_DIFF_RATIO
-        ):
-            issues.append("asymmetrical_movement")
-            messages.append("Try moving your arms and legs together")
-
+        # --- rep quality tracking ---
         if self.stage == "open":
             if arm_frac is not None:
                 self._rep_peak_arm_frac = max(self._rep_peak_arm_frac, arm_frac)
             if leg_frac is not None:
                 self._rep_peak_leg_frac = max(self._rep_peak_leg_frac, leg_frac)
-            if avg_elbow_angle is not None:
-                self._rep_min_elbow_angle = min(
-                    self._rep_min_elbow_angle, avg_elbow_angle
-                )
-            if arm_diff is not None:
-                self._rep_max_arm_diff = max(self._rep_max_arm_diff, arm_diff)
-            if leg_diff_ratio is not None:
-                self._rep_max_leg_diff = max(self._rep_max_leg_diff, leg_diff_ratio)
             if mid_hip is not None:
                 if self._rep_hip_x_start is None:
                     self._rep_hip_x_start = mid_hip.x
@@ -543,6 +504,7 @@ class JumpingJackAnalyzer:
                     self._rep_issue_frame_counts.get(issue, 0) + 1
                 )
 
+        # --- partial rep detection (simple) ---
         partial_feedback = None
         if self.stage == "closed":
             if (
@@ -553,12 +515,9 @@ class JumpingJackAnalyzer:
             elif (
                 not self._attempt_flagged
                 and self._attempt_peak_openness is not None
-                and self._attempt_peak_openness - self.smoothed_openness
-                > PARTIAL_REP_BOUNCE
-                and self._attempt_peak_openness
-                < OPENNESS_OPEN_THRESH - PARTIAL_REP_MARGIN
-                and self._attempt_peak_openness - OPENNESS_CLOSED_THRESH
-                > PARTIAL_REP_MIN_RISE
+                and self._attempt_peak_openness - self.smoothed_openness > 6
+                and self._attempt_peak_openness < OPENNESS_OPEN_THRESH - 8
+                and self._attempt_peak_openness - OPENNESS_CLOSED_THRESH > 6
             ):
                 self._attempt_flagged = True
                 self.partial_rep_count += 1
@@ -568,30 +527,7 @@ class JumpingJackAnalyzer:
                 self._attempt_peak_openness = None
                 self._attempt_flagged = False
 
-        if self.stage == "closed" and self.smoothed_openness > OPENNESS_CLOSED_THRESH:
-            self._openness_acc = 0.0
-            if self.last_openness is not None:
-                self._openness_acc += abs(self.smoothed_openness - self.last_openness)
-
-        rep_completed = False
-        if self.stage == "closed" and self.smoothed_openness > OPENNESS_OPEN_THRESH:
-            self.stage = "open"
-            self.rep_start_time = t
-            self._openness_acc = 0.0
-            self._reset_rep_trackers(
-                arm_frac, leg_frac, avg_elbow_angle, mid_hip.x if mid_hip else None
-            )
-        elif self.stage == "open" and self.smoothed_openness < OPENNESS_CLOSED_THRESH:
-            self.stage = "closed"
-            rep_completed = True
-
-        if self.stage == "closed":
-            phase = "start"
-        elif openness_velocity is not None and openness_velocity < -5.0:
-            phase = "close"
-        else:
-            phase = "open"
-
+        # --- score & rep finalize ---
         rep_duration = rep_avg_speed = rep_class = rep_form_quality = None
         form_score = rom_score = stability_score = sync_score = None
         feedback = framing_message or partial_feedback
@@ -600,44 +536,21 @@ class JumpingJackAnalyzer:
             rep_duration = (
                 (t - self.rep_start_time) if self.rep_start_time is not None else None
             )
-            if rep_duration and rep_duration > 0:
-                rep_avg_speed = self._openness_acc / rep_duration
 
             valid = (
                 rep_duration is not None
                 and MIN_REP_DURATION <= rep_duration <= MAX_REP_DURATION
-                and self._openness_acc >= MIN_OPENNESS_DELTA
             )
 
             if valid:
                 self.rep_count += 1
-                rep_class = self._classify_tempo(rep_duration)
-                self.recent_rep_durations.append(rep_duration)
 
-                # Only treat an issue as real if it showed up repeatedly during the rep, not
-                # just on one noisy frame — this is what stops MediaPipe glitches from
-                # flagging otherwise-good reps as flawed.
+                # Simple quality check
                 confirmed_issues: set[str] = set()
-                if self._rep_open_frames > 0:
-                    for issue, count in self._rep_issue_frame_counts.items():
-                        if (
-                            count >= ISSUE_MIN_FRAMES
-                            and (count / self._rep_open_frames)
-                            >= ISSUE_FREQUENCY_THRESHOLD
-                        ):
-                            confirmed_issues.add(issue)
-
                 if self._rep_peak_arm_frac < ARM_OPENNESS_MIN_GOOD:
                     confirmed_issues.add("arms_not_fully_raised")
                 if self._rep_peak_leg_frac < LEG_OPENNESS_MIN_GOOD:
                     confirmed_issues.add("legs_not_spread_enough")
-
-                # This was the actual bug: confirmed_issues (the noise-filtered, "this issue
-                # really happened" set) was computed above but never handed off to
-                # self._current_rep_issues, which is what the scoring and feedback below
-                # actually reads. Every completed rep was judged against a leftover/empty set
-                # instead of what really happened during the rep.
-                self._current_rep_issues = confirmed_issues
 
                 rom_score = round(
                     100
@@ -646,16 +559,10 @@ class JumpingJackAnalyzer:
                 stability_score = round(
                     100 * _clip(1 - self._rep_hip_x_max_dev / STABILITY_MAX_DRIFT_RATIO)
                 )
-                arm_sync = 100 * _clip(
-                    1 - self._rep_max_arm_diff / ARM_SYNC_MAX_DIFF_DEG
-                )
-                leg_sync = 100 * _clip(
-                    1 - self._rep_max_leg_diff / LEG_SYNC_MAX_DIFF_RATIO
-                )
-                sync_score = round((arm_sync + leg_sync) / 2.0)
+                sync_score = 80  # placeholder; can be expanded later
 
                 form_score = 100
-                for issue in self._current_rep_issues:
+                for issue in confirmed_issues:
                     form_score -= MISTAKE_PENALTY.get(issue, 1)
                 form_score = max(0, form_score)
 
@@ -664,12 +571,12 @@ class JumpingJackAnalyzer:
                 self.sync_scores.append(sync_score)
                 self.form_scores.append(form_score)
 
-                if self._current_rep_issues:
+                if confirmed_issues:
                     rep_form_quality = "needs_improvement"
                     self.flawed_reps += 1
                     tips = [
                         ISSUE_TIPS[issue]
-                        for issue in self._current_rep_issues
+                        for issue in confirmed_issues
                         if issue in ISSUE_TIPS
                     ]
                     if tips:
@@ -695,12 +602,12 @@ class JumpingJackAnalyzer:
             self._openness_acc = 0.0
             self._current_rep_issues = set()
             phase = "rep_complete"
+        else:
+            phase = "open" if self.stage == "open" else "start"
 
         self.last_openness = self.smoothed_openness
         self.last_timestamp_s = t
 
-        if feedback is None and messages:
-            feedback = messages[0]
         if feedback is None and not (left_arm_ok or right_arm_ok):
             feedback = "Make sure your arms are visible in the frame"
         elif feedback is None and not legs_visible:
@@ -748,9 +655,7 @@ class JumpingJackAnalyzer:
                 "rep_duration": (
                     round(rep_duration, 2) if rep_duration is not None else None
                 ),
-                "rep_avg_speed": (
-                    round(rep_avg_speed, 1) if rep_avg_speed is not None else None
-                ),
+                "rep_avg_speed": None,
                 "rep_classification": rep_class,
                 "rep_form_quality": rep_form_quality,
                 "calibrated": self.calibrated,
