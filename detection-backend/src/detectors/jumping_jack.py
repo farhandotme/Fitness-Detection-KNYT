@@ -2,6 +2,7 @@ import math
 from collections import deque
 from typing import Any, Optional
 
+
 from src.engines.poseEngine import (  # type: ignore
     LEFT_ANKLE,
     LEFT_ELBOW,
@@ -20,6 +21,7 @@ from src.engines.poseEngine import (  # type: ignore
 # Tunable constants
 # -------------------------------------------------------------------------
 
+
 MIN_LANDMARK_VISIBILITY = 0.4
 CORE_LANDMARKS = (LEFT_SHOULDER, RIGHT_SHOULDER, LEFT_HIP, RIGHT_HIP)
 
@@ -34,15 +36,18 @@ def _looks_like_a_person(landmarks) -> bool:
 
 
 # Arm abduction angle (hip-shoulder-wrist), degrees.
-ARM_ANGLE_CLOSED = 25.0  # arms relaxed down at the sides
-ARM_ANGLE_OPEN = 150.0  # arms raised overhead
+ARM_ANGLE_CLOSED = 20.0  # arms relaxed down at the sides
+ARM_ANGLE_OPEN = 130.0  # arms raised overhead (realistic for most people)
+
 
 # Elbow angle (shoulder-elbow-wrist), degrees. Should stay near-straight.
-ELBOW_STRAIGHT_MIN = 150.0
+ELBOW_STRAIGHT_MIN = 140.0
+
 
 # Ankle-to-ankle distance / shoulder-width ratio.
-LEG_SPREAD_RATIO_CLOSED = 0.55  # feet together
-LEG_SPREAD_RATIO_OPEN = 1.6  # feet spread wide
+LEG_SPREAD_RATIO_CLOSED = 0.4  # feet together / close
+LEG_SPREAD_RATIO_OPEN = 1.2  # feet spread wide (normal, not extreme)
+
 
 # Combined 0-100 "openness" hysteresis band driving the rep state machine.
 OPENNESS_CLOSED_THRESH = 22.0
@@ -51,25 +56,31 @@ MIN_OPENNESS_DELTA = 35.0  # total travel required for a rep to "count"
 MIN_REP_DURATION = 0.28  # seconds — faster than this = noise/bounce
 MAX_REP_DURATION = 6.0  # seconds — slower than this = paused, not a rep
 
+
 CALIBRATION_FRAMES = 15
+
 
 # Posture: torso should stay close to upright throughout (less forgiving
 # than a squat, which expects forward lean).
-TORSO_LEAN_DELTA_DEG = 18.0
-TORSO_LEAN_HARD_MAX_DEG = 40.0
+TORSO_LEAN_DELTA_DEG = 22.0
+TORSO_LEAN_HARD_MAX_DEG = 45.0
+
 
 # Left/right synchronization tolerances.
 ARM_SYNC_MAX_DIFF_DEG = 55.0
 LEG_SYNC_MAX_DIFF_RATIO = 0.35  # normalized by shoulder width
 
+
 # Stability: allowed sideways hip drift during a rep, normalized by
 # shoulder width. Vertical bounce from the jump itself is NOT penalized.
 STABILITY_MAX_DRIFT_RATIO = 0.55
+
 
 # "Half rep" partial-rep heuristic (mirrors squat's PARTIAL_REP_* family).
 PARTIAL_REP_MARGIN = 12.0
 PARTIAL_REP_MIN_RISE = 20.0
 PARTIAL_REP_BOUNCE = 8.0
+
 
 # Per-mistake form_score penalty.
 MISTAKE_PENALTY = {
@@ -80,9 +91,11 @@ MISTAKE_PENALTY = {
     "asymmetrical_movement": 15,
 }
 
+
 SCORE_HISTORY = 10  # reps kept for rolling-average scores
 TEMPO_HISTORY = 5  # reps kept for reps-per-minute estimate
 FPS_WINDOW = 30  # frames kept for fps estimate
+
 
 # -------------------------------------------------------------------------
 # Camera framing / stance-position thresholds
@@ -610,9 +623,10 @@ class JumpingJackAnalyzer:
                 rep_class = self._classify_tempo(rep_duration)
                 self.recent_rep_durations.append(rep_duration)
 
-                if self._rep_peak_arm_frac < 0.82:
+                # Relaxed ROM checks so normal NASM-style reps are "good"
+                if self._rep_peak_arm_frac < 0.70:  # was 0.82
                     self._current_rep_issues.add("arms_not_fully_raised")
-                if self._rep_peak_leg_frac < 0.82:
+                if self._rep_peak_leg_frac < 0.70:  # was 0.82
                     self._current_rep_issues.add("legs_not_spread_enough")
                 if self._rep_min_elbow_angle < ELBOW_STRAIGHT_MIN:
                     self._current_rep_issues.add("bent_elbows")
