@@ -3,6 +3,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 import asyncio
 import base64
 import time
+import traceback
 
 import cv2
 import numpy as np
@@ -82,7 +83,9 @@ def _log_rep_progress(label: str, result: dict, exercise_already_logged: bool) -
 async def lateral_raise(websocket: WebSocket):
     await websocket.accept()
 
-    print("Client connected: LateralRaise")
+    # DEBUG MARKER — if you don't see this exact string in your container logs on connect,
+    # the running container is not using this file. Remove once counting is confirmed working.
+    print("Client connected: LateralRaise [build: smoothed-lift-fix-v2]")
 
     target_reps = _query_int(websocket, "target_reps", default=10, lo=1, hi=100)
     target_sets = _query_int(websocket, "target_sets", default=1, lo=1, hi=20)
@@ -96,14 +99,59 @@ async def lateral_raise(websocket: WebSocket):
 
     try:
         exercise_logged = False
+
+        # PoseEngine (MediaPipe) requires each frame's timestamp to be strictly greater than
+        # the last one it saw. Two frames processed close enough together can round to the same
+        # millisecond under time.time(), which MediaPipe treats as invalid and raises on — and
+        # since nothing below was catching that, it silently killed the whole session mid-set
+        # (the frontend just froze on the last good frame, with no visible error). This forces
+        # every timestamp we hand to the engine to be at least 1ms after the last one, no matter
+        # how fast frames arrive.
+        last_ts = 0
+
+        # DEBUG — logs only when stage or smoothed_lift changes meaningfully, so you can watch
+        # the container logs while doing a rep and see exactly where it stalls (or confirm it's
+        # tracking fine and the freeze is elsewhere). Remove once counting is confirmed working.
+        last_logged_stage = None
+        last_logged_lift_bucket = None
+
         while True:
             image = await websocket.receive_text()
 
-            frame = decode_frame(image)
+            try:
+                frame = decode_frame(image)
+            except Exception:
+                # A corrupted/partial frame over the wire shouldn't end the session.
+                traceback.print_exc()
+                continue
 
-            timestamp = int(time.time() * 1000)
+            if frame is None:
+                continue
 
-            result = counter.detect(frame, timestamp)
+            timestamp = max(int(time.time() * 1000), last_ts + 1)
+            last_ts = timestamp
+
+            try:
+                result = counter.detect(frame, timestamp)
+            except Exception:
+                # One bad frame (a MediaPipe hiccup, a landmark edge case, etc.) should never
+                # take down the whole session — log it and keep going so tracking and rep
+                # counting can pick right back up on the next frame.
+                traceback.print_exc()
+                continue
+
+            # DEBUG — remove once counting is confirmed working.
+            stage = result.get("stage")
+            lift = result.get("smoothed_lift")
+            lift_bucket = round(lift / 10) if lift is not None else None
+            if stage != last_logged_stage or lift_bucket != last_logged_lift_bucket:
+                print(
+                    f"[LateralRaise][DEBUG] stage={stage} smoothed_lift={lift} "
+                    f"raw_lift={result.get('lift')} pose_detected={result.get('pose_detected')} "
+                    f"low_visibility={result.get('low_visibility')}"
+                )
+                last_logged_stage = stage
+                last_logged_lift_bucket = lift_bucket
 
             exercise_logged = _log_rep_progress("LateralRaise", result, exercise_logged)
 
