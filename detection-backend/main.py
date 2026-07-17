@@ -16,6 +16,7 @@ from src.routes.lateralRaiseRoutes import router as lateralRaiseRouter
 from src.routes.muayThaiJabRoutes import router as muayThaiJabRouter
 from src.routes.deadbugRoutes import router as deadbugRouter
 from src.routes.sidePlankRoutes import router as sidePlankRouter
+from src.routes.bridgePoseRoutes import router as bridgePoseRouter
 
 app = FastAPI()
 
@@ -47,3 +48,4 @@ app.include_router(lateralRaiseRouter, prefix="/ws", tags="lateral-raise")
 app.include_router(muayThaiJabRouter, prefix="/ws", tags="muaythai-jab")
 app.include_router(deadbugRouter, prefix="/ws", tags="dead-bug-router")
 app.include_router(sidePlankRouter, prefix="/ws", tags="side-plank-router")
+app.include_router(bridgePoseRouter, prefix="/ws", tags="bridge-pose-router")
