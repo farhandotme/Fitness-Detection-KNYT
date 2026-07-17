@@ -1,0 +1,49 @@
+.muaythaijab-page {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.muaythaijab-back-btn {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--forest);
+  border-radius: 999px;
+  padding: 7px 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.muaythaijab-setup-tip {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+  background: var(--panel);
+}
+
+/* Round clock, last 10 seconds: a quick pulse so the fighter knows the
+   round is about to end without having to read the numbers. */
+.muaythaijab-time-critical {
+  color: #d64545;
+  font-weight: 800;
+  animation: muaythaijab-pulse 1s ease-in-out infinite;
+}
+
+.muaythaijab-progress-critical .progress-fill {
+  background: #d64545;
+}
+
+@keyframes muaythaijab-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}

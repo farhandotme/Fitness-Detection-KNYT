@@ -12,6 +12,7 @@ import LungePage from "./pages/LungePage";
 import HighKneesPage from "./pages/HighKneesPage";
 import ShoulderPressPage from "./pages/ShoulderPressPage";
 import LateralRaisePage from "./pages/LateralRaisePage";
+import MuayThaiJabPage from "./pages/MuayThaiJabPage";
 
 function App() {
   return (
@@ -36,6 +37,7 @@ function App() {
           <Route path="squat" element={<SquatPage />} />
           <Route path="pushup" element={<PushupPage />} />
           <Route path="body-scan" element={<BodyAnalysisPage />} />
+          <Route path="muay_thai_jab" element={<MuayThaiJabPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

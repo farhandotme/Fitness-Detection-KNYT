@@ -169,6 +169,18 @@ export const EXERCISES: ExerciseMeta[] = [
     route: "/exercises/lateral-raise",
   },
   {
+    id: "Muay Thai Jab",
+    name: "Muay Thai Jab",
+    category: "Upper Body",
+    difficulty: "Beginner",
+    equipment: "Bodyweight",
+    emoji: "🥊",
+    description: "Tracks shoulder abduction and arm symmetry.",
+    tags: ["shoulders", "arms"],
+    status: "available",
+    route: "/muay_thai_jab",
+  },
+  {
     id: "arm-circles",
     name: "Arm Circles",
     category: "Mobility",
