@@ -13,6 +13,7 @@ from src.routes.bodyAnalysisRoutes import router as bodyAnalysisRouter
 from src.routes.mountainClimberRoutes import router as mountainClimberRouter
 from src.routes.shoulderPressRoutes import router as shoulderPressRouter
 from src.routes.lateralRaiseRoutes import router as lateralRaiseRouter
+from src.routes.muayThaiJabRoutes import router as muayThaiJabRouter
 
 app = FastAPI()
 
@@ -41,3 +42,4 @@ app.include_router(mountainClimberRouter, prefix="/ws", tags="mountain-climber")
 app.include_router(bodyAnalysisRouter, prefix="/api", tags="body-analysis")
 app.include_router(shoulderPressRouter, prefix="/ws", tags="shoulder-press")
 app.include_router(lateralRaiseRouter, prefix="/ws", tags="lateral-raise")
+app.include_router(muayThaiJabRouter, prefix="/ws", tags="muaythai-jab")
