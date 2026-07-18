@@ -1,46 +1,46 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Landmark } from "./useSquatSocket";
 
-export type { Landmark };
+export interface Landmark {
+  x: number;
+  y: number;
+  z: number;
+  visibility?: number;
+}
 
 /** Everything the FastAPI `ShoulderPressAnalyzer` sends per frame. */
 export interface ShoulderPressData {
   pose_detected: boolean;
+  position_ok: boolean;
+  position_message: string | null;
+  ready: boolean;
+  angle: number | null;
+  smoothed_angle: number | null;
   left_elbow_angle: number | null;
   right_elbow_angle: number | null;
-  angle: number | null;
-  press: number | null;
-  smoothed_press: number | null;
   stage: string;
   rep_count: number;
   good_reps: number;
   flawed_reps: number;
-  partial_rep_count: number;
   target_reps: number | null;
   session_complete: boolean;
   rep_completed: boolean;
   rep_duration: number | null;
   rep_classification: string | null;
   rep_form_quality: string | null;
-  calibrated: boolean;
-  posture_ok: boolean;
-  posture_issues: string[];
-  posture_messages: string[];
+  lean_ok: boolean;
   framing_ok: boolean;
   framing_message: string | null;
-  form_score: number | null;
-  avg_form_score: number | null;
-  reps_per_minute: number | null;
-  pace_classification: string | null;
   feedback: string | null;
   low_visibility: boolean;
   elapsed_time: number;
   landmarks: Landmark[];
+  /** Which set (of the coach-assigned plan) this connection is for. */
   set_number?: number;
+  /** Total sets in the coach-assigned plan. */
   target_sets?: number;
   /**
    * Backend-validated: true only once every set in the plan has hit its
-   * target reps. The frontend treats this as the source of truth for
+   * target reps. The frontend must treat this as the source of truth for
    * "the user completed this exercise" — it must not compute this itself.
    */
   exercise_complete?: boolean;
@@ -48,32 +48,26 @@ export interface ShoulderPressData {
 
 const EMPTY_RESULT: ShoulderPressData = {
   pose_detected: false,
+  position_ok: false,
+  position_message: null,
+  ready: false,
+  angle: null,
+  smoothed_angle: null,
   left_elbow_angle: null,
   right_elbow_angle: null,
-  angle: null,
-  press: null,
-  smoothed_press: null,
-  stage: "down",
+  stage: "bottom",
   rep_count: 0,
   good_reps: 0,
   flawed_reps: 0,
-  partial_rep_count: 0,
   target_reps: null,
   session_complete: false,
   rep_completed: false,
   rep_duration: null,
   rep_classification: null,
   rep_form_quality: null,
-  calibrated: false,
-  posture_ok: true,
-  posture_issues: [],
-  posture_messages: [],
+  lean_ok: true,
   framing_ok: true,
   framing_message: null,
-  form_score: null,
-  avg_form_score: null,
-  reps_per_minute: null,
-  pace_classification: null,
   feedback: null,
   low_visibility: false,
   elapsed_time: 0,
@@ -97,12 +91,10 @@ export default function useShoulderPressSocket() {
     rep_duration: null as number | null,
     rep_classification: null as string | null,
     rep_form_quality: null as string | null,
-    form_score: null as number | null,
-    posture_issues: [] as string[],
-    posture_messages: [] as string[],
     feedback: null as string | null,
   });
 
+  // Always close any open socket on unmount.
   useEffect(() => {
     return () => {
       socketRef.current?.close();
@@ -128,13 +120,12 @@ export default function useShoulderPressSocket() {
         rep_duration: null,
         rep_classification: null,
         rep_form_quality: null,
-        form_score: null,
-        posture_issues: [],
-        posture_messages: [],
         feedback: null,
       });
       setSocketError(null);
 
+      // The coach-assigned plan is sent to the backend; the backend — not
+      // this hook — decides when a set / the whole exercise is complete.
       const params = new URLSearchParams();
       if (plan?.targetReps != null)
         params.set("target_reps", String(plan.targetReps));
@@ -143,6 +134,9 @@ export default function useShoulderPressSocket() {
       if (plan?.setNumber != null)
         params.set("set_number", String(plan.setNumber));
       const query = params.toString();
+      // # if deside {
+
+      // }
 
       let ws: WebSocket;
       try {
@@ -167,9 +161,6 @@ export default function useShoulderPressSocket() {
             rep_duration: data.rep_duration,
             rep_classification: data.rep_classification,
             rep_form_quality: data.rep_form_quality,
-            form_score: data.form_score,
-            posture_issues: data.posture_issues,
-            posture_messages: data.posture_messages,
             feedback: data.feedback,
           });
         }

@@ -5,16 +5,12 @@ interface Props {
   data: ShoulderPressData | undefined;
 }
 
-const ISSUE_LABEL: Record<string, string> = {
-  poor_posture: "Leaning / arching back",
-  wrist_not_stacked: "Wrist not stacked",
-  elbows_flared: "Elbows too flared",
-  asymmetric_press: "Uneven arms",
-};
+const BOTTOM_ANGLE = 100;
+const TOP_ANGLE = 150;
 
 export default function ShoulderPressStatsPanel({ data }: Props) {
+  const angle = data?.smoothed_angle ?? data?.angle ?? null;
   const quality = data?.rep_form_quality;
-  const issues = data?.posture_issues ?? [];
 
   return (
     <div className="arm-panel">
@@ -33,44 +29,30 @@ export default function ShoulderPressStatsPanel({ data }: Props) {
 
       <div className="arm-panel-rep-row">
         <span className="arm-panel-rep-count">{data?.rep_count ?? 0}</span>
-        <span className={`stage-badge ${data?.stage ?? "down"}`}>
-          {(data?.stage ?? "down") === "up" ? "LOCKOUT" : "RACK"}
+        <span className={`stage-badge ${data?.stage ?? "bottom"}`}>
+          {(data?.stage ?? "bottom") === "top" ? "ARMS UP" : "SHOULDERS"}
         </span>
       </div>
 
       <AngleGauge
-        angle={data?.angle ?? null}
-        upThreshold={160}
-        downThreshold={95}
-        stage={data?.stage === "up" ? "up" : "down"}
+        angle={angle}
+        upThreshold={BOTTOM_ANGLE}
+        downThreshold={TOP_ANGLE}
+        stage={data?.stage === "top" ? "up" : "down"}
       />
 
       <div className="arm-grid">
         <div className="arm-grid-item">
-          <span className="k">Left elbow angle</span>
+          <span className="k">Arm angle</span>
           <span className="v">
-            {data?.left_elbow_angle != null
-              ? `${data.left_elbow_angle.toFixed(1)}°`
-              : "—"}
+            {angle != null ? `${angle.toFixed(1)}°` : "—"}
           </span>
         </div>
         <div className="arm-grid-item">
-          <span className="k">Right elbow angle</span>
-          <span className="v">
-            {data?.right_elbow_angle != null
-              ? `${data.right_elbow_angle.toFixed(1)}°`
-              : "—"}
-          </span>
-        </div>
-        <div className="arm-grid-item">
-          <span className="k">Good / Flawed</span>
+          <span className="k">Good / Needs work</span>
           <span className="v">
             {data?.good_reps ?? 0} / {data?.flawed_reps ?? 0}
           </span>
-        </div>
-        <div className="arm-grid-item">
-          <span className="k">Half reps</span>
-          <span className="v">{data?.partial_rep_count ?? 0}</span>
         </div>
         <div className="arm-grid-item">
           <span className="k">Last rep</span>
@@ -81,46 +63,12 @@ export default function ShoulderPressStatsPanel({ data }: Props) {
           </span>
         </div>
         <div className="arm-grid-item">
-          <span className="k">Tempo</span>
+          <span className="k">Pace</span>
           <span className="v">
             {data?.rep_classification
               ? data.rep_classification.replace("_", " ")
               : "—"}
           </span>
-        </div>
-        <div className="arm-grid-item">
-          <span className="k">Calibration</span>
-          <span className="v">
-            {data?.calibrated ? "Ready" : "Calibrating…"}
-          </span>
-        </div>
-        <div className="arm-grid-item">
-          <span className="k">Cadence</span>
-          <span className="v">
-            {data?.reps_per_minute != null
-              ? `${data.reps_per_minute} rpm`
-              : "—"}
-          </span>
-        </div>
-        <div className="arm-grid-item">
-          <span className="k">Pace</span>
-          <span className="v">
-            {data?.pace_classification
-              ? data.pace_classification.replace("_", " ")
-              : "—"}
-          </span>
-        </div>
-        <div className="arm-grid-item">
-          <span className="k">Form score</span>
-          <span className="v">
-            {data?.form_score != null
-              ? data.form_score
-              : (data?.avg_form_score ?? "—")}
-          </span>
-        </div>
-        <div className="arm-grid-item">
-          <span className="k">Avg form</span>
-          <span className="v">{data?.avg_form_score ?? "—"}</span>
         </div>
       </div>
 
@@ -133,25 +81,21 @@ export default function ShoulderPressStatsPanel({ data }: Props) {
       >
         {data?.framing_ok === false && data.framing_message
           ? data.framing_message
-          : "Position: good — full range overhead in frame, centered"}
+          : "Framing: good — arms fully visible in shot"}
       </div>
 
-      {/* Every tracked correction, live — not just a single summary line,
-          since the whole point of this exercise is getting all four checks
-          right on every rep. */}
-      {(["poor_posture", "wrist_not_stacked", "elbows_flared", "asymmetric_press"] as const).map(
-        (key) => {
-          const active = issues.includes(key);
-          return (
-            <div key={key} className={`posture-line ${active ? "bad" : "ok"}`}>
-              {active
-                ? (data?.posture_messages.find((_m, i) => issues[i] === key) ??
-                  ISSUE_LABEL[key])
-                : `${ISSUE_LABEL[key]}: looks good`}
-            </div>
-          );
-        },
-      )}
+      <div className={`posture-line ${data?.position_ok ? "ok" : "bad"}`}>
+        {data?.position_ok
+          ? "Standing position confirmed — counting reps"
+          : (data?.position_message ??
+            "Waiting for a clear standing position…")}
+      </div>
+
+      <div className={`posture-line ${data?.lean_ok === false ? "bad" : "ok"}`}>
+        {data?.lean_ok === false
+          ? "Try not to lean backward as you press"
+          : "Posture looks steady"}
+      </div>
     </div>
   );
 }
