@@ -1,60 +1,36 @@
 """
-Overhead shoulder-press rep counting + full-body form correction.
+Shoulder press rep counting.
 
-Design
-------
-`ShoulderPressAnalyzer` is a pure, stateful, whole-body analyzer, structured
-the same way as the other detectors in this package (`squat.py`,
-`high_knees.py`, `mountain_climber.py`) — it knows nothing about the camera
-or the MediaPipe model; `ShoulderPressSession` owns a single shared
-`PoseEngine` and feeds it landmarks every frame.
-
-Rep counting
-------------
-Driven by the average shoulder-elbow-wrist ("elbow") angle across both arms
-(falling back to whichever single arm is visible). The rest position is the
-"rack" — elbows bent near shoulder height (`RACK_ANGLE`); a rep is a full
-press to lockout overhead (`LOCKOUT_ANGLE`) and back down to the rack. This
-mirrors `high_knees.py`'s "start grounded, drive up, return completes the
-rep" state machine, just applied to a bilateral (both-arms-together) press
-instead of an alternating-leg movement.
-
-Form tracking — this is the point of the exercise, so it's checked hard
+Design (kept deliberately simple — see project note: this is for everyday
+gym users, not a biomechanics lab)
 ------------------------------------------------------------------------
-Four independent issues are tracked every single frame, each with its own
-plain-language correction, and each contributes to a per-rep `form_score`:
+A shoulder press only needs ONE number to know where the person is in the
+rep: the elbow angle (shoulder-elbow-wrist). Hands start bent near the
+shoulders ("bottom") and the rep is counted once the arms have gone all
+the way up straight overhead and come back down to the shoulders again
+("top" -> back to "bottom").
 
-  1. **`poor_posture`** — torso lean/arch. Overhead pressing invites
-     leaning back or arching the lower back to help drive the weight up
-     instead of pressing strictly vertically. Measured the same way as
-     `high_knees.py`/`lunge.py`: the shoulder-hip line's angle off vertical,
-     compared against a personal baseline captured at rest (rack position),
-     so it adapts to each person's natural stance/camera angle instead of
-     assuming one "correct" absolute lean.
-  2. **`wrist_not_stacked`** — the wrist should stay roughly stacked over
-     the elbow (a vertical forearm) through the whole press, not drift
-     forward/back, which is a common wrist-strain cause. Measured as the
-     wrist's horizontal offset from the elbow, normalized by shoulder
-     width.
-  3. **`elbows_flared`** — at the rack (bottom), the elbows shouldn't flare
-     out dramatically wider than the shoulders before driving up. Measured
-     as elbow-to-elbow width vs shoulder width.
-  4. **`asymmetric_press`** — both arms should press together. Measured as
-     the max gap between the left and right elbow angle during the "up"
-     phase of a rep; one arm lagging/leading the other by a wide margin
-     means the bar/weight is tilting.
+To keep this reliable and avoid the two failure modes we were explicitly
+asked to avoid — (1) "it's not detecting me" and (2) "it keeps flagging
+flaws that aren't real" — this file intentionally does very little beyond
+that one core measurement:
 
-A rep still counts the moment it meets range-of-motion and tempo
-requirements even with a form issue flagged (a flawed rep still counts —
-"perfect or nothing" is discouraging), tagged `rep_form_quality:
-"needs_improvement"`, with `posture_issues`/`posture_messages` telling the
-user exactly what to fix on the next rep. A press that never reaches
-lockout is tracked as a "half rep" (same bounce-detection heuristic as
-`high_knees.py`) instead of being silently dropped.
+  * Only ONE hard gate before counting starts: can we actually see both
+    shoulders/elbows/wrists. No floor-position voting, no calibration
+    step, no orientation classification like the push-up detector needs.
+  * "Are you standing" is judged generously. If we can see the hips we
+    use them for a loose sanity check; if the camera is framed from the
+    waist up (hips not visible — very common for an overhead-press shot)
+    we simply assume standing rather than blocking the count.
+  * Only ONE soft form note (leaning back) — and it never stops a rep
+    from counting, it's just a coaching tip. Everything else people
+    might associate with "advanced" press form (bar path, wrist wobble,
+    scapular tracking, etc.) is left out on purpose.
+  * All on-screen messages are written the way you'd talk to a friend at
+    the gym, not the way a physio would chart it.
 """
 
 import math
-from collections import deque
 from typing import Any, Optional
 
 from src.engines.poseEngine import (  # type: ignore
@@ -74,63 +50,47 @@ from src.engines.poseEngine import (  # type: ignore
 # -------------------------------------------------------------------------
 
 MIN_LANDMARK_VISIBILITY = 0.4
-CORE_LANDMARKS = (LEFT_SHOULDER, RIGHT_SHOULDER, LEFT_HIP, RIGHT_HIP)
 
+CORE_LANDMARKS = (LEFT_SHOULDER, RIGHT_SHOULDER)
 
-def _looks_like_a_person(landmarks) -> bool:
-    visible_core = sum(
-        1
-        for i in CORE_LANDMARKS
-        if landmarks[i].visibility is not None and landmarks[i].visibility > 0.6
-    )
-    return visible_core >= 3
+# Elbow angle (shoulder-elbow-wrist) thresholds driving the rep state
+# machine. Same hysteresis-band idea as the push-up counter: you need to
+# clear TOP_ANGLE to register "pressed all the way up", and drop back
+# below BOTTOM_ANGLE to register "back down" and lock the rep in — the
+# gap between the two stops a borderline angle from double-counting.
+TOP_ANGLE = 150.0  # arms considered straight overhead
+BOTTOM_ANGLE = 100.0  # elbows bent enough to count as the starting position
+MIN_ANGLE_DELTA = 35.0  # total angle travel required for a rep to "count"
+MIN_REP_DURATION = 0.35  # seconds — faster than this = uncontrolled/momentum
+MAX_REP_DURATION = 10.0  # seconds — slower than this = probably a pause, not a rep
 
+# "Go higher" partial-rep coaching (mirrors the push-up detector's logic)
+PARTIAL_REP_MARGIN_DEG = 15.0
+PARTIAL_REP_MIN_RANGE_DEG = 20.0
+PARTIAL_REP_BOUNCE_DEG = 8.0
 
-# Elbow angle (shoulder-elbow-wrist), degrees. Rack position (bottom, elbows
-# bent near shoulder height) => angle near 90. Full overhead lockout
-# (arms extended straight up) => angle near 170-180.
-RACK_ANGLE = 95.0
-LOCKOUT_ANGLE = 160.0
+# Overhead lockout: at the top of the rep we also check the wrist has
+# actually gone above the shoulder line (not just that the elbow angle
+# opened up) — this is what stops "waving your arms around" from being
+# counted as a press. Kept generous on purpose (a small margin, not "wrist
+# above your head").
+WRIST_ABOVE_SHOULDER_MARGIN = 0.02  # fraction of frame height
 
-PRESS_RAISED_THRESH = 99.5  # press_score at/above this = genuinely locked out
-PRESS_GROUNDED_THRESH = 15.0
-MIN_ANGLE_DELTA = 35.0  # total travel required for a rep to "count"
-MIN_REP_DURATION = 0.25  # seconds — faster than this = uncontrolled/momentum
-MAX_REP_DURATION = 6.0  # seconds — slower than this = probably a pause
+# Standing check — generous. If hips aren't visible we skip this
+# entirely rather than block counting (see module docstring).
+MAX_LEAN_FROM_VERTICAL_DEG = 45.0
 
-CALIBRATION_FRAMES = 15
+# Leaning-back soft coaching note (never blocks a rep). Also skipped
+# entirely if hips aren't visible.
+LEAN_BACK_WARN_DEG = 18.0
 
-# "Half rep" partial-rep heuristic (same family as high_knees.py).
-PARTIAL_REP_MARGIN = 10.0
-PARTIAL_REP_MIN_RISE = 18.0
-PARTIAL_REP_BOUNCE = 7.0
+STABLE_FRAMES = 5  # consecutive good frames before counting turns on
+GRACE_FRAMES = 10  # consecutive bad frames tolerated before counting turns off
 
-# ---- form-correction thresholds ----
-TORSO_LEAN_DELTA_DEG = 14.0  # leaning/arching back off your calibrated baseline
-WRIST_OFFSET_RATIO = 0.30  # |wrist.x - elbow.x| / shoulder_width
-ELBOW_FLARE_RATIO = 1.9  # elbow-to-elbow width / shoulder width, checked at rack
-ASYMMETRY_DEG = 20.0  # max allowed gap between left/right elbow angle mid-press
-
-PACE_SLOW_RPM = 15.0
-PACE_FAST_RPM = 55.0
-
-MISTAKE_PENALTY = {
-    "poor_posture": 15,
-    "wrist_not_stacked": 10,
-    "elbows_flared": 10,
-    "asymmetric_press": 15,
-}
-
-SCORE_HISTORY = 10
-RPM_WINDOW = 6
-
-# -------------------------------------------------------------------------
-# Camera framing thresholds
-# -------------------------------------------------------------------------
+# Camera framing
 FRAME_EDGE_MARGIN = 0.03
-TORSO_SPAN_TOO_CLOSE = 0.55
-TORSO_SPAN_TOO_FAR = 0.10
-CENTER_X_TOLERANCE = 0.28
+BBOX_TOO_CLOSE = 0.97  # bbox width or height fraction of frame
+BBOX_TOO_FAR = 0.12
 
 
 class _Point:
@@ -166,116 +126,89 @@ def _angle_deg(a, b, c) -> float:
     return ang
 
 
-def _dist(a, b) -> float:
-    return math.hypot(a.x - b.x, a.y - b.y)
+def _looks_like_a_person(landmarks) -> bool:
+    visible_core = sum(
+        1
+        for i in CORE_LANDMARKS
+        if landmarks[i].visibility is not None and landmarks[i].visibility > 0.6
+    )
+    return visible_core >= 1
 
 
-def _clip(v: float, lo: float = 0.0, hi: float = 1.0) -> float:
-    return max(lo, min(hi, v))
-
-
-def _press_score(angle: float) -> float:
-    """Map an elbow angle to a 0-100 'how close to full lockout' score."""
-    return 100.0 * _clip((angle - RACK_ANGLE) / (LOCKOUT_ANGLE - RACK_ANGLE))
-
-
-def _framing_feedback(l_shoulder, r_shoulder, l_hip, r_hip) -> Optional[str]:
-    mid_shoulder = _midpoint(l_shoulder, r_shoulder)
-    mid_hip = _midpoint(l_hip, r_hip)
-
-    for p in (l_shoulder, r_shoulder, l_hip, r_hip):
+def _framing_feedback(points: list[_Point]) -> Optional[str]:
+    for p in points:
         if (
             p.x < FRAME_EDGE_MARGIN
             or p.x > 1 - FRAME_EDGE_MARGIN
             or p.y < FRAME_EDGE_MARGIN
+            or p.y > 1 - FRAME_EDGE_MARGIN
         ):
-            return "You're partly out of frame — center yourself with space above your head."
+            return (
+                "You're partly out of frame — step back so your arms fit in the shot."
+            )
 
-    torso_span = abs(mid_hip.y - mid_shoulder.y)
-    if torso_span > TORSO_SPAN_TOO_CLOSE:
-        return "You're too close to the camera — step back so your arms fit fully overhead in frame."
-    if torso_span < TORSO_SPAN_TOO_FAR:
-        return "You're too far from the camera — move a bit closer for accurate tracking."
+    if len(points) < 3:
+        return None
 
-    if abs(mid_hip.x - 0.5) > CENTER_X_TOLERANCE:
-        side = "left" if mid_hip.x < 0.5 else "right"
-        return f"Move to the center of frame — you're too far to the {side}."
+    xs = [p.x for p in points]
+    ys = [p.y for p in points]
+    width = max(xs) - min(xs)
+    height = max(ys) - min(ys)
+
+    if width > BBOX_TOO_CLOSE or height > BBOX_TOO_CLOSE:
+        return "You're too close to the camera — back up a bit."
+    if width < BBOX_TOO_FAR and height < BBOX_TOO_FAR:
+        return "You're too far from the camera — move a bit closer."
 
     return None
 
 
 class ShoulderPressAnalyzer:
-    """Stateful overhead-press rep counter + posture/wrist/flare/symmetry checker."""
+    """Stateful shoulder-press rep counter — see module docstring."""
 
     def __init__(self, target_reps: Optional[int] = None):
         self.target_reps = target_reps
 
-        self.stage = "down"  # "down" = rack (rest), "up" = locked out overhead
+        self.stage = "bottom"  # "bottom" = hands at shoulders, "top" = arms overhead
         self.rep_count = 0
         self.good_reps = 0
         self.flawed_reps = 0
         self.partial_rep_count = 0
 
-        self.smoothed_press: Optional[float] = None
-        self.last_press: Optional[float] = None
+        self.smoothed_angle: Optional[float] = None
+        self.last_angle: Optional[float] = None
         self.last_timestamp_s: Optional[float] = None
-        self.press_smooth_alpha = 0.5
-
         self.rep_start_time: Optional[float] = None
-        self._press_acc = 0.0
+        self._rep_angle_acc = 0.0
+        self.angle_smooth_alpha = 0.6
 
         self.session_start_time: Optional[float] = None
 
-        # "Half rep" partial-rep detection (tracked while stage == "down")
-        self._attempt_peak_press: Optional[float] = None
+        self._attempt_max_angle: Optional[float] = None
         self._attempt_flagged = False
 
-        # Personal posture baseline, captured at rest (rack position).
-        self._calib_samples: list[float] = []
-        self.calibrated = False
-        self._baseline_torso_lean = 0.0
+        self._good_streak = 0
+        self._bad_streak = 0
+        self.ready = False
 
         self._current_rep_issues: set[str] = set()
-        self._rep_max_torso_lean_delta = 0.0
-        self._rep_max_wrist_offset = 0.0
-        self._rep_max_asymmetry = 0.0
-        self._rep_elbow_flare_at_rack = False
-
-        self.form_scores: deque = deque(maxlen=SCORE_HISTORY)
-        self._rep_complete_times: deque = deque(maxlen=RPM_WINDOW)
 
     # ---------------------------------------------------------------
-    def _is_complete(self) -> bool:
-        return self.target_reps is not None and self.rep_count >= self.target_reps
-
-    def _finish_calibration(self):
-        n = len(self._calib_samples)
-        self._baseline_torso_lean = sum(self._calib_samples) / n
-        self.calibrated = True
-
-    @staticmethod
-    def _avg(d: deque) -> Optional[float]:
-        return round(sum(d) / len(d), 1) if d else None
-
     def _classify_tempo(self, duration: Optional[float]) -> Optional[str]:
         if duration is None:
             return None
-        if duration < 0.5:
-            return "fast"
-        if duration < 1.3:
+        if duration >= 3.5:
+            return "too_slow"
+        if duration >= 2.0:
+            return "slow"
+        if duration >= 0.8:
             return "good"
-        if duration < 2.5:
-            return "slow"
-        return "too_slow"
-
-    def _classify_pace(self, rpm: Optional[float]) -> Optional[str]:
-        if rpm is None:
-            return None
-        if rpm < PACE_SLOW_RPM:
-            return "slow"
-        if rpm > PACE_FAST_RPM:
+        if duration >= 0.35:
             return "fast"
-        return "steady"
+        return "too_fast"
+
+    def _is_complete(self) -> bool:
+        return self.target_reps is not None and self.rep_count >= self.target_reps
 
     # ---------------------------------------------------------------
     def update(self, landmarks, timestamp_ms: int) -> dict[str, Any]:
@@ -286,39 +219,33 @@ class ShoulderPressAnalyzer:
 
         response: dict[str, Any] = {
             "pose_detected": False,
+            "position_ok": False,
+            "position_message": None,
+            "ready": self.ready,
+            "angle": None,
+            "smoothed_angle": None,
             "left_elbow_angle": None,
             "right_elbow_angle": None,
-            "angle": None,
-            "press": None,
-            "smoothed_press": None,
             "stage": self.stage,
             "rep_count": self.rep_count,
             "good_reps": self.good_reps,
             "flawed_reps": self.flawed_reps,
-            "partial_rep_count": self.partial_rep_count,
             "target_reps": self.target_reps,
             "session_complete": self._is_complete(),
             "rep_completed": False,
             "rep_duration": None,
             "rep_classification": None,
             "rep_form_quality": None,
-            "calibrated": self.calibrated,
-            "posture_ok": True,
-            "posture_issues": [],
-            "posture_messages": [],
+            "lean_ok": True,
             "framing_ok": True,
             "framing_message": None,
-            "form_score": None,
-            "avg_form_score": self._avg(self.form_scores),
-            "reps_per_minute": None,
-            "pace_classification": None,
             "feedback": None,
             "low_visibility": False,
             "elapsed_time": round(elapsed, 2),
         }
 
         if landmarks is None or not _looks_like_a_person(landmarks):
-            response["feedback"] = "No person detected — step into frame."
+            response["feedback"] = "We can't see you yet — step into the camera view."
             return response
 
         l_shoulder, r_shoulder = landmarks[LEFT_SHOULDER], landmarks[RIGHT_SHOULDER]
@@ -328,293 +255,251 @@ class ShoulderPressAnalyzer:
 
         left_arm_ok = _visible((l_shoulder, l_elbow, l_wrist))
         right_arm_ok = _visible((r_shoulder, r_elbow, r_wrist))
-        torso_visible = _visible((l_shoulder, r_shoulder, l_hip, r_hip))
 
         if not left_arm_ok and not right_arm_ok:
             response["pose_detected"] = True
             response["low_visibility"] = True
             response["feedback"] = (
-                "Can't see your arms clearly — adjust the camera so your "
-                "shoulders, elbows, and wrists are all in frame, arms overhead."
-            )
-            return response
-
-        if not torso_visible:
-            response["pose_detected"] = True
-            response["low_visibility"] = True
-            response["feedback"] = (
-                "Can't see your torso — make sure your shoulders and hips "
-                "are both in frame."
+                "We can't see your arms clearly — make sure your shoulders, "
+                "elbows and hands are all visible in the camera."
             )
             return response
 
         response["pose_detected"] = True
 
-        mid_shoulder = _midpoint(l_shoulder, r_shoulder)
-        mid_hip = _midpoint(l_hip, r_hip)
-        shoulder_width = max(_dist(l_shoulder, r_shoulder), 1e-6)
-
-        # ---- camera framing (every frame) ----
-        framing_message = _framing_feedback(l_shoulder, r_shoulder, l_hip, r_hip)
+        # ---- camera framing ----
+        bbox_candidates = [
+            p
+            for p in (l_shoulder, r_shoulder, l_elbow, r_elbow, l_wrist, r_wrist)
+            if _visible((p,))
+        ]
+        bbox_points = [_Point(p.x, p.y) for p in bbox_candidates]
+        framing_message = _framing_feedback(bbox_points)
         response["framing_ok"] = framing_message is None
         response["framing_message"] = framing_message
 
-        # ---- elbow angle per arm (drives rep counting) ----
-        left_angle = _angle_deg(l_shoulder, l_elbow, l_wrist) if left_arm_ok else None
-        right_angle = (
-            _angle_deg(r_shoulder, r_elbow, r_wrist) if right_arm_ok else None
-        )
-        response["left_elbow_angle"] = (
-            round(left_angle, 1) if left_angle is not None else None
-        )
-        response["right_elbow_angle"] = (
-            round(right_angle, 1) if right_angle is not None else None
-        )
+        # ---- standing check — generous, skipped if hips aren't visible ----
+        hips_visible = _visible((l_hip, r_hip)) and _visible((l_shoulder, r_shoulder))
+        is_standing = True  # default to "yes" so we never block on a guess
+        if hips_visible:
+            mid_shoulder = _midpoint(l_shoulder, r_shoulder)
+            mid_hip = _midpoint(l_hip, r_hip)
+            dx = mid_hip.x - mid_shoulder.x
+            dy = mid_hip.y - mid_shoulder.y
+            lean_deg = math.degrees(math.atan2(abs(dx), max(abs(dy), 1e-6)))
+            is_standing = lean_deg <= MAX_LEAN_FROM_VERTICAL_DEG
+        else:
+            lean_deg = None
 
+        if is_standing:
+            self._good_streak += 1
+            self._bad_streak = 0
+        else:
+            self._good_streak = 0
+            self._bad_streak += 1
+
+        if self._good_streak >= STABLE_FRAMES:
+            self.ready = True
+        elif self._bad_streak >= GRACE_FRAMES:
+            self.ready = False
+
+        position_ok = self.ready and framing_message is None
+        response["position_ok"] = position_ok
+        response["ready"] = self.ready
+
+        if framing_message:
+            position_message = None
+        elif not self.ready:
+            position_message = "Stand up straight, facing the camera, with room to raise your arms overhead."
+        else:
+            position_message = None
+        response["position_message"] = position_message
+
+        # ---- elbow angles (drive rep counting) ----
+        left_angle = _angle_deg(l_shoulder, l_elbow, l_wrist) if left_arm_ok else None
+        right_angle = _angle_deg(r_shoulder, r_elbow, r_wrist) if right_arm_ok else None
         angles = [a for a in (left_angle, right_angle) if a is not None]
         raw_angle = sum(angles) / len(angles)
-        response["angle"] = round(raw_angle, 1)
 
-        arm_gap = (
-            abs(left_angle - right_angle)
-            if left_angle is not None and right_angle is not None
-            else 0.0
-        )
-
-        raw_press = _press_score(raw_angle)
-        if self.smoothed_press is None:
-            self.smoothed_press = raw_press
+        if self.smoothed_angle is None:
+            self.smoothed_angle = raw_angle
         else:
-            self.smoothed_press = (
-                self.press_smooth_alpha * raw_press
-                + (1 - self.press_smooth_alpha) * self.smoothed_press
+            self.smoothed_angle = (
+                self.angle_smooth_alpha * raw_angle
+                + (1 - self.angle_smooth_alpha) * self.smoothed_angle
             )
 
-        # ---- torso lean/arch + calibration (captured while racked) ----
-        vertical_ref = _Point(mid_hip.x, mid_hip.y - 1.0)
-        torso_lean = _angle_deg(vertical_ref, mid_hip, mid_shoulder)
-
-        if self.stage == "down" and not self.calibrated:
-            self._calib_samples.append(torso_lean)
-            if len(self._calib_samples) >= CALIBRATION_FRAMES:
-                self._finish_calibration()
-
-        lean_delta = (
-            abs(torso_lean - self._baseline_torso_lean) if self.calibrated else 0.0
-        )
-
-        # ---- wrist-stacked-over-elbow check (every frame) ----
-        wrist_offsets = []
+        # ---- overhead lockout check (wrist above shoulder line) ----
+        wrists_up = []
         if left_arm_ok:
-            wrist_offsets.append(abs(l_wrist.x - l_elbow.x) / shoulder_width)
+            wrists_up.append(l_wrist.y < l_shoulder.y - WRIST_ABOVE_SHOULDER_MARGIN)
         if right_arm_ok:
-            wrist_offsets.append(abs(r_wrist.x - r_elbow.x) / shoulder_width)
-        wrist_offset = max(wrist_offsets) if wrist_offsets else 0.0
+            wrists_up.append(r_wrist.y < r_shoulder.y - WRIST_ABOVE_SHOULDER_MARGIN)
+        wrists_overhead = any(wrists_up) if wrists_up else False
 
-        # ---- elbow-flare check (only meaningful near the rack) ----
-        elbow_width = (
-            _dist(l_elbow, r_elbow) if left_arm_ok and right_arm_ok else None
-        )
-        flare_ratio = (
-            elbow_width / shoulder_width if elbow_width is not None else None
-        )
+        # ---- leaning-back soft note — skipped if hips aren't visible ----
+        lean_issue = None
+        if (
+            position_ok
+            and self.stage == "top"
+            and hips_visible
+            and lean_deg is not None
+            and lean_deg > LEAN_BACK_WARN_DEG
+        ):
+            lean_issue = "leaning_back"
+        response["lean_ok"] = lean_issue is None
 
+        feedback = framing_message
+
+        # ---- rep state machine ----
         rep_completed = False
+        rep_duration = rep_class = rep_form_quality = None
+        partial_feedback = None
 
-        if self.stage == "down":
-            if (
-                self._attempt_peak_press is None
-                or self.smoothed_press > self._attempt_peak_press
-            ):
-                self._attempt_peak_press = self.smoothed_press
-            elif (
-                not self._attempt_flagged
-                and self._attempt_peak_press is not None
-                and self._attempt_peak_press - self.smoothed_press > PARTIAL_REP_BOUNCE
-                and self._attempt_peak_press < PRESS_RAISED_THRESH - PARTIAL_REP_MARGIN
-                and self._attempt_peak_press - PRESS_GROUNDED_THRESH
-                > PARTIAL_REP_MIN_RISE
-            ):
-                self._attempt_flagged = True
-                self.partial_rep_count += 1
-                response["feedback"] = (
-                    f"Half rep — only got to {self._attempt_peak_press:.0f}/100 of "
-                    "full lockout, press all the way overhead."
-                )
-
-            if self.smoothed_press < PRESS_GROUNDED_THRESH - 3:
-                self._attempt_peak_press = None
-                self._attempt_flagged = False
-
-            if flare_ratio is not None and flare_ratio > ELBOW_FLARE_RATIO:
-                self._rep_elbow_flare_at_rack = True
-
-            if self.smoothed_press >= PRESS_RAISED_THRESH:
-                self.stage = "up"
-                self.rep_start_time = t
-                self._press_acc = 0.0
+        if not position_ok:
+            if self.rep_start_time is not None:
+                self.rep_start_time = None
+                self._rep_angle_acc = 0.0
                 self._current_rep_issues = set()
-                self._rep_max_torso_lean_delta = lean_delta
-                self._rep_max_wrist_offset = wrist_offset
-                self._rep_max_asymmetry = arm_gap
+            if feedback is None:
+                feedback = position_message
+        else:
+            if self.stage == "bottom":
+                if (
+                    self._attempt_max_angle is None
+                    or self.smoothed_angle > self._attempt_max_angle
+                ):
+                    self._attempt_max_angle = self.smoothed_angle
+                elif (
+                    not self._attempt_flagged
+                    and self._attempt_max_angle is not None
+                    and self._attempt_max_angle - self.smoothed_angle
+                    > PARTIAL_REP_BOUNCE_DEG
+                    and self._attempt_max_angle < TOP_ANGLE - PARTIAL_REP_MARGIN_DEG
+                    and self._attempt_max_angle - BOTTOM_ANGLE
+                    > PARTIAL_REP_MIN_RANGE_DEG
+                ):
+                    self._attempt_flagged = True
+                    self.partial_rep_count += 1
+                    partial_feedback = (
+                        "Almost — press a little higher next time, all the "
+                        "way until your arms are straight above you."
+                    )
 
-        else:  # self.stage == "up"
-            self._rep_max_torso_lean_delta = max(
-                self._rep_max_torso_lean_delta, lean_delta
-            )
-            self._rep_max_wrist_offset = max(self._rep_max_wrist_offset, wrist_offset)
-            self._rep_max_asymmetry = max(self._rep_max_asymmetry, arm_gap)
+                if self.smoothed_angle < BOTTOM_ANGLE + 5:
+                    self._attempt_max_angle = None
+                    self._attempt_flagged = False
 
-            if self.last_press is not None:
-                self._press_acc += abs(self.smoothed_press - self.last_press)
+            if (
+                self.stage == "bottom"
+                and self.smoothed_angle > TOP_ANGLE
+                and wrists_overhead
+            ):
+                self.rep_start_time = t
+                self._rep_angle_acc = 0.0
+            if self.last_angle is not None:
+                self._rep_angle_acc += abs(self.smoothed_angle - self.last_angle)
 
-            if self.smoothed_press <= PRESS_GROUNDED_THRESH:
-                self.stage = "down"
+            if (
+                self.stage == "bottom"
+                and self.smoothed_angle > TOP_ANGLE
+                and wrists_overhead
+            ):
+                self.stage = "top"
+                self._current_rep_issues = set()
+            elif self.stage == "top" and self.smoothed_angle < BOTTOM_ANGLE:
+                self.stage = "bottom"
                 rep_completed = True
 
-        response["press"] = round(raw_press, 1)
-        response["smoothed_press"] = round(self.smoothed_press, 1)
+            if self.stage == "top" and lean_issue:
+                self._current_rep_issues.add(lean_issue)
 
-        rep_duration = rep_class = rep_form_quality = None
-        form_score = None
-        feedback = response.get("feedback") or framing_message
+            if feedback is None:
+                feedback = partial_feedback
 
-        if rep_completed:
-            rep_duration = (
-                (t - self.rep_start_time) if self.rep_start_time is not None else None
-            )
-            valid = (
-                rep_duration is not None
-                and MIN_REP_DURATION <= rep_duration <= MAX_REP_DURATION
-                and self._press_acc >= MIN_ANGLE_DELTA
-            )
+            if rep_completed:
+                rep_duration = (
+                    (t - self.rep_start_time)
+                    if self.rep_start_time is not None
+                    else None
+                )
 
-            if valid:
-                self.rep_count += 1
-                rep_class = self._classify_tempo(rep_duration)
+                valid = (
+                    rep_duration is not None
+                    and MIN_REP_DURATION <= rep_duration <= MAX_REP_DURATION
+                    and self._rep_angle_acc >= MIN_ANGLE_DELTA
+                )
 
-                if self._rep_max_torso_lean_delta > TORSO_LEAN_DELTA_DEG:
-                    self._current_rep_issues.add("poor_posture")
-                if self._rep_max_wrist_offset > WRIST_OFFSET_RATIO:
-                    self._current_rep_issues.add("wrist_not_stacked")
-                if self._rep_elbow_flare_at_rack:
-                    self._current_rep_issues.add("elbows_flared")
-                if self._rep_max_asymmetry > ASYMMETRY_DEG:
-                    self._current_rep_issues.add("asymmetric_press")
+                if valid:
+                    self.rep_count += 1
+                    rep_class = self._classify_tempo(rep_duration)
 
-                form_score = 100
-                for issue in self._current_rep_issues:
-                    form_score -= MISTAKE_PENALTY.get(issue, 10)
-                form_score = max(0, form_score)
-                self.form_scores.append(form_score)
-                self._rep_complete_times.append(t)
-
-                issue_messages = {
-                    "poor_posture": "Keep your torso upright — don't lean back or arch to press the weight up.",
-                    "wrist_not_stacked": "Stack your wrists over your elbows — don't let them drift forward or back.",
-                    "elbows_flared": "Bring your elbows in closer to your body at the bottom, not flared way out wide.",
-                    "asymmetric_press": "Press both arms together evenly — one side is leading the other.",
-                }
-                messages = [issue_messages[i] for i in sorted(self._current_rep_issues)]
-
-                if self._current_rep_issues:
-                    rep_form_quality = "needs_improvement"
-                    self.flawed_reps += 1
-                    feedback = (
-                        f"Rep {self.rep_count} counted, but watch your form: "
-                        + " ".join(messages)
-                    )
+                    if self._current_rep_issues:
+                        rep_form_quality = "needs_improvement"
+                        self.flawed_reps += 1
+                        feedback = (
+                            f"Rep {self.rep_count} counted — try to keep your "
+                            f"back straight instead of leaning backward."
+                        )
+                    else:
+                        rep_form_quality = "good"
+                        self.good_reps += 1
+                        if rep_class in ("good", "fast"):
+                            feedback = f"Nice press! Rep {self.rep_count} done."
+                        elif rep_class in ("slow", "too_slow"):
+                            feedback = (
+                                f"Good control on that one — rep {self.rep_count} done."
+                            )
+                        else:
+                            feedback = f"Rep {self.rep_count} counted — try a smoother, steadier pace."
                 else:
-                    rep_form_quality = "good"
-                    self.good_reps += 1
-                    feedback = f"Clean overhead press — {rep_class} tempo, full lockout."
+                    rep_completed = False
+                    if rep_duration is not None and rep_duration < MIN_REP_DURATION:
+                        feedback = "That was too fast to count — slow down a little."
+                    elif rep_duration is not None and rep_duration > MAX_REP_DURATION:
+                        feedback = (
+                            "That took a while, so it wasn't counted — keep moving."
+                        )
+                    else:
+                        feedback = (
+                            "Not quite enough movement to count — press further up."
+                        )
 
-                response["posture_ok"] = len(self._current_rep_issues) == 0
-                response["posture_issues"] = sorted(self._current_rep_issues)
-                response["posture_messages"] = messages
-            else:
-                rep_completed = False
-                if rep_duration is not None and rep_duration < MIN_REP_DURATION:
-                    feedback = "Too fast — that one wasn't counted, control the movement."
-                elif rep_duration is not None and rep_duration > MAX_REP_DURATION:
-                    feedback = "That rep took too long — not counted. Keep moving."
-                else:
-                    feedback = "Not enough press range — not counted."
+                self.rep_start_time = None
+                self._rep_angle_acc = 0.0
+                self._current_rep_issues = set()
 
-            self.rep_start_time = None
-            self._press_acc = 0.0
-            self._current_rep_issues = set()
-            self._rep_max_torso_lean_delta = 0.0
-            self._rep_max_wrist_offset = 0.0
-            self._rep_max_asymmetry = 0.0
-            self._rep_elbow_flare_at_rack = False
-        else:
-            # Live, every-frame posture feedback even mid-rep, so the user
-            # gets corrected in real time instead of only after the fact.
-            live_issues = []
-            live_messages = []
-            if lean_delta > TORSO_LEAN_DELTA_DEG:
-                live_issues.append("poor_posture")
-                live_messages.append(
-                    "Keep your torso upright — don't lean back or arch to press the weight up."
-                )
-            if wrist_offset > WRIST_OFFSET_RATIO:
-                live_issues.append("wrist_not_stacked")
-                live_messages.append(
-                    "Stack your wrists over your elbows — don't let them drift forward or back."
-                )
-            if (
-                self.stage == "down"
-                and flare_ratio is not None
-                and flare_ratio > ELBOW_FLARE_RATIO
-            ):
-                live_issues.append("elbows_flared")
-                live_messages.append(
-                    "Bring your elbows in closer to your body before pressing."
-                )
-            response["posture_ok"] = len(live_issues) == 0
-            response["posture_issues"] = live_issues
-            response["posture_messages"] = live_messages
-            if feedback is None and live_messages:
-                feedback = live_messages[0]
-
-        self.last_press = self.smoothed_press
+        self.last_angle = self.smoothed_angle
         self.last_timestamp_s = t
 
-        reps_per_minute = None
-        if len(self._rep_complete_times) >= 2:
-            span = self._rep_complete_times[-1] - self._rep_complete_times[0]
-            if span > 0:
-                reps_per_minute = round(
-                    (len(self._rep_complete_times) - 1) / span * 60.0, 1
-                )
-        pace_classification = self._classify_pace(reps_per_minute)
-
-        if feedback is None and not self.calibrated:
+        if feedback is None and lean_issue:
             feedback = (
-                "Hold the rack position (elbows bent, hands at shoulder "
-                "height) for a second — calibrating your posture."
+                "Keep your back straight — try not to lean backward as you press."
+            )
+        if feedback is None and not self.ready:
+            feedback = (
+                "Stand facing the camera with your arms visible to start counting."
             )
         if feedback is None:
-            feedback = "Good position — press straight up to full lockout."
+            feedback = "Good form — keep going."
 
         response.update(
             {
-                "rep_completed": rep_completed,
-                "rep_duration": round(rep_duration, 2) if rep_duration is not None else None,
-                "rep_classification": rep_class,
-                "rep_form_quality": rep_form_quality,
-                "form_score": form_score,
-                "avg_form_score": self._avg(self.form_scores),
-                "reps_per_minute": reps_per_minute,
-                "pace_classification": pace_classification,
-                "session_complete": self._is_complete(),
+                "angle": raw_angle,
+                "smoothed_angle": self.smoothed_angle,
+                "left_elbow_angle": left_angle,
+                "right_elbow_angle": right_angle,
                 "stage": self.stage,
-                "feedback": feedback,
                 "rep_count": self.rep_count,
                 "good_reps": self.good_reps,
                 "flawed_reps": self.flawed_reps,
-                "partial_rep_count": self.partial_rep_count,
+                "session_complete": self._is_complete(),
+                "rep_completed": rep_completed,
+                "rep_duration": rep_duration,
+                "rep_classification": rep_class,
+                "rep_form_quality": rep_form_quality,
+                "lean_ok": lean_issue is None,
+                "feedback": feedback,
             }
         )
         return response
@@ -623,12 +508,9 @@ class ShoulderPressAnalyzer:
 class ShoulderPressSession:
     """Full shoulder-press session: one shared pose model + one analyzer.
 
-    `target_reps` / `target_sets` / `set_number` are the coach-assigned plan
-    for this user, supplied by the caller (the websocket route, from query
-    params) — same convention as the other exercises. The frontend does not
-    decide on its own whether a set/exercise is done; `session_complete`
-    (this set's reps are done) and `exercise_complete` (the whole assigned
-    plan — all sets — is done) are computed here.
+    Same `target_reps` / `target_sets` / `set_number` contract as the
+    other exercises (see PushupSession) — the backend, not the frontend,
+    is the source of truth for whether a set / the whole plan is done.
     """
 
     def __init__(
