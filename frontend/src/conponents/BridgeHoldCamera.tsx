@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import type { Landmark } from "../hooks/useJumpingJackSocket";
+import type { Landmark } from "../hooks/useBridgeHoldSocket";
 
 interface SkeletonEntity {
   points: Landmark[];
@@ -15,12 +15,14 @@ interface Props {
 }
 
 /**
- * Jumping jacks need the whole body — arms overhead, feet jumped wide —
- * so this requests a portrait-leaning feed and expects the phone/webcam
- * to be propped up further back than a bicep-curl or pushup shot would
- * need, standing facing the camera.
+ * Same capture pipeline as MountainClimberCamera/SquatCamera, scoped to its
+ * own class names (`bh-viewfinder*`). LANDSCAPE-biased on purpose: per
+ * bridge_pose.py's own docstring, this exercise is judged from a side-on
+ * profile view with the body reading as horizontal (lying down, hips
+ * lifting) — a tall portrait crop wastes most of the frame on empty floor,
+ * same reasoning as the mountain-climber camera.
  */
-export default function JumpingJackCamera({
+export default function BridgeHoldCamera({
   active,
   sendFrame,
   skeleton,
@@ -58,9 +60,9 @@ export default function JumpingJackCamera({
         stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: "user",
-            width: { ideal: 640 },
-            height: { ideal: 854 }, // portrait-leaning — full standing body, arms up
-            aspectRatio: { ideal: 3 / 4 },
+            width: { ideal: 854 },
+            height: { ideal: 480 }, // landscape — wide FOV for a side-on floor exercise
+            aspectRatio: { ideal: 16 / 9 },
           },
           audio: false,
         });
@@ -172,7 +174,7 @@ export default function JumpingJackCamera({
   }
 
   return (
-    <div className="jumpingjack-viewfinder">
+    <div className="bh-viewfinder">
       {active ? (
         <>
           <video
@@ -180,17 +182,17 @@ export default function JumpingJackCamera({
             autoPlay
             muted
             playsInline
-            className="jumpingjack-viewfinder-video"
+            className="bh-viewfinder-video"
           />
-          <canvas ref={overlayRef} className="jumpingjack-viewfinder-overlay" />
+          <canvas ref={overlayRef} className="bh-viewfinder-overlay" />
           <canvas ref={canvasRef} style={{ display: "none" }} />
         </>
       ) : (
-        <div className="jumpingjack-viewfinder-placeholder">
+        <div className="bh-viewfinder-placeholder">
           <span>📷</span>
           <p>
-            Camera turns on when you hit Start — stand back far enough that
-            the camera can see you head to toe, with your arms out
+            Camera turns on when you hit Start — lie on your back, side-on to
+            the camera, knees bent, head to knees fully in frame
           </p>
         </div>
       )}

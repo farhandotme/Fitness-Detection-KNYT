@@ -93,8 +93,6 @@ export const EXERCISES: ExerciseMeta[] = [
     route: "/pushup",
   },
 
-  // ---- Coming Soon ----
-
   {
     id: "lunge",
     name: "Lunge",
@@ -205,6 +203,18 @@ export const EXERCISES: ExerciseMeta[] = [
     route: "/side_plank",
   },
   {
+    id: "glute-bridge",
+    name: "Bridge Pose",
+    category: "Lower Body",
+    difficulty: "Beginner",
+    equipment: "Bodyweight",
+    emoji: "🌉",
+    description: "Tracks hip lift height and repetitions.",
+    tags: ["glutes", "hips"],
+    status: "available",
+    route: "/bridge_pose",
+  },
+  {
     id: "arm-circles",
     name: "Arm Circles",
     category: "Mobility",
@@ -312,17 +322,6 @@ export const EXERCISES: ExerciseMeta[] = [
     emoji: "🪑",
     description: "Tracks squat depth with overhead arm position.",
     tags: ["yoga", "legs"],
-    status: "coming_soon",
-  },
-  {
-    id: "glute-bridge",
-    name: "Bridge Pose",
-    category: "Lower Body",
-    difficulty: "Beginner",
-    equipment: "Bodyweight",
-    emoji: "🌉",
-    description: "Tracks hip lift height and repetitions.",
-    tags: ["glutes", "hips"],
     status: "coming_soon",
   },
   {

@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import useJumpingJackSocket from "../hooks/useJumpingJackSocket";
-import JumpingJackCamera from "../conponents/JumpingJackCamera";
-import JumpingJackStatsPanel from "../conponents/JumpingJackStatsPanel";
-import "../pages/BicepPage.css";
-import "./JumpingJackPage.css";
+import { useNavigate } from "react-router-dom";
+import useBridgeHoldSocket from "../hooks/useBridgeHoldSocket";
+import BridgeHoldCamera from "../conponents/BridgeHoldCamera";
+import BridgeHoldStatsPanel from "../conponents/BridgeHoldStatsPanel";
+import "./BicepPage.css";
+import "./BridgeHoldPage.css";
 
 const POSE_CONNECTIONS: [number, number][] = [
   [11, 13],
@@ -20,55 +21,70 @@ const POSE_CONNECTIONS: [number, number][] = [
   [26, 28],
 ];
 
-const REP_PRESETS = [10, 20, 30, 40];
+const HOLD_PRESETS = [20, 30, 45, 60];
 const SET_PRESETS = [1, 2, 3, 4, 5];
-const REST_PRESETS = [15, 20, 30, 45];
+const REST_PRESETS = [20, 30, 45, 60];
 
 type Phase = "setup" | "active" | "resting" | "complete";
 
 interface SetSummary {
   setNumber: number;
-  reps: number;
-  goodReps: number;
-  flawedReps: number;
-  elapsedTime: number;
+  holdSeconds: number;
+  goodSeconds: number;
+  flawedSeconds: number;
+  breakCount: number;
+  bestStreak: number;
+  avgFormScore: number | null;
 }
 
-function JumpingJackPage() {
-  const [repsPerSet, setRepsPerSet] = useState(20);
+function formatSeconds(s: number): string {
+  return s >= 60
+    ? `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`
+    : s.toFixed(1);
+}
+
+function BridgeHoldPage() {
+  const navigate = useNavigate();
+
+  const [targetSeconds, setTargetSeconds] = useState(30);
   const [totalSets, setTotalSets] = useState(3);
-  const [restSeconds, setRestSeconds] = useState(20);
+  const [restSeconds, setRestSeconds] = useState(30);
 
   const [phase, setPhase] = useState<Phase>("setup");
   const [currentSet, setCurrentSet] = useState(1);
   const [restRemaining, setRestRemaining] = useState(0);
   const [setSummaries, setSetSummaries] = useState<SetSummary[]>([]);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [justReached, setJustReached] = useState(false);
 
-  const {
-    connected,
-    result,
-    lastCompletedRep,
-    sendFrame,
-    start,
-    stop,
-    socketError,
-  } = useJumpingJackSocket();
+  const { connected, result, sendFrame, start, stop, socketError } =
+    useBridgeHoldSocket();
 
   const skeleton = result.landmarks?.length
     ? [{ points: result.landmarks, connections: POSE_CONNECTIONS }]
     : [];
 
-  const currentReps = result.rep_count ?? 0;
+  const holdSeconds = result.hold_seconds ?? 0;
   const progressPct = Math.min(
     100,
-    (currentReps / Math.max(1, repsPerSet)) * 100,
+    (holdSeconds / Math.max(1, targetSeconds)) * 100,
   );
 
-  // ---- advance a set once the BACKEND confirms this set's reps are done ----
-  // `session_complete` is computed server-side, from the target_reps the
-  // backend itself was given when the socket opened. Never derived from
-  // currentReps/repsPerSet on the client.
+  // ---- brief "target reached" flash, driven by the backend's own
+  // edge-triggered flag — never re-derived from hold_seconds locally ----
+  useEffect(() => {
+    if (!result.target_reached) return;
+    setJustReached(true);
+    const timer = window.setTimeout(() => setJustReached(false), 1600);
+    return () => window.clearTimeout(timer);
+  }, [result.target_reached]);
+
+  // ---- advance a set once the BACKEND confirms this set's hold time is met ----
+  // `session_complete` is computed server-side
+  // (BridgeHoldAnalyzer._is_complete), from the target_seconds the backend
+  // itself was given when the socket opened. We never derive this from
+  // hold_seconds/targetSeconds on the client — same rule as every rep-based
+  // exercise in this codebase, just with a duration standing in for reps.
   useEffect(() => {
     if (phase !== "active" || !result.session_complete) return;
 
@@ -76,13 +92,18 @@ function JumpingJackPage() {
 
     const summary: SetSummary = {
       setNumber: currentSet,
-      reps: currentReps,
-      goodReps: result.good_reps ?? 0,
-      flawedReps: result.flawed_reps ?? 0,
-      elapsedTime: result.elapsed_time ?? 0,
+      holdSeconds: result.hold_seconds ?? 0,
+      goodSeconds: result.good_seconds ?? 0,
+      flawedSeconds: result.flawed_seconds ?? 0,
+      breakCount: result.break_count ?? 0,
+      bestStreak: result.best_streak_seconds ?? 0,
+      avgFormScore: result.avg_form_score ?? null,
     };
     setSetSummaries((prev) => [...prev, summary]);
 
+    // exercise_complete is also backend-validated: true only once every
+    // set in the plan hit its target. This is the boolean that should
+    // trigger persisting "user completed this exercise" to the database.
     if (result.exercise_complete) {
       setPhase("complete");
     } else {
@@ -104,10 +125,12 @@ function JumpingJackPage() {
   useEffect(() => {
     if (!result.exercise_complete) return;
     // TODO: wire this up to the real backend endpoint once it exists, e.g.
-    //   POST /api/workouts/complete { exercise: "jumping-jack", repsPerSet, totalSets }
-    console.log(
-      "Exercise completed (backend-validated) — ready to persist to DB.",
-    );
+    //   POST /api/workouts/complete { exercise: "bridge_hold", targetSeconds, totalSets }
+    // That endpoint is what should write the "user completed this exercise"
+    // record to MongoDB. The frontend must only ever send what the backend
+    // already validated here (exercise_complete === true) — it must not
+    // decide completion on its own.
+    console.log("Exercise completed (backend-validated) — ready to persist to DB.");
   }, [result.exercise_complete]);
 
   // ---- rest countdown between sets, then auto-start the next one ----
@@ -118,25 +141,21 @@ function JumpingJackPage() {
       const nextSet = currentSet + 1;
       setCurrentSet(nextSet);
       setPhase("active");
-      start({
-        targetReps: repsPerSet,
-        targetSets: totalSets,
-        setNumber: nextSet,
-      });
+      start({ targetSeconds, targetSets: totalSets, setNumber: nextSet });
       return;
     }
 
     const timer = window.setTimeout(() => setRestRemaining((r) => r - 1), 1000);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, restRemaining, start, currentSet, repsPerSet, totalSets]);
+  }, [phase, restRemaining, start, currentSet, targetSeconds, totalSets]);
 
   function handleStart() {
     setCameraError(null);
     setSetSummaries([]);
     setCurrentSet(1);
     setPhase("active");
-    start({ targetReps: repsPerSet, targetSets: totalSets, setNumber: 1 });
+    start({ targetSeconds, targetSets: totalSets, setNumber: 1 });
   }
 
   function handleSkipRest() {
@@ -156,29 +175,27 @@ function JumpingJackPage() {
     setPhase("setup");
   }
 
-  const sessionGood = result.good_reps ?? 0;
-  const sessionFlawed = result.flawed_reps ?? 0;
-  const elapsed = result.elapsed_time ?? 0;
-
   const totals = useMemo(() => {
     return setSummaries.reduce(
       (acc, s) => ({
-        reps: acc.reps + s.reps,
-        good: acc.good + s.goodReps,
-        flawed: acc.flawed + s.flawedReps,
-        time: acc.time + s.elapsedTime,
+        hold: acc.hold + s.holdSeconds,
+        good: acc.good + s.goodSeconds,
+        flawed: acc.flawed + s.flawedSeconds,
+        breaks: acc.breaks + s.breakCount,
+        bestStreak: Math.max(acc.bestStreak, s.bestStreak),
       }),
-      { reps: 0, good: 0, flawed: 0, time: 0 },
+      { hold: 0, good: 0, flawed: 0, breaks: 0, bestStreak: 0 },
     );
   }, [setSummaries]);
 
-  const totalPlannedReps = repsPerSet * totalSets;
-
   return (
-    <div className="bicep-page jumpingjack-page">
+    <div className="bicep-page bh-page">
       <div className="bicep-header">
         <div className="bicep-header-left">
-          <h1 className="bicep-title">Jumping Jacks</h1>
+          <button className="bh-back-btn" onClick={() => navigate("/exercises")}>
+            ← Library
+          </button>
+          <h1 className="bicep-title">Glute Bridge Hold</h1>
         </div>
 
         <div className="bicep-header-right">
@@ -186,7 +203,8 @@ function JumpingJackPage() {
             <div className="active-controls">
               <span className={`status-dot ${connected ? "live" : ""}`} />
               <span className="active-label">
-                Set {currentSet}/{totalSets} · {currentReps}/{repsPerSet} reps
+                Set {currentSet}/{totalSets} · {formatSeconds(holdSeconds)}/
+                {targetSeconds}s
               </span>
               <button className="stop-btn" onClick={handleEndSession}>
                 End Session
@@ -221,12 +239,16 @@ function JumpingJackPage() {
 
       <div className="bicep-body">
         <div className="bicep-camera-col">
-          <JumpingJackCamera
+          <BridgeHoldCamera
             active={phase === "active"}
             sendFrame={sendFrame}
             skeleton={skeleton}
             onError={setCameraError}
           />
+
+          {justReached && (
+            <div className="bh-reached-flash">🎉 Target reached!</div>
+          )}
 
           {phase === "resting" && (
             <div className="rest-overlay-caption">
@@ -247,8 +269,8 @@ function JumpingJackPage() {
               </div>
               <div className="progress-caption">
                 {phase === "active"
-                  ? `${currentReps} / ${repsPerSet} reps`
-                  : "Set complete — resting"}
+                  ? `${formatSeconds(holdSeconds)} / ${targetSeconds}s held`
+                  : "Set complete"}
               </div>
 
               <div className="set-dots">
@@ -256,8 +278,7 @@ function JumpingJackPage() {
                   <span
                     key={n}
                     className={`set-dot ${
-                      n < currentSet ||
-                      (n === currentSet && phase === "resting")
+                      n < currentSet || (n === currentSet && phase === "resting")
                         ? "done"
                         : n === currentSet
                           ? "current"
@@ -270,15 +291,15 @@ function JumpingJackPage() {
               <div className="session-summary">
                 <div className="session-summary-item good">
                   <span className="k">Good</span>
-                  <span className="v">{sessionGood}</span>
+                  <span className="v">{formatSeconds(result.good_seconds ?? 0)}s</span>
                 </div>
                 <div className="session-summary-item flawed">
-                  <span className="k">Needs work</span>
-                  <span className="v">{sessionFlawed}</span>
+                  <span className="k">Flawed</span>
+                  <span className="v">{formatSeconds(result.flawed_seconds ?? 0)}s</span>
                 </div>
                 <div className="session-summary-item">
-                  <span className="k">Elapsed</span>
-                  <span className="v">{elapsed.toFixed(0)}s</span>
+                  <span className="k">Breaks</span>
+                  <span className="v">{result.break_count ?? 0}</span>
                 </div>
               </div>
             </>
@@ -287,30 +308,37 @@ function JumpingJackPage() {
 
         <div className="bicep-stats-col">
           {phase === "setup" && (
+            // TODO(coach-assignment): once a coach/plan API exists,
+            // targetSeconds and totalSets should come from the user's
+            // assigned plan (fetched here) and this picker should become
+            // read-only display, not user-editable inputs. Whatever value
+            // is picked here is what actually gets sent to the backend as
+            // target_seconds/target_sets — and the backend (not this
+            // component) decides when it's been met.
             <div className="session-builder">
               <div className="builder-row">
-                <span className="builder-label">Reps per set</span>
+                <span className="builder-label">Hold time per set</span>
                 <div className="builder-controls">
                   <input
                     type="number"
-                    min={1}
-                    max={200}
-                    value={repsPerSet}
+                    min={5}
+                    max={1800}
+                    value={targetSeconds}
                     onChange={(e) =>
-                      setRepsPerSet(
-                        Math.max(1, Math.min(200, Number(e.target.value) || 1)),
+                      setTargetSeconds(
+                        Math.max(5, Math.min(1800, Number(e.target.value) || 5)),
                       )
                     }
                     className="reps-input"
                   />
                   <div className="reps-presets">
-                    {REP_PRESETS.map((n) => (
+                    {HOLD_PRESETS.map((n) => (
                       <button
                         key={n}
-                        className={`reps-preset ${repsPerSet === n ? "active" : ""}`}
-                        onClick={() => setRepsPerSet(n)}
+                        className={`reps-preset ${targetSeconds === n ? "active" : ""}`}
+                        onClick={() => setTargetSeconds(n)}
                       >
-                        {n}
+                        {n}s
                       </button>
                     ))}
                   </div>
@@ -364,17 +392,16 @@ function JumpingJackPage() {
               </div>
 
               <div className="builder-total">
-                {totalSets} × {repsPerSet} ={" "}
-                <strong>{totalPlannedReps} reps total</strong>
+                {totalSets} × {targetSeconds}s ={" "}
+                <strong>{totalSets * targetSeconds}s total hold time</strong>
               </div>
 
-              <div className="pushup-setup-tip">
-                Stand facing the camera with your whole body in view, from your
-                head down to your feet. Leave enough space to jump your feet out
-                to the sides and swing your arms all the way up over your head.
-                A rep only counts once you bring your feet back together and
-                your arms back down — so keep a steady, continuous rhythm
-                instead of pausing halfway.
+              <div className="squat-setup-tip">
+                Lie on your back, side-on to the camera, knees bent and feet
+                flat. Hold still in the bridge for a second once you lift so
+                the timer can lock onto your alignment — the clock only runs
+                while your form checks out, and pauses (not resets) if it
+                breaks.
               </div>
 
               <button className="start-btn full-width" onClick={handleStart}>
@@ -394,21 +421,27 @@ function JumpingJackPage() {
               {setSummaries[setSummaries.length - 1] && (
                 <div className="arm-grid rest-panel-grid">
                   <div className="arm-grid-item">
-                    <span className="k">Reps</span>
+                    <span className="k">Held</span>
                     <span className="v">
-                      {setSummaries[setSummaries.length - 1].reps}
+                      {formatSeconds(setSummaries[setSummaries.length - 1].holdSeconds)}s
                     </span>
                   </div>
                   <div className="arm-grid-item">
-                    <span className="k">Good</span>
+                    <span className="k">Best streak</span>
                     <span className="v">
-                      {setSummaries[setSummaries.length - 1].goodReps}
+                      {formatSeconds(setSummaries[setSummaries.length - 1].bestStreak)}s
                     </span>
                   </div>
                   <div className="arm-grid-item">
-                    <span className="k">Needs work</span>
+                    <span className="k">Breaks</span>
                     <span className="v">
-                      {setSummaries[setSummaries.length - 1].flawedReps}
+                      {setSummaries[setSummaries.length - 1].breakCount}
+                    </span>
+                  </div>
+                  <div className="arm-grid-item">
+                    <span className="k">Avg form</span>
+                    <span className="v">
+                      {setSummaries[setSummaries.length - 1].avgFormScore ?? "—"}
                     </span>
                   </div>
                 </div>
@@ -422,14 +455,18 @@ function JumpingJackPage() {
 
           {phase === "active" && (
             <div className="single-arm-wrap">
-              <JumpingJackStatsPanel data={result} />
+              <BridgeHoldStatsPanel data={result} targetSeconds={targetSeconds} />
 
-              {(lastCompletedRep.feedback || result.feedback) && (
+              {result.feedback && (
                 <div
-                  className={`feedback-box ${lastCompletedRep.rep_form_quality ?? ""}`}
+                  className={`feedback-box ${
+                    result.is_holding
+                      ? (result.hold_quality ?? "")
+                      : "needs_improvement"
+                  }`}
                 >
                   <strong>Coach Feedback</strong>
-                  <p>{lastCompletedRep.feedback ?? result.feedback}</p>
+                  <p>{result.feedback}</p>
                 </div>
               )}
             </div>
@@ -443,38 +480,42 @@ function JumpingJackPage() {
                   <span className="v">{setSummaries.length}</span>
                 </div>
                 <div className="session-summary-item">
-                  <span className="k">Total reps</span>
-                  <span className="v">{totals.reps}</span>
+                  <span className="k">Total held</span>
+                  <span className="v">{formatSeconds(totals.hold)}s</span>
                 </div>
                 <div className="session-summary-item good">
                   <span className="k">Good</span>
-                  <span className="v">{totals.good}</span>
+                  <span className="v">{formatSeconds(totals.good)}s</span>
                 </div>
                 <div className="session-summary-item flawed">
-                  <span className="k">Needs work</span>
-                  <span className="v">{totals.flawed}</span>
+                  <span className="k">Flawed</span>
+                  <span className="v">{formatSeconds(totals.flawed)}s</span>
                 </div>
                 <div className="session-summary-item">
-                  <span className="k">Total time</span>
-                  <span className="v">{totals.time.toFixed(0)}s</span>
+                  <span className="k">Breaks</span>
+                  <span className="v">{totals.breaks}</span>
+                </div>
+                <div className="session-summary-item">
+                  <span className="k">Best streak</span>
+                  <span className="v">{formatSeconds(totals.bestStreak)}s</span>
                 </div>
               </div>
 
               <div className="results-table">
                 <div className="results-row results-head">
                   <span>Set</span>
-                  <span>Reps</span>
-                  <span>Good</span>
-                  <span>Needs work</span>
-                  <span>Time</span>
+                  <span>Held</span>
+                  <span>Breaks</span>
+                  <span>Best streak</span>
+                  <span>Avg form</span>
                 </div>
                 {setSummaries.map((s) => (
                   <div key={s.setNumber} className="results-row">
                     <span>{s.setNumber}</span>
-                    <span>{s.reps}</span>
-                    <span className="good-text">{s.goodReps}</span>
-                    <span className="flawed-text">{s.flawedReps}</span>
-                    <span>{s.elapsedTime.toFixed(0)}s</span>
+                    <span>{formatSeconds(s.holdSeconds)}s</span>
+                    <span>{s.breakCount}</span>
+                    <span>{formatSeconds(s.bestStreak)}s</span>
+                    <span>{s.avgFormScore ?? "—"}</span>
                   </div>
                 ))}
                 {setSummaries.length === 0 && (
@@ -485,6 +526,13 @@ function JumpingJackPage() {
                   </div>
                 )}
               </div>
+
+              <button
+                className="start-btn full-width"
+                onClick={() => navigate("/exercises")}
+              >
+                Back to Exercise Library
+              </button>
             </div>
           )}
         </div>
@@ -493,4 +541,4 @@ function JumpingJackPage() {
   );
 }
 
-export default JumpingJackPage;
+export default BridgeHoldPage;

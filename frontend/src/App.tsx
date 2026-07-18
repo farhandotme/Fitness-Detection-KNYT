@@ -15,6 +15,9 @@ import LateralRaisePage from "./pages/LateralRaisePage";
 import MuayThaiJabPage from "./pages/MuayThaiJabPage";
 import DeadBugPage from "./pages/DeadBugPage";
 import SidePlankPage from "./pages/SidePlankPage";
+import BridgeHoldPage from "./pages/BridgeHoldPage";
+import MountainClimberPage from "./pages/MountainClimberPage";
+import PlankHoldPage from "./pages/PlankholdPage";
 
 function App() {
   return (
@@ -42,6 +45,12 @@ function App() {
           <Route path="muay_thai_jab" element={<MuayThaiJabPage />} />
           <Route path="dead_bug" element={<DeadBugPage />} />
           <Route path="side_plank" element={<SidePlankPage />} />
+          <Route path="bridge_pose" element={<BridgeHoldPage />} />
+          <Route path="exercises/plank-hold" element={<PlankHoldPage />} />
+          <Route
+            path="/exercises/mountain-climber"
+            element={<MountainClimberPage />}
+          />
         </Route>
       </Routes>
     </BrowserRouter>
