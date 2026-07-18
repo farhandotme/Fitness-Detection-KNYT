@@ -15,12 +15,18 @@ interface Props {
 }
 
 /**
- * Same capture pipeline as DeadBugCamera. Side plank is judged from a
- * side-on (profile) view with the body roughly horizontal — landscape
- * framing fits that far better than the portrait framing used for
- * standing exercises.
+ * Same capture pipeline as the other exercise cameras. Unlike the forearm
+ * plank (filmed from the side), a side plank is filmed front-on — the
+ * camera needs to see the whole shape of the body lying on its side — so
+ * this still requests a landscape-biased resolution to keep head-to-feet
+ * in frame.
  */
-export default function SidePlankCamera({ active, sendFrame, skeleton, onError }: Props) {
+export default function SidePlankCamera({
+  active,
+  sendFrame,
+  skeleton,
+  onError,
+}: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null); // hidden — used only to capture frames to send
   const overlayRef = useRef<HTMLCanvasElement>(null); // visible — skeleton drawing
@@ -48,14 +54,14 @@ export default function SidePlankCamera({ active, sendFrame, skeleton, onError }
         );
         return;
       }
-
       let stream: MediaStream;
       try {
         stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: "user",
             width: { ideal: 854 },
-            height: { ideal: 480 }, // landscape — body is roughly horizontal in a side-on shot
+            height: { ideal: 480 },
+            aspectRatio: { ideal: 16 / 9 },
           },
           audio: false,
         });
@@ -167,7 +173,7 @@ export default function SidePlankCamera({ active, sendFrame, skeleton, onError }
   }
 
   return (
-    <div className="sideplank-viewfinder">
+    <div className="plank-viewfinder">
       {active ? (
         <>
           <video
@@ -175,17 +181,18 @@ export default function SidePlankCamera({ active, sendFrame, skeleton, onError }
             autoPlay
             muted
             playsInline
-            className="sideplank-viewfinder-video"
+            className="plank-viewfinder-video"
           />
-          <canvas ref={overlayRef} className="sideplank-viewfinder-overlay" />
+          <canvas ref={overlayRef} className="plank-viewfinder-overlay" />
           <canvas ref={canvasRef} style={{ display: "none" }} />
         </>
       ) : (
-        <div className="sideplank-viewfinder-placeholder">
+        <div className="plank-viewfinder-placeholder">
           <span>📷</span>
           <p>
-            Camera turns on when you hit Start — turn sideways to the
-            camera, full body in view
+            Camera turns on when you hit Start — lie down on your side facing
+            the camera, propped up on one arm, so your whole body fits in
+            the shot
           </p>
         </div>
       )}

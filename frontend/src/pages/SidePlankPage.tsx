@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import useSidePlankSocket from "../hooks/useSidePlankSocket";
 import SidePlankCamera from "../conponents/SidePlankCamera";
 import SidePlankStatsPanel from "../conponents/SidePlankStatsPanel";
 import "./BicepPage.css";
+import "./PlankHoldPage.css";
 import "./SidePlankPage.css";
 
-// Side-on skeleton — only the supporting-side limbs are meaningfully
-// tracked (the analyzer picks one active side), but drawing both sides
-// keeps the overlay useful while the person is still getting into position.
 const POSE_CONNECTIONS: [number, number][] = [
   [11, 13],
   [13, 15],
@@ -21,9 +20,15 @@ const POSE_CONNECTIONS: [number, number][] = [
   [25, 27],
   [24, 26],
   [26, 28],
+  [27, 29],
+  [29, 31],
+  [27, 31],
+  [28, 30],
+  [30, 32],
+  [28, 32],
 ];
 
-const HOLD_PRESETS = [20, 30, 45, 60];
+const HOLD_PRESETS = [15, 20, 30, 45];
 const SET_PRESETS = [1, 2, 3, 4];
 const REST_PRESETS = [20, 30, 45, 60];
 
@@ -32,16 +37,25 @@ type Phase = "setup" | "active" | "resting" | "complete";
 interface SetSummary {
   setNumber: number;
   holdSeconds: number;
-  goodSeconds: number;
-  flawedSeconds: number;
   bestStreak: number;
   breakCount: number;
-  avgFormScore: number | null;
+  goodSeconds: number;
+  flawedSeconds: number;
+}
+
+function formatSeconds(s: number): string {
+  const total = Math.max(0, s);
+  const m = Math.floor(total / 60);
+  const sec = total - m * 60;
+  if (m > 0) return `${m}:${sec.toFixed(0).padStart(2, "0")}`;
+  return `${sec.toFixed(1)}s`;
 }
 
 function SidePlankPage() {
-  const [targetSeconds, setTargetSeconds] = useState(30);
-  const [totalSets, setTotalSets] = useState(3);
+  const navigate = useNavigate();
+
+  const [holdTarget, setHoldTarget] = useState(20);
+  const [totalSets, setTotalSets] = useState(2);
   const [restSeconds, setRestSeconds] = useState(30);
 
   const [phase, setPhase] = useState<Phase>("setup");
@@ -50,7 +64,7 @@ function SidePlankPage() {
   const [setSummaries, setSetSummaries] = useState<SetSummary[]>([]);
   const [cameraError, setCameraError] = useState<string | null>(null);
 
-  const { connected, result, lastEvent, sendFrame, start, stop, socketError } =
+  const { connected, result, sendFrame, start, stop, socketError } =
     useSidePlankSocket();
 
   const skeleton = result.landmarks?.length
@@ -58,55 +72,91 @@ function SidePlankPage() {
     : [];
 
   const currentHold = result.hold_seconds ?? 0;
-  const progressPct = Math.min(100, (currentHold / Math.max(1, targetSeconds)) * 100);
+  const progressPct = Math.min(
+    100,
+    (currentHold / Math.max(1, holdTarget)) * 100,
+  );
 
-  // ---- advance a set to completion once the target hold time is hit ----
+  // ---- advance a set once the BACKEND confirms this set's hold time is met ----
+  // `session_complete` is computed server-side (SidePlankAnalyzer._is_complete),
+  // from the target_seconds the backend itself was given when the socket
+  // opened. We never derive this from currentHold/holdTarget on the client.
   useEffect(() => {
-    if (phase !== "active" || currentHold < targetSeconds) return;
+    if (phase !== "active" || !result.session_complete) return;
 
     stop();
 
     const summary: SetSummary = {
       setNumber: currentSet,
-      holdSeconds: currentHold,
-      goodSeconds: result.good_seconds ?? 0,
-      flawedSeconds: result.flawed_seconds ?? 0,
+      holdSeconds: result.hold_seconds ?? 0,
       bestStreak: result.best_streak_seconds ?? 0,
       breakCount: result.break_count ?? 0,
-      avgFormScore: result.avg_form_score ?? null,
+      goodSeconds: result.good_seconds ?? 0,
+      flawedSeconds: result.flawed_seconds ?? 0,
     };
     setSetSummaries((prev) => [...prev, summary]);
 
-    if (currentSet >= totalSets) {
+    // exercise_complete is also backend-validated: true only once every
+    // set in the plan hit its target. This is the boolean that should
+    // trigger persisting "user completed this exercise" to the database.
+    if (result.exercise_complete) {
       setPhase("complete");
     } else {
       setRestRemaining(restSeconds);
       setPhase("resting");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, currentHold, targetSeconds, currentSet, totalSets, restSeconds, result, stop]);
+  }, [
+    phase,
+    result.session_complete,
+    currentSet,
+    totalSets,
+    restSeconds,
+    result,
+    stop,
+  ]);
+
+  // ---- persist completion once the backend confirms the whole plan is done ----
+  useEffect(() => {
+    if (!result.exercise_complete) return;
+    // TODO: wire this up to the real backend endpoint once it exists, e.g.
+    //   POST /api/workouts/complete { exercise: "side-plank", holdTarget, totalSets }
+    // That endpoint is what should write the "user completed this exercise"
+    // record to MongoDB. The frontend must only ever send what the backend
+    // already validated here (exercise_complete === true) — it must not
+    // decide completion on its own.
+    console.log(
+      "Exercise completed (backend-validated) — ready to persist to DB.",
+    );
+  }, [result.exercise_complete]);
 
   // ---- rest countdown between sets, then auto-start the next one ----
   useEffect(() => {
     if (phase !== "resting") return;
 
     if (restRemaining <= 0) {
-      setCurrentSet((s) => s + 1);
+      const nextSet = currentSet + 1;
+      setCurrentSet(nextSet);
       setPhase("active");
-      start();
+      start({
+        targetSeconds: holdTarget,
+        targetSets: totalSets,
+        setNumber: nextSet,
+      });
       return;
     }
 
     const timer = window.setTimeout(() => setRestRemaining((r) => r - 1), 1000);
     return () => window.clearTimeout(timer);
-  }, [phase, restRemaining, start]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, restRemaining, start, currentSet, holdTarget, totalSets]);
 
   function handleStart() {
     setCameraError(null);
     setSetSummaries([]);
     setCurrentSet(1);
     setPhase("active");
-    start();
+    start({ targetSeconds: holdTarget, targetSets: totalSets, setNumber: 1 });
   }
 
   function handleSkipRest() {
@@ -126,29 +176,33 @@ function SidePlankPage() {
     setPhase("setup");
   }
 
-  const sessionGoodSeconds = result.good_seconds ?? 0;
-  const sessionFlawedSeconds = result.flawed_seconds ?? 0;
   const elapsed = result.elapsed_time ?? 0;
 
   const totals = useMemo(() => {
     return setSummaries.reduce(
       (acc, s) => ({
         hold: acc.hold + s.holdSeconds,
+        bestStreak: Math.max(acc.bestStreak, s.bestStreak),
+        breaks: acc.breaks + s.breakCount,
         good: acc.good + s.goodSeconds,
         flawed: acc.flawed + s.flawedSeconds,
-        breaks: acc.breaks + s.breakCount,
-        bestStreak: Math.max(acc.bestStreak, s.bestStreak),
       }),
-      { hold: 0, good: 0, flawed: 0, breaks: 0, bestStreak: 0 },
+      { hold: 0, bestStreak: 0, breaks: 0, good: 0, flawed: 0 },
     );
   }, [setSummaries]);
 
-  const totalPlannedSeconds = targetSeconds * totalSets;
+  const totalPlannedSeconds = holdTarget * totalSets;
 
   return (
-    <div className="bicep-page sideplank-page">
+    <div className="bicep-page plank-page">
       <div className="bicep-header">
         <div className="bicep-header-left">
+          <button
+            className="plank-back-btn"
+            onClick={() => navigate("/exercises")}
+          >
+            ← Library
+          </button>
           <h1 className="bicep-title">Side Plank Trainer</h1>
         </div>
 
@@ -157,7 +211,8 @@ function SidePlankPage() {
             <div className="active-controls">
               <span className={`status-dot ${connected ? "live" : ""}`} />
               <span className="active-label">
-                Set {currentSet}/{totalSets} · {currentHold.toFixed(0)}/{targetSeconds}s
+                Set {currentSet}/{totalSets} · {formatSeconds(currentHold)} /{" "}
+                {formatSeconds(holdTarget)}
               </span>
               <button className="stop-btn" onClick={handleEndSession}>
                 End Session
@@ -211,12 +266,14 @@ function SidePlankPage() {
               <div className="progress-track">
                 <div
                   className="progress-fill"
-                  style={{ width: `${phase === "active" ? progressPct : 100}%` }}
+                  style={{
+                    width: `${phase === "active" ? progressPct : 100}%`,
+                  }}
                 />
               </div>
               <div className="progress-caption">
                 {phase === "active"
-                  ? `${currentHold.toFixed(0)} / ${targetSeconds}s held`
+                  ? `${formatSeconds(currentHold)} / ${formatSeconds(holdTarget)} held`
                   : "Set complete — resting"}
               </div>
 
@@ -225,7 +282,8 @@ function SidePlankPage() {
                   <span
                     key={n}
                     className={`set-dot ${
-                      n < currentSet || (n === currentSet && phase === "resting")
+                      n < currentSet ||
+                      (n === currentSet && phase === "resting")
                         ? "done"
                         : n === currentSet
                           ? "current"
@@ -237,12 +295,16 @@ function SidePlankPage() {
 
               <div className="session-summary">
                 <div className="session-summary-item good">
-                  <span className="k">Good time</span>
-                  <span className="v">{sessionGoodSeconds.toFixed(0)}s</span>
+                  <span className="k">Good</span>
+                  <span className="v">
+                    {formatSeconds(result.good_seconds ?? 0)}
+                  </span>
                 </div>
                 <div className="session-summary-item flawed">
-                  <span className="k">Flawed time</span>
-                  <span className="v">{sessionFlawedSeconds.toFixed(0)}s</span>
+                  <span className="k">Flawed</span>
+                  <span className="v">
+                    {formatSeconds(result.flawed_seconds ?? 0)}
+                  </span>
                 </div>
                 <div className="session-summary-item">
                   <span className="k">Elapsed</span>
@@ -255,18 +317,24 @@ function SidePlankPage() {
 
         <div className="bicep-stats-col">
           {phase === "setup" && (
+            // TODO(coach-assignment): once a coach/plan API exists, holdTarget
+            // and totalSets should come from the user's assigned plan (fetched
+            // here) and this picker should become read-only display, not
+            // user-editable inputs. Whatever value is picked here is what
+            // actually gets sent to the backend as target_seconds/target_sets —
+            // and the backend (not this component) decides when it's been met.
             <div className="session-builder">
               <div className="builder-row">
-                <span className="builder-label">Hold target per set</span>
+                <span className="builder-label">Hold time per set</span>
                 <div className="builder-controls">
                   <input
                     type="number"
                     min={5}
-                    max={300}
-                    value={targetSeconds}
+                    max={600}
+                    value={holdTarget}
                     onChange={(e) =>
-                      setTargetSeconds(
-                        Math.max(5, Math.min(300, Number(e.target.value) || 5)),
+                      setHoldTarget(
+                        Math.max(5, Math.min(600, Number(e.target.value) || 5)),
                       )
                     }
                     className="reps-input"
@@ -275,8 +343,8 @@ function SidePlankPage() {
                     {HOLD_PRESETS.map((n) => (
                       <button
                         key={n}
-                        className={`reps-preset ${targetSeconds === n ? "active" : ""}`}
-                        onClick={() => setTargetSeconds(n)}
+                        className={`reps-preset ${holdTarget === n ? "active" : ""}`}
+                        onClick={() => setHoldTarget(n)}
                       >
                         {n}s
                       </button>
@@ -286,15 +354,17 @@ function SidePlankPage() {
               </div>
 
               <div className="builder-row">
-                <span className="builder-label">Number of sets (one side each — alternate!)</span>
+                <span className="builder-label">Number of sets</span>
                 <div className="builder-controls">
                   <input
                     type="number"
                     min={1}
-                    max={10}
+                    max={20}
                     value={totalSets}
                     onChange={(e) =>
-                      setTotalSets(Math.max(1, Math.min(10, Number(e.target.value) || 1)))
+                      setTotalSets(
+                        Math.max(1, Math.min(20, Number(e.target.value) || 1)),
+                      )
                     }
                     className="reps-input"
                   />
@@ -330,18 +400,18 @@ function SidePlankPage() {
               </div>
 
               <div className="builder-total">
-                {totalSets} × {targetSeconds}s ={" "}
-                <strong>{totalPlannedSeconds}s total hold time</strong>
+                {totalSets} × {holdTarget}s ={" "}
+                <strong>{formatSeconds(totalPlannedSeconds)} total hold</strong>
               </div>
 
-              <div className="squat-setup-tip">
-                Lie on your side, propped up on your forearm with your elbow
-                under your shoulder, legs stacked and straight, and lift your
-                hips so your body forms a straight line from head to feet.
-                Position the camera to your side, far enough back that your
-                whole body fits in frame. The timer only runs while your form
-                holds — it pauses automatically if you break position, and
-                picks back up the moment you do.
+              <div className="plank-setup-tip">
+                Lie down on one side facing the camera, prop yourself up on
+                your forearm or hand, stack your feet, and lift your hips so
+                your body makes one straight line from your shoulders to your
+                feet — like a plank turned on its side. Do a set on each side.
+                The timer only counts while you're actually holding the
+                position, and it never loses time you've already earned — if
+                you drop out of position it just pauses until you're back.
               </div>
 
               <button className="start-btn full-width" onClick={handleStart}>
@@ -352,7 +422,9 @@ function SidePlankPage() {
 
           {phase === "resting" && (
             <div className="rest-panel">
-              <div className="rest-panel-title">Set {currentSet} complete 🎉</div>
+              <div className="rest-panel-title">
+                Set {currentSet} complete 🎉
+              </div>
               <div className="rest-panel-big-countdown">{restRemaining}</div>
               <div className="rest-panel-caption">seconds of rest left</div>
 
@@ -361,19 +433,35 @@ function SidePlankPage() {
                   <div className="arm-grid-item">
                     <span className="k">Held</span>
                     <span className="v">
-                      {setSummaries[setSummaries.length - 1].holdSeconds.toFixed(0)}s
+                      {formatSeconds(
+                        setSummaries[setSummaries.length - 1].holdSeconds,
+                      )}
                     </span>
                   </div>
                   <div className="arm-grid-item">
                     <span className="k">Best streak</span>
                     <span className="v">
-                      {setSummaries[setSummaries.length - 1].bestStreak.toFixed(0)}s
+                      {formatSeconds(
+                        setSummaries[setSummaries.length - 1].bestStreak,
+                      )}
                     </span>
                   </div>
                   <div className="arm-grid-item">
                     <span className="k">Breaks</span>
                     <span className="v">
                       {setSummaries[setSummaries.length - 1].breakCount}
+                    </span>
+                  </div>
+                  <div className="arm-grid-item">
+                    <span className="k">Good / Flawed</span>
+                    <span className="v">
+                      {formatSeconds(
+                        setSummaries[setSummaries.length - 1].goodSeconds,
+                      )}{" "}
+                      /{" "}
+                      {formatSeconds(
+                        setSummaries[setSummaries.length - 1].flawedSeconds,
+                      )}
                     </span>
                   </div>
                 </div>
@@ -389,14 +477,12 @@ function SidePlankPage() {
             <div className="single-arm-wrap">
               <SidePlankStatsPanel data={result} />
 
-              {(lastEvent.feedback || result.feedback) && (
+              {result.feedback && (
                 <div
-                  className={`feedback-box ${
-                    lastEvent.kind === "break" ? "needs_improvement" : (result.hold_quality ?? "")
-                  }`}
+                  className={`feedback-box ${result.hold_quality ?? (result.hold_state === "broken" ? "needs_improvement" : "")}`}
                 >
                   <strong>Coach Feedback</strong>
-                  <p>{lastEvent.feedback ?? result.feedback}</p>
+                  <p>{result.feedback}</p>
                 </div>
               )}
             </div>
@@ -410,20 +496,24 @@ function SidePlankPage() {
                   <span className="v">{setSummaries.length}</span>
                 </div>
                 <div className="session-summary-item">
-                  <span className="k">Total hold</span>
-                  <span className="v">{totals.hold.toFixed(0)}s</span>
-                </div>
-                <div className="session-summary-item good">
-                  <span className="k">Good time</span>
-                  <span className="v">{totals.good.toFixed(0)}s</span>
-                </div>
-                <div className="session-summary-item flawed">
-                  <span className="k">Flawed time</span>
-                  <span className="v">{totals.flawed.toFixed(0)}s</span>
+                  <span className="k">Total held</span>
+                  <span className="v">{formatSeconds(totals.hold)}</span>
                 </div>
                 <div className="session-summary-item">
                   <span className="k">Best streak</span>
-                  <span className="v">{totals.bestStreak.toFixed(0)}s</span>
+                  <span className="v">{formatSeconds(totals.bestStreak)}</span>
+                </div>
+                <div className="session-summary-item">
+                  <span className="k">Total breaks</span>
+                  <span className="v">{totals.breaks}</span>
+                </div>
+                <div className="session-summary-item good">
+                  <span className="k">Good</span>
+                  <span className="v">{formatSeconds(totals.good)}</span>
+                </div>
+                <div className="session-summary-item flawed">
+                  <span className="k">Flawed</span>
+                  <span className="v">{formatSeconds(totals.flawed)}</span>
                 </div>
               </div>
 
@@ -431,17 +521,19 @@ function SidePlankPage() {
                 <div className="results-row results-head">
                   <span>Set</span>
                   <span>Held</span>
-                  <span>Best streak</span>
+                  <span>Best</span>
                   <span>Breaks</span>
-                  <span>Avg score</span>
+                  <span>Good</span>
                 </div>
                 {setSummaries.map((s) => (
                   <div key={s.setNumber} className="results-row">
                     <span>{s.setNumber}</span>
-                    <span>{s.holdSeconds.toFixed(0)}s</span>
-                    <span className="good-text">{s.bestStreak.toFixed(0)}s</span>
-                    <span className="flawed-text">{s.breakCount}</span>
-                    <span>{s.avgFormScore != null ? s.avgFormScore : "—"}</span>
+                    <span>{formatSeconds(s.holdSeconds)}</span>
+                    <span>{formatSeconds(s.bestStreak)}</span>
+                    <span>{s.breakCount}</span>
+                    <span className="good-text">
+                      {formatSeconds(s.goodSeconds)}
+                    </span>
                   </div>
                 ))}
                 {setSummaries.length === 0 && (
@@ -452,6 +544,13 @@ function SidePlankPage() {
                   </div>
                 )}
               </div>
+
+              <button
+                className="start-btn full-width"
+                onClick={() => navigate("/exercises")}
+              >
+                Back to Exercise Library
+              </button>
             </div>
           )}
         </div>
