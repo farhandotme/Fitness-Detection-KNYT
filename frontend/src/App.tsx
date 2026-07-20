@@ -12,12 +12,14 @@ import LungePage from "./pages/LungePage";
 import HighKneesPage from "./pages/HighKneesPage";
 import ShoulderPressPage from "./pages/ShoulderPressPage";
 import LateralRaisePage from "./pages/LateralRaisePage";
-import MuayThaiJabPage from "./pages/MuayThaiJabPage";
 import DeadBugPage from "./pages/DeadBugPage";
 import SidePlankPage from "./pages/SidePlankPage";
 import BridgeHoldPage from "./pages/BridgeHoldPage";
 import MountainClimberPage from "./pages/MountainClimberPage";
 import PlankHoldPage from "./pages/PlankholdPage";
+import JabPage from "./pages/JabPage";
+import BirdDogPage from "./pages/BirdDogPage";
+import CalfRaisePage from "./pages/CalfRaisePage";
 
 function App() {
   return (
@@ -42,11 +44,13 @@ function App() {
           <Route path="squat" element={<SquatPage />} />
           <Route path="pushup" element={<PushupPage />} />
           <Route path="body-scan" element={<BodyAnalysisPage />} />
-          <Route path="muay_thai_jab" element={<MuayThaiJabPage />} />
+          <Route path="muay_thai_jab" element={<JabPage />} />
           <Route path="dead_bug" element={<DeadBugPage />} />
           <Route path="side_plank" element={<SidePlankPage />} />
           <Route path="bridge_pose" element={<BridgeHoldPage />} />
           <Route path="exercises/plank-hold" element={<PlankHoldPage />} />
+          <Route path="bird_dog" element={<BirdDogPage />} />
+          <Route path="calf_raise" element={<CalfRaisePage />} />
           <Route
             path="/exercises/mountain-climber"
             element={<MountainClimberPage />}
