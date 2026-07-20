@@ -3,43 +3,56 @@ Side plank hold timing + posture correction.
 
 Design
 ------
-Same idea as `plank_hold.py`: a side plank has no reps, it's a single
-continuous timed position, so `SidePlankAnalyzer` runs a **hold timer that
-only advances while the person is genuinely in a side plank**. The timer
-never loses time it already earned — it *pauses* the instant the position
-breaks (or the camera loses them) and *resumes* the instant it's good
-again. `hold_seconds` only ever goes up; `current_streak_seconds` is the
-only thing that resets, so the person always knows how their current
-attempt is going without being punished for the whole session.
+Same logic as `PlankHoldAnalyzer` — a side plank has no reps, it's a
+single continuous timed position, so this doesn't run a rep state machine
+either. It runs the identical **hold timer that only advances while the
+person is verified, frame by frame, to actually be in a correct side
+plank**:
 
-Why a side plank is filmed differently than a forearm plank
--------------------------------------------------------------
-A forearm plank is judged from a profile (side-on) view, because that's
-the only angle a straight body-line can be checked from — and that view
-only ever shows *one* side of the body clearly.
+    * The instant form breaks (or the person leaves frame, or the camera
+      framing goes bad), the timer **pauses**. It never silently resets to
+      zero, so accumulated `hold_seconds` is monotonic for the lifetime of
+      a set. `current_streak_seconds` (time since the last break) is what
+      resets, giving live feedback on the *current* attempt without
+      punishing total progress.
+    * The instant good form resumes, the timer picks back up from where it
+      left off.
 
-A side plank is the opposite: the person is lying on their side, so the
-camera needs to face the *front* (or back) of their body to see the whole
-shape of the pose — both shoulders, both hips, both ankles are usually
-visible at once, just at different heights (the "top" arm/hip/leg sits
-higher on screen than the "bottom" one that's carrying the weight). So
-instead of picking one visible side like the forearm plank does, this
-analyzer builds the straight-line check from the **midpoint** of each
-left/right pair (shoulder, hip, ankle) — that midpoint is a stable stand-in
-for the body's centerline no matter which side is down, and it doesn't
-flicker if one side briefly reads a little less clearly than the other.
+Camera framing
+---------------
+A side plank is judged from the same **side-on (profile) view** as a
+regular plank — the straight-line body check (shoulder-hip-ankle) works
+identically regardless of whether the person is face-down (plank) or
+lying on their hip (side plank), since it's a 2D image-plane angle, not a
+3D orientation check. So framing here reuses the exact same "body reads
+as horizontal" check.
 
-Kept deliberately simple
--------------------------
-Earlier feedback on this app was that exercises were flagging too many
-"flaws" and missing valid positions too often. So this analyzer keeps only
-ONE thing that can pause the timer — the body not forming a reasonably
-straight line (`alignment_angle`, shoulder→hip→ankle) — plus basic camera
-framing. Everything else (which elbow is supporting, whether the hips are
-sagging vs. piking) is reported as a lighter-weight coaching tip that
-affects the form score but never stops the clock, and is only ever raised
-when it can be measured with confidence. Bent knees are allowed — that's a
-normal, easier variation of the exercise, not a mistake.
+Form signal
+-----------
+Same two hard-gate angles as the regular plank, evaluated on whichever
+side of the body is currently better tracked — for a side plank this is
+naturally the side facing the camera (the down/supporting side, on a
+forearm or hand, with the bottom foot on the ground):
+
+  * `alignment_angle` = angle(shoulder, hip, ankle). ~180° is a
+    ruler-straight body. In a side plank, a bad angle almost always means
+    the hips have dropped toward the floor (not lifted), so the
+    hip-sag/hip-pike distinction still applies and still reads off the
+    signed deviation of the hip from the dead-straight shoulder-ankle
+    line.
+  * `knee_angle` = angle(hip, knee, ankle). Unlike a front plank, a bent
+    front knee is a legitimate beginner regression for a side plank
+    (stacking the top knee forward for balance, or a modified/kneeling
+    side plank), so this is **not** a hard break here — it's graded as a
+    lighter-weight form note only, same tier as head position.
+  * `head_angle` = angle(ear, shoulder, hip), calibrated against the
+    person's own first few good-hold seconds — identical to the regular
+    plank.
+
+Only a broken hip alignment (or bad framing / no person) pauses the
+timer. Knee position and head position are both graded as form notes,
+not hard breaks — this keeps a beginner's modified side plank counting
+while still coaching toward a stricter version.
 """
 
 import math
@@ -48,59 +61,87 @@ from typing import Any, Optional
 
 from src.engines.poseEngine import (  # type: ignore
     LEFT_ANKLE,
-    LEFT_ELBOW,
+    LEFT_EAR,
     LEFT_HIP,
     LEFT_KNEE,
     LEFT_SHOULDER,
     PoseEngine,
     RIGHT_ANKLE,
-    RIGHT_ELBOW,
+    RIGHT_EAR,
     RIGHT_HIP,
     RIGHT_KNEE,
     RIGHT_SHOULDER,
 )
 
 # -------------------------------------------------------------------------
-# Tunable constants
+# Tunable constants — same values as the regular plank hold, since a
+# straight body line is a straight body line regardless of orientation.
 # -------------------------------------------------------------------------
 
-MIN_LANDMARK_VISIBILITY = 0.35
+MIN_LANDMARK_VISIBILITY = 0.4
 
+# A side (left or right) is usable as `active_side` only if all four of
+# these are confidently visible on that side. For a side plank this
+# naturally resolves to the down/camera-facing side.
+SIDE_LANDMARKS = {
+    "left": (LEFT_SHOULDER, LEFT_HIP, LEFT_KNEE, LEFT_ANKLE),
+    "right": (RIGHT_SHOULDER, RIGHT_HIP, RIGHT_KNEE, RIGHT_ANKLE),
+}
 CORE_LANDMARKS = (LEFT_SHOULDER, RIGHT_SHOULDER, LEFT_HIP, RIGHT_HIP)
 
-# ---- body-alignment angle (shoulder-hip-ankle), degrees ----
-# Hysteresis band, same pattern as the forearm plank: once holding, only a
-# drop below ALIGN_BROKEN pauses the timer; to start (or resume) it has to
-# climb back above the higher ALIGN_RESUME. Thresholds are deliberately a
-# little looser than the forearm plank's, because a side plank is judged
-# from a front-on camera rather than a true profile view, which reads
-# slightly less "ruler straight" even with perfect form.
-ALIGN_BROKEN = 128.0
-ALIGN_RESUME = 145.0
-ALIGN_IDEAL = 160.0  # at/above this, hip alignment is "good" tier (no flaw)
 
-# Per-issue form_score penalty (applied per frame while holding). These are
-# coaching notes only — they never pause the timer.
+def _looks_like_a_person(landmarks) -> bool:
+    visible_core = sum(
+        1
+        for i in CORE_LANDMARKS
+        if landmarks[i].visibility is not None and landmarks[i].visibility > 0.6
+    )
+    return visible_core >= 2  # a side-on view often only clearly shows 2-3
+
+
+# ---- body-alignment angle (shoulder-hip-ankle), degrees ----
+# Hysteresis band: once holding, only a drop below ALIGN_BROKEN pauses the
+# timer; once broken/not-started, alignment has to climb back above
+# ALIGN_RESUME to start it again — stops a borderline angle from
+# flickering holding/broken every other frame.
+ALIGN_BROKEN = 145.0
+ALIGN_RESUME = 156.0
+ALIGN_IDEAL = 167.0  # at/above this, hip alignment is "good" tier (no flaw)
+
+# ---- knee angle (hip-knee-ankle), degrees ----
+# Not a hard break here (see module docstring) — a bent front knee is a
+# legitimate beginner regression for a side plank. Graded as a form note
+# only, below this threshold.
+KNEE_FLAW_BELOW = 140.0
+
+# ---- head/neck angle (ear-shoulder-hip), degrees — calibrated per-person ----
+HEAD_ANGLE_DELTA = 18.0  # allowed drift from personal baseline before flagging
+CALIBRATION_FRAMES = 15  # consecutive good-hold frames needed to calibrate
+
+# Per-issue form_score penalty (applied per frame while holding).
 MISTAKE_PENALTY = {
-    "hip_sag": 18,
-    "hip_pike": 14,
-    "support_arm": 8,
+    "hip_sag": 22,
+    "hip_pike": 18,
+    "knee_forward": 12,
+    "head_position": 10,
 }
 
-# form_score is sampled into this rolling window roughly once a second so
-# `avg_form_score` reflects the last ~SCORE_HISTORY seconds, not the frame
-# rate.
+# form_score is sampled into this rolling window roughly once a second
+# (not every frame) so `avg_form_score` reflects the last ~SCORE_HISTORY
+# seconds of holding rather than being dominated by frame rate.
 SCORE_HISTORY = 30
 SCORE_SAMPLE_INTERVAL = 1.0  # seconds
 
 # -------------------------------------------------------------------------
-# Camera framing / orientation thresholds — body should read as roughly
-# horizontal (lying down) rather than upright (standing).
+# Camera framing / stance-position thresholds (profile view — body should
+# read as roughly horizontal, not standing).
 # -------------------------------------------------------------------------
 FRAME_EDGE_MARGIN = 0.03
-BODY_SPAN_TOO_CLOSE = 0.92  # shoulder-to-ankle span as a fraction of frame width
-BODY_SPAN_TOO_FAR = 0.30
-MAX_STANDING_RATIO = 0.85  # |dy|/|dx| of shoulder->ankle above this reads as "standing"
+BODY_SPAN_TOO_CLOSE = (
+    0.85  # shoulder-to-ankle span as a fraction of frame width: too large = too close
+)
+BODY_SPAN_TOO_FAR = 0.35  # too small = too far away
+MAX_STANDING_RATIO = 0.65  # |dy|/|dx| of shoulder->ankle above this = too vertical (standing, not planking)
 
 
 class _Point:
@@ -111,28 +152,24 @@ class _Point:
         self.y = y
 
 
-def _midpoint(a, b) -> _Point:
-    return _Point((a.x + b.x) / 2.0, (a.y + b.y) / 2.0)
-
-
-def _visible(points, min_vis: float = MIN_LANDMARK_VISIBILITY) -> bool:
+def _visible(points) -> bool:
     for p in points:
         if p is None:
             return False
         v = getattr(p, "visibility", None)
-        if v is not None and v < min_vis:
+        if v is not None and v < MIN_LANDMARK_VISIBILITY:
             return False
     return True
 
 
-def _vis_score(p) -> float:
-    v = getattr(p, "visibility", None)
-    return v if v is not None else 0.0
-
-
-def _looks_like_a_person(landmarks) -> bool:
-    visible_core = sum(1 for i in CORE_LANDMARKS if _vis_score(landmarks[i]) > 0.5)
-    return visible_core >= 3
+def _side_visibility(landmarks, side: str) -> float:
+    """Lowest visibility score among the four landmarks that make up
+    `side` — a conservative "can we trust this side at all" score."""
+    scores = []
+    for idx in SIDE_LANDMARKS[side]:
+        v = landmarks[idx].visibility
+        scores.append(v if v is not None else 0.0)
+    return min(scores) if scores else 0.0
 
 
 def _angle_deg(a, b, c) -> float:
@@ -153,8 +190,9 @@ def _dist(a, b) -> float:
 def _hip_deviation(shoulder, hip, ankle) -> float:
     """Signed vertical deviation of the hip from the straight
     shoulder-ankle line, normalized by body length. Positive = hip sits
-    below the line (sagging toward the floor); negative = hip sits above
-    it (piking up)."""
+    *below* the line (sagging toward the floor); negative = hip sits
+    *above* it (piking up too high). Based on simple x interpolation, so
+    its sign is unaffected by which way the person is facing the camera."""
     body_len = max(_dist(shoulder, ankle), 1e-6)
     dx = ankle.x - shoulder.x
     if abs(dx) < 1e-6:
@@ -164,68 +202,62 @@ def _hip_deviation(shoulder, hip, ankle) -> float:
     return (hip.y - line_y_at_hip) / body_len
 
 
-def _ankle_or_knee_midpoint(landmarks) -> Optional[_Point]:
-    """Midpoint of both ankles, preferred; falls back to knees if the feet
-    are cropped out of frame — same "don't refuse to detect just because
-    one point is missing" spirit as the push-up detector."""
-    l_ankle, r_ankle = landmarks[LEFT_ANKLE], landmarks[RIGHT_ANKLE]
-    if _visible((l_ankle, r_ankle)):
-        return _midpoint(l_ankle, r_ankle)
-    l_knee, r_knee = landmarks[LEFT_KNEE], landmarks[RIGHT_KNEE]
-    if _visible((l_knee, r_knee)):
-        return _midpoint(l_knee, r_knee)
-    # Last resort: whichever single ankle/knee is visible.
-    for p in (l_ankle, r_ankle, l_knee, r_knee):
-        if _visible((p,)):
-            return _Point(p.x, p.y)
-    return None
+def _framing_feedback(shoulder, hip, ankle) -> Optional[str]:
+    """Coaches the user into a good spot for the camera to judge a side
+    plank from — checked every frame, independent of exercise form.
 
-
-def _framing_feedback(mid_shoulder, mid_hip, ankle_point) -> Optional[str]:
-    """Plain-language camera positioning checks — independent of side
-    plank form, since bad framing is why the form math might be unreliable
-    in the first place."""
-    for p in (mid_shoulder, mid_hip, ankle_point):
+    Checks, in order of how badly they break tracking:
+      1. Part of the (active-side) body clipped at a frame edge.
+      2. Standing too upright instead of horizontal — most likely they
+         haven't gotten into side plank position yet, or the camera isn't
+         actually side-on.
+      3. Too close / too far from the camera.
+    """
+    for p in (shoulder, hip, ankle):
         if (
             p.x < FRAME_EDGE_MARGIN
             or p.x > 1 - FRAME_EDGE_MARGIN
             or p.y < FRAME_EDGE_MARGIN
             or p.y > 1 - FRAME_EDGE_MARGIN
         ):
-            return "Part of you is out of frame — make sure your whole body fits in the shot."
+            return (
+                "You're partly out of frame — reposition so your whole body, "
+                "head to feet, fits in the shot."
+            )
 
-    dx = abs(ankle_point.x - mid_shoulder.x)
-    dy = abs(ankle_point.y - mid_shoulder.y)
-    if dx > 1e-6 and (dy / dx) > MAX_STANDING_RATIO:
+    dx = abs(ankle.x - shoulder.x)
+    dy = abs(ankle.y - shoulder.y)
+    if dx < 1e-6 or (dy / dx) > MAX_STANDING_RATIO:
         return (
-            "Lie down on your side facing the camera, propped up on your "
-            "forearm or hand, so I can see your whole body."
+            "Lie on your side facing the camera and prop up onto your "
+            "forearm or hand, hips lifted — I need a side-on view to "
+            "check your alignment."
         )
 
     body_span = math.hypot(dx, dy)
     if body_span > BODY_SPAN_TOO_CLOSE:
-        return "You're too close to the camera — move back so your whole body fits in frame."
+        return "You're too close to the camera — step back until your whole body fits in frame."
     if body_span < BODY_SPAN_TOO_FAR:
-        return "You're too far from the camera — move a bit closer."
+        return "You're too far from the camera — move closer for accurate tracking."
 
     return None
 
 
 class SidePlankAnalyzer:
-    """Stateful side-plank timer + light posture checker.
+    """Stateful side-plank-hold timer + posture checker.
 
-    Mirrors `PlankHoldAnalyzer`'s hold-timer contract exactly
-    (`hold_seconds` / `session_complete` / etc.) so it slots into the same
-    kind of session-and-route wiring as every other timed exercise here.
+    No `target_reps` here — the coach-assigned target is a duration,
+    `target_seconds`. `session_complete` is `hold_seconds >= target_seconds`,
+    exactly mirroring `PlankHoldAnalyzer`.
     """
 
     def __init__(self, target_seconds: Optional[int] = None):
         self.target_seconds = target_seconds
 
-        self.active_side: Optional[str] = None  # which side is on the ground
+        self.active_side: Optional[str] = None
 
-        self.hold_active = False
-        self.started = False
+        self.hold_active = False  # is the timer running THIS frame
+        self.started = False  # has the timer ever run at all
         self.hold_seconds = 0.0
         self.good_seconds = 0.0
         self.flawed_seconds = 0.0
@@ -236,7 +268,14 @@ class SidePlankAnalyzer:
         self.last_timestamp_s: Optional[float] = None
         self.session_start_time: Optional[float] = None
 
-        self._was_complete = False
+        self._was_complete = False  # for edge-triggering `target_reached`
+
+        # Personal head/neck baseline, calibrated from the first stretch of
+        # genuinely good holding (good hip alignment) rather than a fixed
+        # angle, since neutral neck angle varies by build/camera tilt.
+        self._calib_samples: list[float] = []
+        self.calibrated = False
+        self._baseline_head_angle = 180.0
 
         self.form_scores: deque[int] = deque(maxlen=SCORE_HISTORY)
         self._last_score_sample_time: Optional[float] = None
@@ -247,17 +286,25 @@ class SidePlankAnalyzer:
             self.target_seconds is not None and self.hold_seconds >= self.target_seconds
         )
 
-    def _pick_down_side(self, landmarks) -> Optional[str]:
-        """Which side is loaded (touching/near the ground) — read off
-        whichever shoulder sits lower on screen (larger y). Sticky toward
-        the current side so it doesn't flicker on near-tie frames."""
-        l_sh, r_sh = landmarks[LEFT_SHOULDER], landmarks[RIGHT_SHOULDER]
-        if not _visible((l_sh, r_sh), min_vis=0.3):
+    def _finish_calibration(self):
+        n = len(self._calib_samples)
+        self._baseline_head_angle = sum(self._calib_samples) / n
+        self.calibrated = True
+
+    def _pick_active_side(self, landmarks) -> Optional[str]:
+        vis = {side: _side_visibility(landmarks, side) for side in ("left", "right")}
+
+        # Prefer to keep the current side if it's still trustworthy — avoids
+        # flickering `active_side` (and the angle it drives) back and forth
+        # on frames where both sides read similarly.
+        if (
+            self.active_side is not None
+            and vis[self.active_side] >= MIN_LANDMARK_VISIBILITY
+        ):
             return self.active_side
-        diff = l_sh.y - r_sh.y  # positive => left is lower on screen
-        if abs(diff) < 0.02:
-            return self.active_side or ("left" if diff >= 0 else "right")
-        return "left" if diff > 0 else "right"
+
+        best_side = max(vis, key=lambda s: vis[s])
+        return best_side if vis[best_side] >= MIN_LANDMARK_VISIBILITY else None
 
     # ---------------------------------------------------------------
     def update(self, landmarks, timestamp_ms: int) -> dict[str, Any]:
@@ -270,6 +317,8 @@ class SidePlankAnalyzer:
             "pose_detected": False,
             "active_side": self.active_side,
             "alignment_angle": None,
+            "knee_angle": None,
+            "head_angle": None,
             "hold_state": (
                 "holding"
                 if self.started and self.hold_active
@@ -286,6 +335,7 @@ class SidePlankAnalyzer:
             "session_complete": self._is_complete(),
             "target_reached": False,
             "hold_quality": None,
+            "calibrated": self.calibrated,
             "posture_ok": True,
             "posture_issues": [],
             "posture_messages": [],
@@ -300,61 +350,99 @@ class SidePlankAnalyzer:
 
         dt = 0.0
         if self.last_timestamp_s is not None:
-            dt = max(0.0, min(t - self.last_timestamp_s, 0.5))
+            dt = max(0.0, min(t - self.last_timestamp_s, 0.5))  # clamp huge gaps
         self.last_timestamp_s = t
 
         if landmarks is None or not _looks_like_a_person(landmarks):
             self._register_broken_frame()
             response["feedback"] = (
-                "I can't see you — step into frame, lying on your side facing the camera."
+                "No person detected — get into frame, lying on your side to the camera."
             )
             response.update(self._progress_fields())
             return response
 
-        response["pose_detected"] = True
-
-        mid_shoulder = _midpoint(landmarks[LEFT_SHOULDER], landmarks[RIGHT_SHOULDER])
-        mid_hip = _midpoint(landmarks[LEFT_HIP], landmarks[RIGHT_HIP])
-        ankle_point = _ankle_or_knee_midpoint(landmarks)
-
-        if ankle_point is None:
+        self.active_side = self._pick_active_side(landmarks)
+        if self.active_side is None:
+            response["pose_detected"] = True
             response["low_visibility"] = True
             self._register_broken_frame()
             response["feedback"] = (
-                "I can't see your legs clearly — step back so your whole body is in frame."
+                "Can't see your body clearly from either side — step back and "
+                "make sure your propped-up side is facing the camera."
             )
             response.update(self._progress_fields())
             return response
 
-        self.active_side = self._pick_down_side(landmarks)
-
-        framing_message = _framing_feedback(mid_shoulder, mid_hip, ankle_point)
-        alignment_angle = _angle_deg(mid_shoulder, mid_hip, ankle_point)
-
-        align_broken = alignment_angle < (
-            ALIGN_BROKEN if self.hold_active else ALIGN_RESUME
+        s_idx, h_idx, k_idx, a_idx = SIDE_LANDMARKS[self.active_side]
+        shoulder, hip, knee, ankle = (
+            landmarks[s_idx],
+            landmarks[h_idx],
+            landmarks[k_idx],
+            landmarks[a_idx],
         )
+        ear = landmarks[LEFT_EAR if self.active_side == "left" else RIGHT_EAR]
+        ear_ok = (
+            _visible((ear,)) and ear.visibility is not None and ear.visibility > 0.3
+        )
+
+        alignment_angle = _angle_deg(shoulder, hip, ankle)
+        knee_angle = _angle_deg(hip, knee, ankle)
+        head_angle = _angle_deg(ear, shoulder, hip) if ear_ok else None
+
+        framing_message = _framing_feedback(shoulder, hip, ankle)
+
+        # ---- resolve hold-validity this frame (with hysteresis) ----
+        # Unlike the regular plank, knee angle is never a hard break here —
+        # a bent front knee is a legitimate beginner side-plank regression.
+        if self.hold_active:
+            align_broken = alignment_angle < ALIGN_BROKEN
+        else:
+            align_broken = alignment_angle < ALIGN_RESUME
+
         holding_now = framing_message is None and not align_broken
 
-        # ---- lightweight coaching (never pauses the timer) ----
+        # ---- form tiering (only meaningful while holding) ----
         issues: list[str] = []
         messages: list[str] = []
-        if holding_now and alignment_angle < ALIGN_IDEAL:
-            deviation = _hip_deviation(mid_shoulder, mid_hip, ankle_point)
-            if deviation > 0:
-                issues.append("hip_sag")
-                messages.append(
-                    "Lift your hips a little higher — keep your body in one straight line."
-                )
-            else:
-                issues.append("hip_pike")
-                messages.append("Lower your hips slightly — you're piking up too high.")
-
         if holding_now:
-            support_message = self._check_support_arm(landmarks)
-            if support_message:
-                issues.append("support_arm")
-                messages.append(support_message)
+            if alignment_angle < ALIGN_IDEAL:
+                deviation = _hip_deviation(shoulder, hip, ankle)
+                if deviation > 0:
+                    issues.append("hip_sag")
+                    messages.append(
+                        "Lift your hips — you're sagging toward the floor, squeeze your obliques."
+                    )
+                else:
+                    issues.append("hip_pike")
+                    messages.append(
+                        "Lower your hips slightly — you're piking up too high, flatten out."
+                    )
+
+            if knee_angle < KNEE_FLAW_BELOW:
+                issues.append("knee_forward")
+                messages.append(
+                    "Straighten your legs when you're ready to progress — "
+                    "stacking a bent knee forward is a fine regression for now."
+                )
+
+            if self.calibrated and head_angle is not None:
+                if abs(head_angle - self._baseline_head_angle) > HEAD_ANGLE_DELTA:
+                    issues.append("head_position")
+                    messages.append(
+                        "Keep your neck neutral — don't let your head drop or crane up."
+                    )
+
+            # Calibrate the neutral-neck baseline only from genuinely clean
+            # holds (no hip issue) so a bad rep can't poison it.
+            if (
+                not self.calibrated
+                and head_angle is not None
+                and "hip_sag" not in issues
+                and "hip_pike" not in issues
+            ):
+                self._calib_samples.append(head_angle)
+                if len(self._calib_samples) >= CALIBRATION_FRAMES:
+                    self._finish_calibration()
 
         # ---- advance / pause the timer ----
         form_score = None
@@ -395,30 +483,36 @@ class SidePlankAnalyzer:
         target_reached = is_complete and not self._was_complete
         self._was_complete = is_complete
 
-        # ---- feedback priority: framing > not-in-position > form tips > praise ----
+        # ---- feedback priority: framing > hard break > form flaws > praise ----
         feedback = framing_message
         if feedback is None and align_broken:
             feedback = (
-                "Get into side plank — lie on your side, prop yourself up, "
-                "and keep your body in one straight line from shoulders to feet."
+                "That's not a side plank position yet — get your body in a "
+                "straight line from shoulders to ankles, hips lifted off the floor."
             )
         if feedback is None and messages:
             feedback = messages[0]
+        if feedback is None and not self.calibrated and holding_now:
+            feedback = "Great form — hold it, calibrating your neutral posture."
         if feedback is None and target_reached:
             feedback = f"Target reached — {self.target_seconds}s held, nice work!"
         if feedback is None and holding_now:
             feedback = "Great side plank — keep holding!"
         if feedback is None:
-            feedback = "Get back into side plank position to keep the timer going."
+            feedback = "Get back into side plank position to resume the timer."
 
         response.update(
             {
+                "pose_detected": True,
                 "active_side": self.active_side,
                 "alignment_angle": round(alignment_angle, 1),
+                "knee_angle": round(knee_angle, 1),
+                "head_angle": round(head_angle, 1) if head_angle is not None else None,
                 "hold_state": "holding" if holding_now else "broken",
                 "is_holding": holding_now,
                 "target_reached": target_reached,
                 "hold_quality": hold_quality,
+                "calibrated": self.calibrated,
                 "posture_ok": len(issues) == 0,
                 "posture_issues": issues,
                 "posture_messages": messages,
@@ -433,31 +527,6 @@ class SidePlankAnalyzer:
         return response
 
     # ---------------------------------------------------------------
-    def _check_support_arm(self, landmarks) -> Optional[str]:
-        """Soft, best-effort check that the supporting (down-side) elbow
-        sits roughly under the shoulder rather than way out or way in.
-        Only raised when both points are confidently visible — anything
-        uncertain is simply skipped rather than guessed at, so a partly
-        hidden arm never gets flagged as wrong."""
-        if self.active_side == "left":
-            shoulder, elbow = landmarks[LEFT_SHOULDER], landmarks[LEFT_ELBOW]
-        elif self.active_side == "right":
-            shoulder, elbow = landmarks[RIGHT_SHOULDER], landmarks[RIGHT_ELBOW]
-        else:
-            return None
-
-        if not _visible((shoulder, elbow), min_vis=0.5):
-            return None
-
-        shoulder_width = _dist(landmarks[LEFT_SHOULDER], landmarks[RIGHT_SHOULDER])
-        if shoulder_width < 1e-6:
-            return None
-
-        horizontal_offset = abs(elbow.x - shoulder.x) / shoulder_width
-        if horizontal_offset > 0.65:
-            return "Bring your supporting elbow in, roughly under your shoulder."
-        return None
-
     def _register_broken_frame(self):
         if self.hold_active:
             self.break_count += 1
@@ -485,10 +554,11 @@ class SidePlankAnalyzer:
 class SidePlankSession:
     """Full side-plank session: one shared pose model + one analyzer.
 
-    Same `target_seconds` / `target_sets` / `set_number` contract as
-    `PlankHoldSession` — the coach-assigned plan is supplied by the caller
-    (the websocket route, from query params), and `session_complete` /
-    `exercise_complete` are both computed here, never on the frontend.
+    `target_seconds` / `target_sets` / `set_number` are the coach-assigned
+    plan for this user, supplied by the caller (the websocket route, from
+    query params) — same convention as `PlankHoldSession`. The frontend
+    does not decide on its own whether a set/exercise is done;
+    `session_complete` and `exercise_complete` are both computed here.
     """
 
     def __init__(
