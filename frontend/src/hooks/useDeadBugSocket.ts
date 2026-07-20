@@ -7,80 +7,59 @@ export interface Landmark {
   visibility?: number;
 }
 
-/** Which contralateral pair is currently extending, if any. */
-export type ActiveSide = "right_arm_left_leg" | "left_arm_right_leg" | null;
-
-/** Everything the FastAPI `DeadBugAnalyzer` sends per frame — see
- * dead_bug.py's `update()` response dict. Kept 1:1 with the backend so a
- * schema change there is a compile error here, not a silent UI bug. */
+/** Everything the FastAPI `DeadBugAnalyzer` sends per frame. */
 export interface DeadBugData {
   pose_detected: boolean;
-  left_arm_angle: number | null;
-  right_arm_angle: number | null;
-  left_leg_angle: number | null;
-  right_leg_angle: number | null;
-  active_side: ActiveSide;
-  phase: string;
-  stage: string;
+  ready: boolean;
+  stance_ok: boolean;
+  stance_message: string | null;
+  framing_ok: boolean;
+  framing_message: string | null;
   rep_count: number;
-  good_reps: number;
-  flawed_reps: number;
-  not_counted_incomplete: number;
+  right_arm_left_leg_count: number;
+  left_arm_right_leg_count: number;
   target_reps: number | null;
   session_complete: boolean;
   rep_completed: boolean;
-  rep_duration: number | null;
-  rep_avg_speed: number | null;
-  rep_classification: string | null;
-  rep_form_quality: string | null;
-  calibrated: boolean;
-  posture_ok: boolean;
-  posture_issues: string[];
-  posture_messages: string[];
-  framing_ok: boolean;
-  framing_message: string | null;
+  rep_diagonal: "right_arm_left_leg" | "left_arm_right_leg" | null;
+  invalid_attempt: boolean;
+  invalid_reason: "tempo" | "cross_limb" | "hip_drift" | null;
   feedback: string | null;
   low_visibility: boolean;
   elapsed_time: number;
   landmarks: Landmark[];
-  // Added by DeadBugSession.detect() on top of the analyzer's own dict.
-  set_number: number;
-  target_sets: number;
-  exercise_complete: boolean;
+  set_number?: number;
+  target_sets?: number;
+  /**
+   * Backend-validated: true only once every set in the plan hit its
+   * target reps. The frontend must treat this as the source of truth for
+   * "the user completed this exercise" — never compute it client-side.
+   */
+  exercise_complete?: boolean;
 }
 
 const EMPTY_RESULT: DeadBugData = {
   pose_detected: false,
-  left_arm_angle: null,
-  right_arm_angle: null,
-  left_leg_angle: null,
-  right_leg_angle: null,
-  active_side: null,
-  phase: "start",
-  stage: "start",
+  ready: false,
+  stance_ok: false,
+  stance_message: null,
+  framing_ok: true,
+  framing_message: null,
   rep_count: 0,
-  good_reps: 0,
-  flawed_reps: 0,
-  not_counted_incomplete: 0,
+  right_arm_left_leg_count: 0,
+  left_arm_right_leg_count: 0,
   target_reps: null,
   session_complete: false,
   rep_completed: false,
-  rep_duration: null,
-  rep_avg_speed: null,
-  rep_classification: null,
-  rep_form_quality: null,
-  calibrated: false,
-  posture_ok: true,
-  posture_issues: [],
-  posture_messages: [],
-  framing_ok: true,
-  framing_message: null,
+  rep_diagonal: null,
+  invalid_attempt: false,
+  invalid_reason: null,
   feedback: null,
   low_visibility: false,
   elapsed_time: 0,
   landmarks: [],
-  set_number: 1,
-  target_sets: 1,
+  set_number: undefined,
+  target_sets: undefined,
   exercise_complete: false,
 };
 
@@ -94,11 +73,10 @@ export default function useDeadBugSocket() {
   const [socketError, setSocketError] = useState<string | null>(null);
   const [result, setResult] = useState<DeadBugData>(EMPTY_RESULT);
 
-  const [lastCompletedRep, setLastCompletedRep] = useState({
-    rep_duration: null as number | null,
-    rep_avg_speed: null as number | null,
-    rep_classification: null as string | null,
-    rep_form_quality: null as string | null,
+  const [lastEvent, setLastEvent] = useState({
+    kind: null as "rep" | "invalid" | null,
+    diagonal: null as string | null,
+    reason: null as string | null,
     feedback: null as string | null,
   });
 
@@ -115,59 +93,73 @@ export default function useDeadBugSocket() {
     socketRef.current = null;
   }, []);
 
-  const start = useCallback(() => {
-    socketRef.current?.close();
+  const start = useCallback(
+    (plan?: {
+      targetReps?: number;
+      targetSets?: number;
+      setNumber?: number;
+    }) => {
+      socketRef.current?.close();
 
-    setResult(EMPTY_RESULT);
-    setLastCompletedRep({
-      rep_duration: null,
-      rep_avg_speed: null,
-      rep_classification: null,
-      rep_form_quality: null,
-      feedback: null,
-    });
-    setSocketError(null);
+      setResult(EMPTY_RESULT);
+      setLastEvent({ kind: null, diagonal: null, reason: null, feedback: null });
+      setSocketError(null);
 
-    let ws: WebSocket;
-    try {
-      // Backend endpoint is a single, unprefixed "/deadbug" path (see
-      // deadbugRoutes.py) mounted under the app-wide "/ws" prefix in
-      // main.py — unlike bicep/squat there's no left/right/both split,
-      // since one session tracks BOTH contralateral pairs at once.
-      ws = new WebSocket(`${WS_BASE}/ws/deadbug`);
-    } catch {
-      setSocketError("Couldn't reach the detection server. Is it running?");
-      return;
-    }
+      const params = new URLSearchParams();
+      if (plan?.targetReps != null)
+        params.set("target_reps", String(plan.targetReps));
+      if (plan?.targetSets != null)
+        params.set("target_sets", String(plan.targetSets));
+      if (plan?.setNumber != null)
+        params.set("set_number", String(plan.setNumber));
+      const query = params.toString();
 
-    socketRef.current = ws;
-
-    ws.onopen = () => setConnected(true);
-
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data) as DeadBugData;
-      setResult(data);
-
-      if (data.rep_completed) {
-        setLastCompletedRep({
-          rep_duration: data.rep_duration,
-          rep_avg_speed: data.rep_avg_speed,
-          rep_classification: data.rep_classification,
-          rep_form_quality: data.rep_form_quality,
-          feedback: data.feedback,
-        });
+      let ws: WebSocket;
+      try {
+        ws = new WebSocket(
+          `${WS_BASE}/ws/dead_bug${query ? `?${query}` : ""}`,
+        );
+      } catch {
+        setSocketError("Couldn't reach the detection server. Is it running?");
+        return;
       }
-    };
 
-    ws.onclose = () => {
-      setConnected(false);
-      socketRef.current = null;
-    };
+      socketRef.current = ws;
 
-    ws.onerror = () => {
-      setSocketError("Connection error — check that the backend is running.");
-    };
-  }, []);
+      ws.onopen = () => setConnected(true);
+
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data) as DeadBugData;
+        setResult(data);
+
+        if (data.rep_completed) {
+          setLastEvent({
+            kind: "rep",
+            diagonal: data.rep_diagonal,
+            reason: null,
+            feedback: data.feedback,
+          });
+        } else if (data.invalid_attempt) {
+          setLastEvent({
+            kind: "invalid",
+            diagonal: null,
+            reason: data.invalid_reason,
+            feedback: data.feedback,
+          });
+        }
+      };
+
+      ws.onclose = () => {
+        setConnected(false);
+        socketRef.current = null;
+      };
+
+      ws.onerror = () => {
+        setSocketError("Connection error — check that the backend is running.");
+      };
+    },
+    [],
+  );
 
   const sendFrame = useCallback((image: string) => {
     const ws = socketRef.current;
@@ -178,7 +170,7 @@ export default function useDeadBugSocket() {
   return {
     connected,
     result,
-    lastCompletedRep,
+    lastEvent,
     sendFrame,
     start,
     stop,

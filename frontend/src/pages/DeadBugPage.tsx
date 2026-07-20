@@ -1,21 +1,23 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import useDeadBugSocket from "../hooks/useDeadBugSocket";
 import DeadBugCamera from "../conponents/DeadBugCamera";
 import DeadBugStatsPanel from "../conponents/DeadBugStatsPanel";
-import "./BicepPage.css";
+import "../pages/BicepPage.css";
+import "../pages/PlankHoldPage.css"; // reuses plank-viewfinder look — same lying-down framing
 import "./DeadBugPage.css";
 
-// Full-body connections, both arms and both legs — dead bug moves all four
-// limbs, unlike the single-arm skeleton used on the bicep page.
+// MediaPipe pose connections relevant to a dead bug: torso + both arms +
+// both legs, so the whole contralateral movement is visible.
 const POSE_CONNECTIONS: [number, number][] = [
+  [11, 12],
   [11, 13],
   [13, 15],
   [12, 14],
   [14, 16],
-  [11, 12],
-  [23, 24],
   [11, 23],
   [12, 24],
+  [23, 24],
   [23, 25],
   [25, 27],
   [24, 26],
@@ -31,13 +33,14 @@ type Phase = "setup" | "active" | "resting" | "complete";
 interface SetSummary {
   setNumber: number;
   reps: number;
-  goodReps: number;
-  flawedReps: number;
-  tooShallow: number;
+  rightArmLeftLeg: number;
+  leftArmRightLeg: number;
   elapsedTime: number;
 }
 
 function DeadBugPage() {
+  const navigate = useNavigate();
+
   const [repsPerSet, setRepsPerSet] = useState(8);
   const [totalSets, setTotalSets] = useState(3);
   const [restSeconds, setRestSeconds] = useState(30);
@@ -51,7 +54,7 @@ function DeadBugPage() {
   const {
     connected,
     result,
-    lastCompletedRep,
+    lastEvent,
     sendFrame,
     start,
     stop,
@@ -63,54 +66,72 @@ function DeadBugPage() {
     : [];
 
   const currentReps = result.rep_count ?? 0;
-  const progressPct = Math.min(100, (currentReps / Math.max(1, repsPerSet)) * 100);
+  const progressPct = Math.min(
+    100,
+    (currentReps / Math.max(1, repsPerSet)) * 100,
+  );
 
-  // ---- advance a set to completion once the user's target reps is hit ----
+  // ---- advance a set once the BACKEND confirms this set's reps are done ----
+  // `session_complete` is computed server-side (DeadBugAnalyzer._is_complete).
+  // The frontend never derives this itself from currentReps/repsPerSet.
   useEffect(() => {
-    if (phase !== "active" || currentReps < repsPerSet) return;
+    if (phase !== "active" || !result.session_complete) return;
 
     stop();
 
     const summary: SetSummary = {
       setNumber: currentSet,
       reps: currentReps,
-      goodReps: result.good_reps ?? 0,
-      flawedReps: result.flawed_reps ?? 0,
-      tooShallow: result.not_counted_incomplete ?? 0,
+      rightArmLeftLeg: result.right_arm_left_leg_count ?? 0,
+      leftArmRightLeg: result.left_arm_right_leg_count ?? 0,
       elapsedTime: result.elapsed_time ?? 0,
     };
     setSetSummaries((prev) => [...prev, summary]);
 
-    if (currentSet >= totalSets) {
+    if (result.exercise_complete) {
       setPhase("complete");
     } else {
       setRestRemaining(restSeconds);
       setPhase("resting");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, currentReps, repsPerSet, currentSet, totalSets, restSeconds, result, stop]);
+  }, [
+    phase,
+    result.session_complete,
+    currentSet,
+    totalSets,
+    restSeconds,
+    result,
+    stop,
+  ]);
 
   // ---- rest countdown between sets, then auto-start the next one ----
   useEffect(() => {
     if (phase !== "resting") return;
 
     if (restRemaining <= 0) {
-      setCurrentSet((s) => s + 1);
+      const nextSet = currentSet + 1;
+      setCurrentSet(nextSet);
       setPhase("active");
-      start();
+      start({
+        targetReps: repsPerSet,
+        targetSets: totalSets,
+        setNumber: nextSet,
+      });
       return;
     }
 
     const timer = window.setTimeout(() => setRestRemaining((r) => r - 1), 1000);
     return () => window.clearTimeout(timer);
-  }, [phase, restRemaining, start]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, restRemaining, start, currentSet, repsPerSet, totalSets]);
 
   function handleStart() {
     setCameraError(null);
     setSetSummaries([]);
     setCurrentSet(1);
     setPhase("active");
-    start();
+    start({ targetReps: repsPerSet, targetSets: totalSets, setNumber: 1 });
   }
 
   function handleSkipRest() {
@@ -130,29 +151,35 @@ function DeadBugPage() {
     setPhase("setup");
   }
 
-  const sessionGood = result.good_reps ?? 0;
-  const sessionFlawed = result.flawed_reps ?? 0;
   const elapsed = result.elapsed_time ?? 0;
 
   const totals = useMemo(() => {
     return setSummaries.reduce(
       (acc, s) => ({
         reps: acc.reps + s.reps,
-        good: acc.good + s.goodReps,
-        flawed: acc.flawed + s.flawedReps,
-        shallow: acc.shallow + s.tooShallow,
+        rl: acc.rl + s.rightArmLeftLeg,
+        lr: acc.lr + s.leftArmRightLeg,
         time: acc.time + s.elapsedTime,
       }),
-      { reps: 0, good: 0, flawed: 0, shallow: 0, time: 0 },
+      { reps: 0, rl: 0, lr: 0, time: 0 },
     );
   }, [setSummaries]);
 
   const totalPlannedReps = repsPerSet * totalSets;
 
   return (
-    <div className="bicep-page deadbug-page">
+    // Same shared shell as the other exercises ("bicep-page ...") plus
+    // PlankHoldPage.css's lying-down look (this page uses "plank-page"
+    // too, since dead bug shares the same camera/panel framing).
+    <div className="bicep-page plank-page dead-bug-page">
       <div className="bicep-header">
         <div className="bicep-header-left">
+          <button
+            className="plank-back-btn"
+            onClick={() => navigate("/exercises")}
+          >
+            ← Library
+          </button>
           <h1 className="bicep-title">Dead Bug Trainer</h1>
         </div>
 
@@ -215,7 +242,9 @@ function DeadBugPage() {
               <div className="progress-track">
                 <div
                   className="progress-fill"
-                  style={{ width: `${phase === "active" ? progressPct : 100}%` }}
+                  style={{
+                    width: `${phase === "active" ? progressPct : 100}%`,
+                  }}
                 />
               </div>
               <div className="progress-caption">
@@ -229,7 +258,8 @@ function DeadBugPage() {
                   <span
                     key={n}
                     className={`set-dot ${
-                      n < currentSet || (n === currentSet && phase === "resting")
+                      n < currentSet ||
+                      (n === currentSet && phase === "resting")
                         ? "done"
                         : n === currentSet
                           ? "current"
@@ -241,12 +271,16 @@ function DeadBugPage() {
 
               <div className="session-summary">
                 <div className="session-summary-item good">
-                  <span className="k">Good</span>
-                  <span className="v">{sessionGood}</span>
+                  <span className="k">R-arm/L-leg</span>
+                  <span className="v">
+                    {result.right_arm_left_leg_count ?? 0}
+                  </span>
                 </div>
                 <div className="session-summary-item flawed">
-                  <span className="k">Flawed</span>
-                  <span className="v">{sessionFlawed}</span>
+                  <span className="k">L-arm/R-leg</span>
+                  <span className="v">
+                    {result.left_arm_right_leg_count ?? 0}
+                  </span>
                 </div>
                 <div className="session-summary-item">
                   <span className="k">Elapsed</span>
@@ -266,10 +300,12 @@ function DeadBugPage() {
                   <input
                     type="number"
                     min={1}
-                    max={50}
+                    max={100}
                     value={repsPerSet}
                     onChange={(e) =>
-                      setRepsPerSet(Math.max(1, Math.min(50, Number(e.target.value) || 1)))
+                      setRepsPerSet(
+                        Math.max(1, Math.min(100, Number(e.target.value) || 1)),
+                      )
                     }
                     className="reps-input"
                   />
@@ -293,10 +329,12 @@ function DeadBugPage() {
                   <input
                     type="number"
                     min={1}
-                    max={10}
+                    max={20}
                     value={totalSets}
                     onChange={(e) =>
-                      setTotalSets(Math.max(1, Math.min(10, Number(e.target.value) || 1)))
+                      setTotalSets(
+                        Math.max(1, Math.min(20, Number(e.target.value) || 1)),
+                      )
                     }
                     className="reps-input"
                   />
@@ -332,18 +370,20 @@ function DeadBugPage() {
               </div>
 
               <div className="builder-total">
-                {totalSets} × {repsPerSet} = <strong>{totalPlannedReps} reps total</strong>
-                <br />
-                (counts both sides combined — right-arm/left-leg and
-                left-arm/right-leg each add to the same total)
+                {totalSets} × {repsPerSet} ={" "}
+                <strong>{totalPlannedReps} reps total</strong>
               </div>
 
-              <div className="squat-setup-tip">
-                Lie on your back with your camera to the side, far enough away
-                that your head, torso, and both legs are all in frame. Start
-                in tabletop: arms reaching straight up, knees bent 90° over
-                your hips. Hold still for a moment while it calibrates your
-                baseline.
+              <div className="plank-setup-tip">
+                Lie on your back, sideways to the camera: knees stacked over
+                hips, arms reaching straight up (tabletop). Reach one arm
+                overhead and the <strong>opposite</strong> leg straight out
+                together, keeping your lower back flat on the floor, then
+                return to tabletop and switch sides. A rep only counts when
+                the right arm + left leg (or left arm + right leg) move
+                together, at a controlled pace, without your hips shifting —
+                moving just one limb, both same-side limbs, all four limbs
+                at once, or letting your back arch won't count.
               </div>
 
               <button className="start-btn full-width" onClick={handleStart}>
@@ -354,7 +394,9 @@ function DeadBugPage() {
 
           {phase === "resting" && (
             <div className="rest-panel">
-              <div className="rest-panel-title">Set {currentSet} complete 🎉</div>
+              <div className="rest-panel-title">
+                Set {currentSet} complete 🎉
+              </div>
               <div className="rest-panel-big-countdown">{restRemaining}</div>
               <div className="rest-panel-caption">seconds of rest left</div>
 
@@ -362,18 +404,20 @@ function DeadBugPage() {
                 <div className="arm-grid rest-panel-grid">
                   <div className="arm-grid-item">
                     <span className="k">Reps</span>
-                    <span className="v">{setSummaries[setSummaries.length - 1].reps}</span>
-                  </div>
-                  <div className="arm-grid-item">
-                    <span className="k">Good</span>
                     <span className="v">
-                      {setSummaries[setSummaries.length - 1].goodReps}
+                      {setSummaries[setSummaries.length - 1].reps}
                     </span>
                   </div>
                   <div className="arm-grid-item">
-                    <span className="k">Flawed</span>
+                    <span className="k">R-arm/L-leg</span>
                     <span className="v">
-                      {setSummaries[setSummaries.length - 1].flawedReps}
+                      {setSummaries[setSummaries.length - 1].rightArmLeftLeg}
+                    </span>
+                  </div>
+                  <div className="arm-grid-item">
+                    <span className="k">L-arm/R-leg</span>
+                    <span className="v">
+                      {setSummaries[setSummaries.length - 1].leftArmRightLeg}
                     </span>
                   </div>
                 </div>
@@ -389,10 +433,12 @@ function DeadBugPage() {
             <div className="single-arm-wrap">
               <DeadBugStatsPanel data={result} />
 
-              {(lastCompletedRep.feedback || result.feedback) && (
-                <div className={`feedback-box ${lastCompletedRep.rep_form_quality ?? ""}`}>
+              {(lastEvent.feedback || result.feedback) && (
+                <div
+                  className={`feedback-box ${lastEvent.kind === "invalid" ? "needs_improvement" : ""}`}
+                >
                   <strong>Coach Feedback</strong>
-                  <p>{lastCompletedRep.feedback ?? result.feedback}</p>
+                  <p>{lastEvent.feedback ?? result.feedback}</p>
                 </div>
               )}
             </div>
@@ -410,12 +456,12 @@ function DeadBugPage() {
                   <span className="v">{totals.reps}</span>
                 </div>
                 <div className="session-summary-item good">
-                  <span className="k">Good</span>
-                  <span className="v">{totals.good}</span>
+                  <span className="k">R-arm/L-leg</span>
+                  <span className="v">{totals.rl}</span>
                 </div>
                 <div className="session-summary-item flawed">
-                  <span className="k">Flawed</span>
-                  <span className="v">{totals.flawed}</span>
+                  <span className="k">L-arm/R-leg</span>
+                  <span className="v">{totals.lr}</span>
                 </div>
                 <div className="session-summary-item">
                   <span className="k">Total time</span>
@@ -427,16 +473,16 @@ function DeadBugPage() {
                 <div className="results-row results-head">
                   <span>Set</span>
                   <span>Reps</span>
-                  <span>Good</span>
-                  <span>Flawed</span>
+                  <span>R/L</span>
+                  <span>L/R</span>
                   <span>Time</span>
                 </div>
                 {setSummaries.map((s) => (
                   <div key={s.setNumber} className="results-row">
                     <span>{s.setNumber}</span>
                     <span>{s.reps}</span>
-                    <span className="good-text">{s.goodReps}</span>
-                    <span className="flawed-text">{s.flawedReps}</span>
+                    <span className="good-text">{s.rightArmLeftLeg}</span>
+                    <span className="flawed-text">{s.leftArmRightLeg}</span>
                     <span>{s.elapsedTime.toFixed(0)}s</span>
                   </div>
                 ))}
@@ -448,6 +494,13 @@ function DeadBugPage() {
                   </div>
                 )}
               </div>
+
+              <button
+                className="start-btn full-width"
+                onClick={() => navigate("/exercises")}
+              >
+                Back to Exercise Library
+              </button>
             </div>
           )}
         </div>

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import type { Landmark } from "../hooks/usebicepCurlSocket";
+import type { Landmark } from "../hooks/useDeadBugSocket";
 
 interface SkeletonEntity {
   points: Landmark[];
@@ -15,10 +15,12 @@ interface Props {
 }
 
 /**
- * Same capture pipeline as BicepCamera/SquatCamera, scoped to its own class
- * names. Dead bug is filmed lying down from the side (sagittal view), so
- * the body spans the frame horizontally — landscape framing fits that far
- * better than the portrait framing used for standing exercises.
+ * Reuses the exact same viewfinder classes as PlankHoldCamera /
+ * SidePlankCamera (`plank-viewfinder*`) — dead bug is also judged lying
+ * down, filmed from the side, so it shares the same framing needs. Same
+ * no-crop camera handling as the other exercises: natural resolution
+ * request, box sized to the real camera aspect ratio, `object-fit:
+ * contain`. Scoped in DeadBugPage.css so PlankHoldPage is untouched.
  */
 export default function DeadBugCamera({
   active,
@@ -29,6 +31,7 @@ export default function DeadBugCamera({
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null); // hidden — used only to capture frames to send
   const overlayRef = useRef<HTMLCanvasElement>(null); // visible — skeleton drawing
+  const viewfinderRef = useRef<HTMLDivElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const sendFrameRef = useRef(sendFrame);
   sendFrameRef.current = sendFrame;
@@ -38,6 +41,7 @@ export default function DeadBugCamera({
       streamRef.current?.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
       if (videoRef.current) videoRef.current.srcObject = null;
+      if (viewfinderRef.current) viewfinderRef.current.style.aspectRatio = "";
       return;
     }
 
@@ -53,14 +57,15 @@ export default function DeadBugCamera({
         );
         return;
       }
-
       let stream: MediaStream;
       try {
         stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: "user",
-            width: { ideal: 854 },
-            height: { ideal: 480 }, // landscape — body lies horizontally across the frame
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            // No forced aspectRatio — let the camera hand back its
+            // natural framing instead of cropping to fit one.
           },
           audio: false,
         });
@@ -84,7 +89,18 @@ export default function DeadBugCamera({
       }
 
       streamRef.current = stream;
-      if (videoRef.current) videoRef.current.srcObject = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.onloadedmetadata = () => {
+          const v = videoRef.current;
+          if (!v || !viewfinderRef.current) return;
+          if (v.videoWidth > 0 && v.videoHeight > 0) {
+            // Match the box to the camera's real aspect ratio instead of
+            // a hardcoded one, so nothing gets cropped/zoomed to fit.
+            viewfinderRef.current.style.aspectRatio = `${v.videoWidth} / ${v.videoHeight}`;
+          }
+        };
+      }
 
       interval = window.setInterval(captureFrame, 33); // ~30 FPS
     }
@@ -172,7 +188,7 @@ export default function DeadBugCamera({
   }
 
   return (
-    <div className="deadbug-viewfinder">
+    <div className="plank-viewfinder" ref={viewfinderRef}>
       {active ? (
         <>
           <video
@@ -180,17 +196,17 @@ export default function DeadBugCamera({
             autoPlay
             muted
             playsInline
-            className="deadbug-viewfinder-video"
+            className="plank-viewfinder-video"
           />
-          <canvas ref={overlayRef} className="deadbug-viewfinder-overlay" />
+          <canvas ref={overlayRef} className="plank-viewfinder-overlay" />
           <canvas ref={canvasRef} style={{ display: "none" }} />
         </>
       ) : (
-        <div className="deadbug-viewfinder-placeholder">
-          <span>📷</span>
+        <div className="plank-viewfinder-placeholder">
+          <span>🐞</span>
           <p>
-            Camera turns on when you hit Start — lie on your back, camera to
-            your side, full body in view
+            Camera turns on when you hit Start — lie on your back, sideways
+            to the camera, knees stacked over hips, arms reaching up
           </p>
         </div>
       )}
