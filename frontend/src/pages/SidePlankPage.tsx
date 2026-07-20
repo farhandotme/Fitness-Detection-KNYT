@@ -55,7 +55,7 @@ function SidePlankPage() {
   const navigate = useNavigate();
 
   const [holdTarget, setHoldTarget] = useState(20);
-  const [totalSets, setTotalSets] = useState(2);
+  const [totalSets, setTotalSets] = useState(3);
   const [restSeconds, setRestSeconds] = useState(30);
 
   const [phase, setPhase] = useState<Phase>("setup");
@@ -96,9 +96,6 @@ function SidePlankPage() {
     };
     setSetSummaries((prev) => [...prev, summary]);
 
-    // exercise_complete is also backend-validated: true only once every
-    // set in the plan hit its target. This is the boolean that should
-    // trigger persisting "user completed this exercise" to the database.
     if (result.exercise_complete) {
       setPhase("complete");
     } else {
@@ -194,7 +191,11 @@ function SidePlankPage() {
   const totalPlannedSeconds = holdTarget * totalSets;
 
   return (
-    <div className="bicep-page plank-page">
+    // Same shared shell as PlankHoldPage ("bicep-page ..." + PlankHoldPage.css
+    // classes like plank-viewfinder/plank-panel/plank-timer) so this looks
+    // identical to the regular plank — only "side-plank-page" adds the
+    // camera zoom-fix override in SidePlankPage.css.
+    <div className="bicep-page plank-page side-plank-page">
       <div className="bicep-header">
         <div className="bicep-header-left">
           <button
@@ -405,13 +406,14 @@ function SidePlankPage() {
               </div>
 
               <div className="plank-setup-tip">
-                Lie down on one side facing the camera, prop yourself up on
-                your forearm or hand, stack your feet, and lift your hips so
-                your body makes one straight line from your shoulders to your
-                feet — like a plank turned on its side. Do a set on each side.
-                The timer only counts while you're actually holding the
-                position, and it never loses time you've already earned — if
-                you drop out of position it just pauses until you're back.
+                Lie on your side facing the camera and prop yourself up on
+                your forearm (or hand for a straight-arm variation), feet
+                stacked, hips lifted into a straight line from shoulders to
+                ankles. The timer only runs while your alignment checks out,
+                and it never loses progress you've already earned — if you
+                break form it just pauses until you're back in position. A
+                bent front knee is a totally fine beginner regression and
+                still counts.
               </div>
 
               <button className="start-btn full-width" onClick={handleStart}>

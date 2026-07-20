@@ -15,11 +15,18 @@ interface Props {
 }
 
 /**
- * Same capture pipeline as the other exercise cameras. Unlike the forearm
- * plank (filmed from the side), a side plank is filmed front-on — the
- * camera needs to see the whole shape of the body lying on its side — so
- * this still requests a landscape-biased resolution to keep head-to-feet
- * in frame.
+ * Reuses the exact same viewfinder classes as PlankHoldCamera
+ * (`plank-viewfinder*`, from PlankHoldPage.css) so this looks identical
+ * to the regular plank — a side plank is judged from the same side-on
+ * profile view.
+ *
+ * The one behavioral difference: like the jab/mountain-climber cameras,
+ * this requests the camera's natural resolution (no forced aspect ratio)
+ * instead of PlankHoldCamera's forced 16:9 landscape, sizes the box to
+ * whatever the camera actually reports, and displays with
+ * `object-fit: contain` so nothing gets cropped or zoomed. Those two
+ * overrides live in SidePlankPage.css, scoped under `.side-plank-page`
+ * so PlankHoldPage's own styling/behavior is untouched.
  */
 export default function SidePlankCamera({
   active,
@@ -30,6 +37,7 @@ export default function SidePlankCamera({
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null); // hidden — used only to capture frames to send
   const overlayRef = useRef<HTMLCanvasElement>(null); // visible — skeleton drawing
+  const viewfinderRef = useRef<HTMLDivElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const sendFrameRef = useRef(sendFrame);
   sendFrameRef.current = sendFrame;
@@ -39,6 +47,7 @@ export default function SidePlankCamera({
       streamRef.current?.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
       if (videoRef.current) videoRef.current.srcObject = null;
+      if (viewfinderRef.current) viewfinderRef.current.style.aspectRatio = "";
       return;
     }
 
@@ -59,9 +68,10 @@ export default function SidePlankCamera({
         stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: "user",
-            width: { ideal: 854 },
-            height: { ideal: 480 },
-            aspectRatio: { ideal: 16 / 9 },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            // No forced aspectRatio — let the camera hand back its
+            // natural framing instead of cropping to fit one.
           },
           audio: false,
         });
@@ -85,7 +95,18 @@ export default function SidePlankCamera({
       }
 
       streamRef.current = stream;
-      if (videoRef.current) videoRef.current.srcObject = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.onloadedmetadata = () => {
+          const v = videoRef.current;
+          if (!v || !viewfinderRef.current) return;
+          if (v.videoWidth > 0 && v.videoHeight > 0) {
+            // Match the box to the camera's real aspect ratio instead of
+            // a hardcoded one, so nothing gets cropped/zoomed to fit.
+            viewfinderRef.current.style.aspectRatio = `${v.videoWidth} / ${v.videoHeight}`;
+          }
+        };
+      }
 
       interval = window.setInterval(captureFrame, 33); // ~30 FPS
     }
@@ -173,7 +194,7 @@ export default function SidePlankCamera({
   }
 
   return (
-    <div className="plank-viewfinder">
+    <div className="plank-viewfinder" ref={viewfinderRef}>
       {active ? (
         <>
           <video
@@ -188,11 +209,10 @@ export default function SidePlankCamera({
         </>
       ) : (
         <div className="plank-viewfinder-placeholder">
-          <span>📷</span>
+          <span>📏</span>
           <p>
-            Camera turns on when you hit Start — lie down on your side facing
-            the camera, propped up on one arm, so your whole body fits in
-            the shot
+            Camera turns on when you hit Start — lie on your side facing the
+            camera, propped up on your forearm or hand, hips lifted
           </p>
         </div>
       )}

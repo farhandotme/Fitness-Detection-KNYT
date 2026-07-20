@@ -90,6 +90,32 @@ export default function SidePlankStatsPanel({ data }: Props) {
             {formatSeconds(data?.flawed_seconds)}
           </span>
         </div>
+        <div className="arm-grid-item">
+          <span className="k">Alignment</span>
+          <span className="v">
+            {data?.alignment_angle != null
+              ? `${data.alignment_angle.toFixed(1)}°`
+              : "—"}
+          </span>
+        </div>
+        <div className="arm-grid-item">
+          <span className="k">Knee angle</span>
+          <span className="v">
+            {data?.knee_angle != null ? `${data.knee_angle.toFixed(1)}°` : "—"}
+          </span>
+        </div>
+        <div className="arm-grid-item">
+          <span className="k">Head angle</span>
+          <span className="v">
+            {data?.head_angle != null ? `${data.head_angle.toFixed(1)}°` : "—"}
+          </span>
+        </div>
+        <div className="arm-grid-item">
+          <span className="k">Calibration</span>
+          <span className="v">
+            {data?.calibrated ? "Ready" : "Calibrating…"}
+          </span>
+        </div>
       </div>
 
       <div className="arm-grid" style={{ marginTop: 4 }}>
@@ -116,7 +142,7 @@ export default function SidePlankStatsPanel({ data }: Props) {
       >
         {data?.framing_ok === false && data.framing_message
           ? data.framing_message
-          : "Position: good — whole body in frame"}
+          : "Position: good — side-on, full body in frame"}
       </div>
 
       <div
@@ -125,7 +151,9 @@ export default function SidePlankStatsPanel({ data }: Props) {
         {data?.posture_ok === false && data.posture_issues.length > 0
           ? (data.posture_messages[0] ??
             data.posture_issues.join(", ").replace(/_/g, " "))
-          : "Form looks good"}
+          : data?.calibrated
+            ? "Posture looks good"
+            : "Calibrating your form baseline…"}
       </div>
     </div>
   );

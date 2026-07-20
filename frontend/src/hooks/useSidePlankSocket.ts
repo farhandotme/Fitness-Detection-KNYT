@@ -6,9 +6,10 @@ export type { Landmark };
 /** Everything the FastAPI `SidePlankAnalyzer` sends per frame. */
 export interface SidePlankData {
   pose_detected: boolean;
-  /** Which side of the body is on the ground right now. */
   active_side: "left" | "right" | null;
   alignment_angle: number | null;
+  knee_angle: number | null;
+  head_angle: number | null;
   hold_state: "not_started" | "holding" | "broken";
   is_holding: boolean;
   hold_seconds: number;
@@ -22,6 +23,7 @@ export interface SidePlankData {
   /** Edge-triggered: true for exactly one frame the moment the target is met. */
   target_reached: boolean;
   hold_quality: "good" | "needs_improvement" | null;
+  calibrated: boolean;
   posture_ok: boolean;
   posture_issues: string[];
   posture_messages: string[];
@@ -50,6 +52,8 @@ const EMPTY_RESULT: SidePlankData = {
   pose_detected: false,
   active_side: null,
   alignment_angle: null,
+  knee_angle: null,
+  head_angle: null,
   hold_state: "not_started",
   is_holding: false,
   hold_seconds: 0,
@@ -62,6 +66,7 @@ const EMPTY_RESULT: SidePlankData = {
   session_complete: false,
   target_reached: false,
   hold_quality: null,
+  calibrated: false,
   posture_ok: true,
   posture_issues: [],
   posture_messages: [],
