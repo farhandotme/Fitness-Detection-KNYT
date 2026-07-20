@@ -25,12 +25,11 @@ def decode_frame(raw: str):
 def _query_int(websocket: WebSocket, name: str, default: int, lo: int, hi: int) -> int:
     """Read an integer query param off the websocket URL, clamped to [lo, hi].
 
-    This is how the coach-assigned plan (hold seconds per set / number of
-    sets / which set this connection is for) reaches the backend. The
-    frontend sends these when it opens the socket; it does NOT get to
-    decide on its own whether that plan has been completed —
-    SidePlankSession is the only thing that sets `session_complete` /
-    `exercise_complete` in the response.
+    Same convention as `plankRoutes.py` — the coach-assigned plan (hold
+    seconds per set / number of sets / which set) reaches the backend this
+    way; the frontend does NOT get to decide on its own whether that plan
+    has been completed — `SidePlankSession` is the only thing that sets
+    `session_complete` / `exercise_complete` in the response.
     """
     raw = websocket.query_params.get(name)
     if raw is None:
@@ -78,7 +77,7 @@ async def side_plank(websocket: WebSocket):
 
     print("Client connected: Side Plank")
 
-    target_seconds = _query_int(websocket, "target_seconds", default=30, lo=5, hi=1800)
+    target_seconds = _query_int(websocket, "target_seconds", default=20, lo=5, hi=1800)
     target_sets = _query_int(websocket, "target_sets", default=1, lo=1, hi=20)
     set_number = _query_int(websocket, "set_number", default=1, lo=1, hi=target_sets)
 
@@ -104,7 +103,8 @@ async def side_plank(websocket: WebSocket):
                 print(
                     f"[Side Plank] state -> {result.get('hold_state')} "
                     f"(held {result.get('hold_seconds')}s / {result.get('target_seconds')}s, "
-                    f"set {result.get('set_number')}/{result.get('target_sets')})"
+                    f"set {result.get('set_number')}/{result.get('target_sets')}, "
+                    f"side={result.get('active_side')})"
                 )
                 last_hold_state = result.get("hold_state")
 

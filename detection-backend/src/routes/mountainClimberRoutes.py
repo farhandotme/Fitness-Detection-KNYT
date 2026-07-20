@@ -1,4 +1,5 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+
 import asyncio
 import base64
 import time
@@ -13,14 +14,23 @@ router = APIRouter()
 
 def decode_frame(raw: str):
     if "," in raw:
-        raw = raw.split(",", 1)[1]
+        raw = raw.split(",")[1]
+
     image_bytes = base64.b64decode(raw)
     np_array = np.frombuffer(image_bytes, dtype=np.uint8)
-    frame = cv2.imdecode(np_array, cv2.IMREAD_COLOR)
-    return frame
+
+    return cv2.imdecode(np_array, cv2.IMREAD_COLOR)
 
 
 def _query_int(websocket: WebSocket, name: str, default: int, lo: int, hi: int) -> int:
+    """Read an integer query param off the websocket URL, clamped to [lo, hi].
+
+    Same convention as `jabRoutes.py` / `pushupRoutes.py` — the frontend
+    sends the coach-assigned plan (reps per set / sets / which set) as
+    query params when it opens the socket; the backend
+    `MountainClimberSession` is the only thing that decides whether that
+    plan has been met.
+    """
     raw = websocket.query_params.get(name)
     if raw is None:
         return default
@@ -31,12 +41,38 @@ def _query_int(websocket: WebSocket, name: str, default: int, lo: int, hi: int) 
     return max(lo, min(hi, value))
 
 
+def _log_rep_progress(label: str, result: dict, exercise_already_logged: bool) -> bool:
+    """Print one line per completed knee drive, and one line when the
+    exercise finishes — never per-frame."""
+    if result.get("drive_completed"):
+        leg = result.get("drive_leg")
+        rep_count = result.get("rep_count")
+        target_reps = result.get("target_reps")
+        set_number = result.get("set_number")
+        target_sets = result.get("target_sets")
+        tempo = result.get("drive_classification") or "n/a"
+        print(
+            f"[{label}] {leg} knee drive {rep_count}/{target_reps} "
+            f"(set {set_number}/{target_sets}) — tempo={tempo}"
+        )
+
+    if result.get("exercise_complete") and not exercise_already_logged:
+        print(
+            f"[{label}] EXERCISE COMPLETE — "
+            f"{result.get('target_sets')} sets x {result.get('target_reps')} reps done."
+        )
+        return True
+
+    return exercise_already_logged
+
+
 @router.websocket("/mountain_climber")
 async def mountain_climber(websocket: WebSocket):
     await websocket.accept()
+
     print("Client connected: Mountain Climber")
 
-    target_reps = _query_int(websocket, "target_reps", default=10, lo=1, hi=200)
+    target_reps = _query_int(websocket, "target_reps", default=20, lo=1, hi=300)
     target_sets = _query_int(websocket, "target_sets", default=1, lo=1, hi=20)
     set_number = _query_int(websocket, "set_number", default=1, lo=1, hi=target_sets)
 
@@ -47,19 +83,24 @@ async def mountain_climber(websocket: WebSocket):
     )
 
     try:
+        exercise_logged = False
         while True:
             image = await websocket.receive_text()
+
             frame = decode_frame(image)
-            if frame is None:
-                await websocket.send_json(
-                    {"error": "Invalid frame", "pose_detected": False}
-                )
-                continue
+
             timestamp = int(time.time() * 1000)
+
             result = counter.detect(frame, timestamp)
+
+            exercise_logged = _log_rep_progress("MountainClimber", result, exercise_logged)
+
             await websocket.send_json(result)
+
             await asyncio.sleep(0.001)
+
     except WebSocketDisconnect:
         print("Disconnected: Mountain Climber")
+
     finally:
         counter.close()
