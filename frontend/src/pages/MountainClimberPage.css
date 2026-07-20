@@ -1,81 +1,16 @@
-.mountainclimber-page {
-  max-width: 1400px;
-  margin: 0 auto;
+/* Mountain Climber — only what BicepPage.css / PushupPage.css don't
+   already provide. The per-leg angle bar classes (.jab-angle-bar*) are
+   reused as-is from JabPage.css (same look, different exercise), so
+   this file only needs the camera zoom-fix scoping. */
+
+/* ---- camera zoom fix, scoped to this page only ----
+   PushupCamera's own CSS (in PushupPage.css) is untouched; these
+   overrides only apply inside .mountain-climber-page. */
+.mountain-climber-page .pushup-viewfinder {
+  aspect-ratio: 4 / 3; /* neutral default until the real camera ratio loads */
 }
 
-.mountainclimber-back-btn {
-  border: 1px solid var(--line);
-  background: transparent;
-  color: var(--forest);
-  border-radius: 999px;
-  padding: 7px 12px;
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  cursor: pointer;
-}
-
-.mountainclimber-stats-panel {
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 14px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  background: var(--panel);
-}
-
-.mountainclimber-metrics {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.mountainclimber-metric {
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 8px 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.mountainclimber-metric .k {
-  font-family: var(--mono);
-  font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--muted);
-}
-
-.mountainclimber-metric .v {
-  font-family: var(--mono);
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--ink);
-}
-
-.rest-overlay-caption {
-  position: absolute;
-  inset: auto 20px 20px auto;
-  background: rgba(7, 12, 10, 0.72);
-  padding: 10px 14px;
-  border-radius: 999px;
-  color: white;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  z-index: 2;
-}
-
-.rest-countdown {
-  font-weight: 700;
-  color: var(--sprout);
-}
-
-@media (max-width: 900px) {
-  .mountainclimber-metrics {
-    grid-template-columns: 1fr 1fr;
-  }
+.mountain-climber-page .pushup-viewfinder-video,
+.mountain-climber-page .pushup-viewfinder-overlay {
+  object-fit: contain; /* show the whole camera frame — never crop/zoom */
 }

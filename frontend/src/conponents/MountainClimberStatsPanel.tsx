@@ -1,161 +1,135 @@
 import type { MountainClimberData } from "../hooks/useMountainClimberSocket";
-import AngleGauge from "./AngleGauge";
 
 interface Props {
   data: MountainClimberData | undefined;
 }
 
-const STAGE_LABEL: Record<string, string> = {
-  ready: "READY",
-  drive: "DRIVE",
-};
+const DRIVEN_ANGLE = 125;
+const EXTENDED_ANGLE = 155;
 
-function formatIssue(issue: string) {
-  return issue.replace(/_/g, " ");
+/**
+ * Small inline hip-angle bar per leg — the same pattern as
+ * JabStatsPanel's `MiniAngleBar`, just flipped (a mountain climber's
+ * "rest" state is a high angle, its "active" state is a low angle,
+ * the opposite of a jab's guard/extend). Everything else on this panel
+ * reuses PushupStatsPanel's shared classes (`arm-panel`, `stage-badge`,
+ * `arm-grid`, `posture-line`, `pose-pill`).
+ */
+function MiniAngleBar({
+  label,
+  angle,
+  stage,
+}: {
+  label: string;
+  angle: number | null;
+  stage: "extended" | "driven";
+}) {
+  const pct =
+    angle == null
+      ? 0
+      : Math.max(
+          0,
+          Math.min(
+            100,
+            ((EXTENDED_ANGLE - angle) / (EXTENDED_ANGLE - DRIVEN_ANGLE)) * 100,
+          ),
+        );
+  return (
+    <div className="jab-angle-bar">
+      <div className="jab-angle-bar-head">
+        <span className="k">{label}</span>
+        <span className={`stage-badge ${stage}`}>
+          {stage === "driven" ? "DRIVE" : "PLANK"}
+        </span>
+      </div>
+      <div className="jab-angle-bar-track">
+        <div className="jab-angle-bar-fill" style={{ width: `${pct}%` }} />
+      </div>
+      <span className="v">{angle != null ? `${angle.toFixed(0)}°` : "—"}</span>
+    </div>
+  );
 }
 
 export default function MountainClimberStatsPanel({ data }: Props) {
-  const quality = data?.rep_form_quality;
-  const activeLeg = data?.active_leg;
-  const stage = data?.stage ?? "ready";
-  const stageClass = stage === "drive" ? "up" : "down";
-  const stageLabel = activeLeg
-    ? activeLeg.toUpperCase()
-    : (STAGE_LABEL[stage] ?? "READY");
-
-  const hasPose = Boolean(data?.pose_detected);
-  const isUnstable = Boolean(data?.low_visibility);
-  const postureBad = data?.posture_ok === false;
-  const framingBad = data?.framing_ok === false;
-
-  const leftDrive = data?.left_knee_drive === true;
-  const rightDrive = data?.right_knee_drive === true;
-  const bothDrive = leftDrive && rightDrive;
-
-  const primaryFeedback =
-    framingBad && data?.framing_message
-      ? data.framing_message
-      : postureBad && data?.posture_messages?.length
-        ? data.posture_messages[0]
-        : (data?.feedback ?? null);
+  const tempo = data?.drive_classification;
 
   return (
     <div className="arm-panel">
       <div className="arm-panel-head">
         <span className="arm-panel-label">MOUNTAIN CLIMBER</span>
         <span
-          className={`pose-pill ${
-            hasPose ? (isUnstable ? "warn" : "ok") : "bad"
-          }`}
+          className={`pose-pill ${data?.pose_detected ? (data.low_visibility ? "warn" : "ok") : "bad"}`}
         >
-          {hasPose ? (isUnstable ? "Unstable" : "Tracking") : "No pose"}
+          {data?.pose_detected
+            ? data.low_visibility
+              ? "Unstable"
+              : "Tracking"
+            : "No pose"}
         </span>
       </div>
 
       <div className="arm-panel-rep-row">
         <span className="arm-panel-rep-count">{data?.rep_count ?? 0}</span>
-        <span className={`stage-badge ${stageClass}`}>{stageLabel}</span>
+        <span className="stage-badge">total knee drives</span>
       </div>
 
-      <AngleGauge
-        angle={data?.body_alignment ?? null}
-        upThreshold={140}
-        downThreshold={180}
-        stage={stage === "drive" ? "up" : "down"}
+      <div className="arm-grid">
+        <div className="arm-grid-item">
+          <span className="k">Left leg</span>
+          <span className="v">{data?.left_count ?? 0}</span>
+        </div>
+        <div className="arm-grid-item">
+          <span className="k">Right leg</span>
+          <span className="v">{data?.right_count ?? 0}</span>
+        </div>
+      </div>
+
+      <MiniAngleBar
+        label="Left hip"
+        angle={data?.left_hip_angle ?? null}
+        stage={data?.left_stage ?? "extended"}
+      />
+      <MiniAngleBar
+        label="Right hip"
+        angle={data?.right_hip_angle ?? null}
+        stage={data?.right_stage ?? "extended"}
       />
 
       <div className="arm-grid">
         <div className="arm-grid-item">
-          <span className="k">Left knee</span>
+          <span className="k">Last drive</span>
           <span className="v">
-            {data?.left_knee_drive == null ? "—" : leftDrive ? "Drive" : "Rest"}
+            {data?.drive_duration != null
+              ? `${data.drive_duration.toFixed(2)}s`
+              : "—"}
           </span>
         </div>
-
-        <div className="arm-grid-item">
-          <span className="k">Right knee</span>
-          <span className="v">
-            {data?.right_knee_drive == null
-              ? "—"
-              : rightDrive
-                ? "Drive"
-                : "Rest"}
-          </span>
-        </div>
-
-        <div className="arm-grid-item">
-          <span className="k">Good / Flawed</span>
-          <span className="v">
-            {data?.good_reps ?? 0} / {data?.flawed_reps ?? 0}
-          </span>
-        </div>
-
         <div className="arm-grid-item">
           <span className="k">Tempo</span>
-          <span className="v">
-            {data?.pace_classification
-              ? data.pace_classification.replace("_", " ")
-              : "—"}
-          </span>
+          <span className="v">{tempo ? tempo.replace("_", " ") : "—"}</span>
         </div>
-
         <div className="arm-grid-item">
-          <span className="k">Alignment</span>
-          <span className="v">
-            {data?.body_alignment != null
-              ? `${data.body_alignment.toFixed(1)}°`
-              : "—"}
-          </span>
+          <span className="k">Leg</span>
+          <span className="v">{data?.drive_leg ? data.drive_leg : "—"}</span>
         </div>
-
         <div className="arm-grid-item">
           <span className="k">Elapsed</span>
-          <span className="v">
-            {data?.elapsed_time != null
-              ? `${data.elapsed_time.toFixed(0)}s`
-              : "—"}
-          </span>
-        </div>
-
-        <div className="arm-grid-item">
-          <span className="k">Form score</span>
-          <span className="v">
-            {data?.form_score != null ? `${data.form_score}` : "—"}
-          </span>
-        </div>
-
-        <div className="arm-grid-item">
-          <span className="k">Calibration</span>
-          <span className="v">{data?.calibrated ? "Ready" : "Learning"}</span>
+          <span className="v">{(data?.elapsed_time ?? 0).toFixed(0)}s</span>
         </div>
       </div>
 
-      <div className={`quality-badge ${quality ?? ""}`}>
-        {quality ? formatIssue(quality) : "form: —"}
-      </div>
-
-      <div className={`posture-line ${framingBad ? "bad" : "ok"}`}>
-        {framingBad && data?.framing_message
+      <div
+        className={`posture-line ${data?.framing_ok === false ? "bad" : "ok"}`}
+      >
+        {data?.framing_ok === false && data.framing_message
           ? data.framing_message
-          : "Position: good — full body visible and centered"}
+          : "Framing: good — full body visible"}
       </div>
 
-      <div className={`posture-line ${postureBad ? "bad" : "ok"}`}>
-        {postureBad && data?.posture_messages?.length
-          ? data.posture_messages[0]
-          : data?.calibrated
-            ? "Posture looks good"
-            : "Calibrating your form baseline…"}
-      </div>
-
-      <div className={`posture-line ${bothDrive ? "bad" : "ok"}`}>
-        {bothDrive
-          ? "Drive only one knee at a time."
-          : "Alternation looks good"}
-      </div>
-
-      <div className="posture-line ok">
-        {primaryFeedback ?? "Hold a strong plank and drive knees alternately."}
+      <div className={`posture-line ${data?.stance_ok ? "ok" : "bad"}`}>
+        {data?.stance_ok
+          ? "Plank confirmed — counting knee drives"
+          : (data?.stance_message ?? "Waiting for a confirmed plank base…")}
       </div>
     </div>
   );

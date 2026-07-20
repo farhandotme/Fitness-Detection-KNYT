@@ -1,72 +1,69 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Landmark } from "./useSquatSocket";
 
-export type { Landmark };
+export interface Landmark {
+  x: number;
+  y: number;
+  z: number;
+  visibility?: number;
+}
 
+/** Everything the FastAPI `MountainClimberAnalyzer` sends per frame. */
 export interface MountainClimberData {
   pose_detected: boolean;
-  active_leg: "left" | "right" | null;
-  stage: string;
-  rep_count: number;
-  good_reps: number;
-  flawed_reps: number;
-  target_reps: number | null;
-  session_complete: boolean;
-  rep_completed: boolean;
-  rep_leg: "left" | "right" | null;
-  rep_duration: number | null;
-  rep_classification: string | null;
-  rep_form_quality: string | null;
-  form_score: number | null;
-  avg_form_score: number | null;
-  reps_per_minute: number | null;
-  pace_classification: string | null;
-  posture_ok: boolean;
-  posture_issues: string[];
-  posture_messages: string[];
+  ready: boolean;
+  stance_ok: boolean;
+  stance_message: string | null;
   framing_ok: boolean;
   framing_message: string | null;
+  left_hip_angle: number | null;
+  right_hip_angle: number | null;
+  left_stage: "extended" | "driven";
+  right_stage: "extended" | "driven";
+  left_count: number;
+  right_count: number;
+  rep_count: number;
+  target_reps: number | null;
+  session_complete: boolean;
+  drive_completed: boolean;
+  drive_leg: "left" | "right" | null;
+  drive_duration: number | null;
+  drive_classification: string | null;
   feedback: string | null;
-  calibrated?: boolean;
   low_visibility: boolean;
-  left_knee_drive: boolean | number | null;
-  right_knee_drive: boolean | number | null;
-  body_alignment: number | null;
   elapsed_time: number;
   landmarks: Landmark[];
   set_number?: number;
   target_sets?: number;
+  /**
+   * Backend-validated: true only once every set in the plan hit its
+   * target reps. The frontend must treat this as the source of truth for
+   * "the user completed this exercise" — never compute it client-side.
+   */
   exercise_complete?: boolean;
 }
 
 const EMPTY_RESULT: MountainClimberData = {
   pose_detected: false,
-  active_leg: null,
-  stage: "ready",
-  rep_count: 0,
-  good_reps: 0,
-  flawed_reps: 0,
-  target_reps: null,
-  session_complete: false,
-  rep_completed: false,
-  rep_leg: null,
-  rep_duration: null,
-  rep_classification: null,
-  rep_form_quality: null,
-  form_score: null,
-  avg_form_score: null,
-  reps_per_minute: null,
-  pace_classification: null,
-  posture_ok: true,
-  posture_issues: [],
-  posture_messages: [],
+  ready: false,
+  stance_ok: false,
+  stance_message: null,
   framing_ok: true,
   framing_message: null,
+  left_hip_angle: null,
+  right_hip_angle: null,
+  left_stage: "extended",
+  right_stage: "extended",
+  left_count: 0,
+  right_count: 0,
+  rep_count: 0,
+  target_reps: null,
+  session_complete: false,
+  drive_completed: false,
+  drive_leg: null,
+  drive_duration: null,
+  drive_classification: null,
   feedback: null,
   low_visibility: false,
-  left_knee_drive: null,
-  right_knee_drive: null,
-  body_alignment: null,
   elapsed_time: 0,
   landmarks: [],
   set_number: undefined,
@@ -80,43 +77,47 @@ const WS_BASE =
 
 export default function useMountainClimberSocket() {
   const socketRef = useRef<WebSocket | null>(null);
-  const reconnectRef = useRef(0);
-  const manualCloseRef = useRef(false);
-  const retryTimerRef = useRef<number | null>(null);
-  const lastPlanRef = useRef<{
-    targetReps?: number;
-    targetSets?: number;
-    setNumber?: number;
-  } | null>(null);
-
   const [connected, setConnected] = useState(false);
   const [socketError, setSocketError] = useState<string | null>(null);
   const [result, setResult] = useState<MountainClimberData>(EMPTY_RESULT);
 
-  const stop = useCallback(() => {
-    manualCloseRef.current = true;
-    reconnectRef.current = 0;
-    if (retryTimerRef.current) {
-      window.clearTimeout(retryTimerRef.current);
-      retryTimerRef.current = null;
-    }
-    socketRef.current?.close();
-    socketRef.current = null;
-    setConnected(false);
-  }, []);
+  const [lastCompletedDrive, setLastCompletedDrive] = useState({
+    leg: null as "left" | "right" | null,
+    duration: null as number | null,
+    classification: null as string | null,
+    feedback: null as string | null,
+  });
 
+  // Always close any open socket on unmount.
   useEffect(() => {
     return () => {
-      stop();
+      socketRef.current?.close();
+      socketRef.current = null;
     };
-  }, [stop]);
+  }, []);
 
-  const buildUrl = useCallback(
+  const stop = useCallback(() => {
+    socketRef.current?.close();
+    socketRef.current = null;
+  }, []);
+
+  const start = useCallback(
     (plan?: {
       targetReps?: number;
       targetSets?: number;
       setNumber?: number;
     }) => {
+      socketRef.current?.close();
+
+      setResult(EMPTY_RESULT);
+      setLastCompletedDrive({
+        leg: null,
+        duration: null,
+        classification: null,
+        feedback: null,
+      });
+      setSocketError(null);
+
       const params = new URLSearchParams();
       if (plan?.targetReps != null)
         params.set("target_reps", String(plan.targetReps));
@@ -125,99 +126,45 @@ export default function useMountainClimberSocket() {
       if (plan?.setNumber != null)
         params.set("set_number", String(plan.setNumber));
       const query = params.toString();
-      return `${WS_BASE}/ws/mountain_climber${query ? `?${query}` : ""}`;
+
+      let ws: WebSocket;
+      try {
+        ws = new WebSocket(
+          `${WS_BASE}/ws/mountain_climber${query ? `?${query}` : ""}`,
+        );
+      } catch {
+        setSocketError("Couldn't reach the detection server. Is it running?");
+        return;
+      }
+
+      socketRef.current = ws;
+
+      ws.onopen = () => setConnected(true);
+
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data) as MountainClimberData;
+        setResult(data);
+
+        if (data.drive_completed) {
+          setLastCompletedDrive({
+            leg: data.drive_leg,
+            duration: data.drive_duration,
+            classification: data.drive_classification,
+            feedback: data.feedback,
+          });
+        }
+      };
+
+      ws.onclose = () => {
+        setConnected(false);
+        socketRef.current = null;
+      };
+
+      ws.onerror = () => {
+        setSocketError("Connection error — check that the backend is running.");
+      };
     },
     [],
-  );
-
-  const connect = useCallback(
-    (plan?: {
-      targetReps?: number;
-      targetSets?: number;
-      setNumber?: number;
-    }) => {
-      const url = buildUrl(plan);
-
-      try {
-        const ws = new WebSocket(url);
-        socketRef.current = ws;
-
-        ws.onopen = () => {
-          reconnectRef.current = 0;
-          setConnected(true);
-          setSocketError(null);
-        };
-
-        ws.onmessage = (event) => {
-          try {
-            setResult(JSON.parse(event.data) as MountainClimberData);
-          } catch {
-            setSocketError("Received invalid data from server.");
-          }
-        };
-
-        ws.onclose = () => {
-          setConnected(false);
-
-          if (manualCloseRef.current) {
-            socketRef.current = null;
-            return;
-          }
-
-          const tries = reconnectRef.current;
-          if (tries >= 5) {
-            setSocketError(
-              "Couldn't reach the detection server. Is it running?",
-            );
-            socketRef.current = null;
-            return;
-          }
-
-          reconnectRef.current = tries + 1;
-          if (retryTimerRef.current) window.clearTimeout(retryTimerRef.current);
-          retryTimerRef.current = window.setTimeout(
-            () => {
-              connect(lastPlanRef.current ?? undefined);
-            },
-            1000 * (tries + 1),
-          );
-        };
-
-        ws.onerror = () => {
-          setSocketError(
-            "Connection error — check that the backend is running.",
-          );
-          try {
-            ws.close();
-          } catch {}
-        };
-      } catch {
-        setSocketError("Couldn't create WebSocket connection.");
-      }
-    },
-    [buildUrl],
-  );
-
-  const start = useCallback(
-    (plan?: {
-      targetReps?: number;
-      targetSets?: number;
-      setNumber?: number;
-    }) => {
-      manualCloseRef.current = false;
-      reconnectRef.current = 0;
-      lastPlanRef.current = plan ?? null;
-      if (retryTimerRef.current) {
-        window.clearTimeout(retryTimerRef.current);
-        retryTimerRef.current = null;
-      }
-      socketRef.current?.close();
-      socketRef.current = null;
-      setResult(EMPTY_RESULT);
-      setSocketError(null);
-      connect(plan);
-    },
-    [connect],
   );
 
   const sendFrame = useCallback((image: string) => {
@@ -226,5 +173,13 @@ export default function useMountainClimberSocket() {
     ws.send(image);
   }, []);
 
-  return { connected, result, sendFrame, start, stop, socketError };
+  return {
+    connected,
+    result,
+    lastCompletedDrive,
+    sendFrame,
+    start,
+    stop,
+    socketError,
+  };
 }
