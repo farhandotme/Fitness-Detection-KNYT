@@ -20,6 +20,15 @@ DEFAULT_MIN_DETECTION_CONFIDENCE = 0.75
 DEFAULT_MIN_PRESENCE_CONFIDENCE = 0.75
 DEFAULT_MIN_TRACKING_CONFIDENCE = 0.7
 
+# Full-body / farther-away exercises (e.g. calf raises — the whole body,
+# head to feet, has to fit in frame, so ankles/heels/toes end up smaller
+# and less sharp than in a close-up shot) do better with a lower
+# confidence floor than the close-up defaults above. Pass these to
+# `PoseEngine(...)` instead of the defaults for that kind of exercise.
+FULL_BODY_MIN_DETECTION_CONFIDENCE = 0.6
+FULL_BODY_MIN_PRESENCE_CONFIDENCE = 0.6
+FULL_BODY_MIN_TRACKING_CONFIDENCE = 0.55
+
 # How many consecutive frames with *no* detected pose we tolerate before
 # reporting "no person" to callers. MediaPipe's tracker briefly drops the
 # pose on fast/blurry motion (very common mid-rep, especially on squats
@@ -65,7 +74,7 @@ class PoseEngine:
 
     def __init__(
         self,
-        running_mode: vision.RunningMode = vision.RunningMode.VIDEO,
+        running_mode: Optional[vision.RunningMode] = None,
         min_detection_confidence: float = DEFAULT_MIN_DETECTION_CONFIDENCE,
         min_presence_confidence: float = DEFAULT_MIN_PRESENCE_CONFIDENCE,
         min_tracking_confidence: float = DEFAULT_MIN_TRACKING_CONFIDENCE,
@@ -73,6 +82,10 @@ class PoseEngine:
         if not os.path.exists(MODEL_PATH):
             raise FileNotFoundError(f"{MODEL_PATH} not found.")
 
+        # Avoid using a module attribute directly as a default in the
+        # signature (can cause "variable not allowed in type expression").
+        if running_mode is None:
+            running_mode = vision.RunningMode.VIDEO
         self.running_mode = running_mode
 
         base_options = mp_python.BaseOptions(model_asset_path=MODEL_PATH)
