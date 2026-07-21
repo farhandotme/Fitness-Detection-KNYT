@@ -1,0 +1,61 @@
+/* ---------------------------------
+   Warrior II page — reuses the shared dashboard layout classes from
+   BicepPage.css. Only Warrior-II-specific bits (the wide landscape
+   viewfinder and the big hold timer) live here, mirroring PlankHoldPage.css.
+--------------------------------- */
+
+/* ---- landscape viewfinder (front-on, wide-stance + arm-spread view) ---- */
+
+.warrior-viewfinder {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background: var(--panel);
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--panel-line);
+  flex-shrink: 0;
+}
+
+.warrior-viewfinder-video {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+}
+
+.warrior-viewfinder-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  transform: scaleX(-1);
+}
+
+.warrior-viewfinder-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  text-align: center;
+  padding: 0 24px;
+}
+
+.warrior-viewfinder-placeholder span {
+  font-size: 28px;
+}
+
+@media (max-width: 820px) {
+  .warrior-viewfinder {
+    aspect-ratio: 4 / 3;
+  }
+}

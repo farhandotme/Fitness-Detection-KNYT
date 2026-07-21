@@ -251,6 +251,18 @@ export const EXERCISES: ExerciseMeta[] = [
     route: "/tree_pose",
   },
   {
+    id: "warrior-ii",
+    name: "Warrior II",
+    category: "Mobility",
+    difficulty: "Intermediate",
+    equipment: "Bodyweight",
+    emoji: "⚔️",
+    description: "Yoga balance and posture assessment.",
+    tags: ["yoga", "balance"],
+    status: "available",
+    route: "/warriorII",
+  },
+  {
     id: "arm-circles",
     name: "Arm Circles",
     category: "Mobility",
@@ -307,17 +319,7 @@ export const EXERCISES: ExerciseMeta[] = [
     tags: ["yoga", "stretch"],
     status: "coming_soon",
   },
-  {
-    id: "warrior-ii",
-    name: "Warrior II",
-    category: "Mobility",
-    difficulty: "Intermediate",
-    equipment: "Bodyweight",
-    emoji: "⚔️",
-    description: "Yoga balance and posture assessment.",
-    tags: ["yoga", "balance"],
-    status: "coming_soon",
-  },
+
   {
     id: "chair-pose",
     name: "Chair Pose",

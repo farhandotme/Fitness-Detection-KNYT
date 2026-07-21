@@ -21,6 +21,7 @@ import JabPage from "./pages/JabPage";
 import BirdDogPage from "./pages/BirdDogPage";
 import CalfRaisePage from "./pages/CalfRaisePage";
 import TreePosePage from "./pages/TreePosePage";
+import WarriorIIPage from "./pages/WarrioriiPage";
 
 function App() {
   return (
@@ -53,6 +54,7 @@ function App() {
           <Route path="bird_dog" element={<BirdDogPage />} />
           <Route path="calf_raise" element={<CalfRaisePage />} />
           <Route path="tree_pose" element={<TreePosePage />} />
+          <Route path="warriorII" element={<WarriorIIPage />} />
           <Route
             path="/exercises/mountain-climber"
             element={<MountainClimberPage />}
