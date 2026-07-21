@@ -20,6 +20,7 @@ from src.routes.bridgePoseRoutes import router as bridgePoseRouter
 from src.routes.birdDogRoutes import router as birdDogRouter
 from src.routes.calfRaiseRoutes import router as calfRaiseRouter
 from src.routes.treePoseRoutes import router as treePoseRouter
+from src.routes.warrioriiroutes import router as warrioriiRouter
 
 app = FastAPI()
 
@@ -55,3 +56,4 @@ app.include_router(bridgePoseRouter, prefix="/ws", tags="bridge-pose-router")
 app.include_router(birdDogRouter, prefix="/ws", tags="bird-dog-router")
 app.include_router(calfRaiseRouter, prefix="/ws", tags="calf-raise-router")
 app.include_router(treePoseRouter, prefix="/ws", tags="tree-pose-router")
+app.include_router(warrioriiRouter, prefix="/ws", tags="warriorii-pose-router")
