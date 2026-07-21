@@ -239,6 +239,18 @@ export const EXERCISES: ExerciseMeta[] = [
     route: "/calf_raise",
   },
   {
+    id: "tree-pose",
+    name: "Tree Pose",
+    category: "Mobility",
+    difficulty: "Intermediate",
+    equipment: "Bodyweight",
+    emoji: "🌳",
+    description: "Single-leg balance and stability assessment.",
+    tags: ["balance", "yoga"],
+    status: "available",
+    route: "/tree_pose",
+  },
+  {
     id: "arm-circles",
     name: "Arm Circles",
     category: "Mobility",

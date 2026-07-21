@@ -20,6 +20,7 @@ import PlankHoldPage from "./pages/PlankholdPage";
 import JabPage from "./pages/JabPage";
 import BirdDogPage from "./pages/BirdDogPage";
 import CalfRaisePage from "./pages/CalfRaisePage";
+import TreePosePage from "./pages/TreePosePage";
 
 function App() {
   return (
@@ -51,6 +52,7 @@ function App() {
           <Route path="exercises/plank-hold" element={<PlankHoldPage />} />
           <Route path="bird_dog" element={<BirdDogPage />} />
           <Route path="calf_raise" element={<CalfRaisePage />} />
+          <Route path="tree_pose" element={<TreePosePage />} />
           <Route
             path="/exercises/mountain-climber"
             element={<MountainClimberPage />}
