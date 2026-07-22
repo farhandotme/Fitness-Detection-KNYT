@@ -24,9 +24,11 @@ from src.routes.warrioriiroutes import router as warrioriiRouter
 from src.routes.cobraPoseRoutes import router as cobraPoseRouter
 from src.routes.chairPoseRoutes import router as chairPoseRouter
 from src.routes.downwardDogRoutes import router as downwardDogRouter
+from src.routes.pikePushupRoutes import router as pikePushupRouter
+from src.routes.tuckJumpRoutes import router as tuckJumpRouter
+from src.routes.sumoSquatRoutes import router as sumoSquatRouter
 
 app = FastAPI()
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -63,3 +65,6 @@ app.include_router(warrioriiRouter, prefix="/ws", tags="warriorii-pose-router")
 app.include_router(cobraPoseRouter, prefix="/ws", tags="cobra-pose-router")
 app.include_router(chairPoseRouter, prefix="/ws", tags="chair-pose-router")
 app.include_router(downwardDogRouter, prefix="/ws", tags="downward-dog-router")
+app.include_router(pikePushupRouter, prefix="/ws", tags="pike-pushup-router")
+app.include_router(tuckJumpRouter, prefix="/ws", tags="tuck-jump-router")
+app.include_router(sumoSquatRouter, prefix="/ws", tags="sumo-squat-router")
