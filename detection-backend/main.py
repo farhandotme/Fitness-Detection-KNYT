@@ -23,6 +23,7 @@ from src.routes.treePoseRoutes import router as treePoseRouter
 from src.routes.warrioriiroutes import router as warrioriiRouter
 from src.routes.cobraPoseRoutes import router as cobraPoseRouter
 from src.routes.chairPoseRoutes import router as chairPoseRouter
+from src.routes.downwardDogRoutes import router as downwardDogRouter
 
 app = FastAPI()
 
@@ -61,3 +62,4 @@ app.include_router(treePoseRouter, prefix="/ws", tags="tree-pose-router")
 app.include_router(warrioriiRouter, prefix="/ws", tags="warriorii-pose-router")
 app.include_router(cobraPoseRouter, prefix="/ws", tags="cobra-pose-router")
 app.include_router(chairPoseRouter, prefix="/ws", tags="chair-pose-router")
+app.include_router(downwardDogRouter, prefix="/ws", tags="downward-dog-router")
