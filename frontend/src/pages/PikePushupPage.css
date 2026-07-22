@@ -1,0 +1,643 @@
+/* ---------------------------------
+   Pike push-up page — fully self-contained styling.
+
+   NOTE: the rest of this project references a shared `BicepPage.css`
+   (for `.bicep-page`, `.arm-panel`, `.feedback-box`, `.session-builder`,
+   etc.) that isn't actually present in this project export, so this file
+   defines everything this page needs on its own, using the same design
+   tokens from index.css (--paper, --ink, --panel, --forest, --sprout,
+   --amber, --alert, --sans, --mono). If/when the real BicepPage.css
+   shows up, the shared class names below (arm-panel, arm-grid, etc.) can
+   be deleted here without touching the component markup.
+--------------------------------- */
+
+.pike-page {
+  min-height: 100vh;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  font-family: var(--sans);
+  color: var(--ink);
+}
+
+.pike-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.pike-title {
+  font-family: var(--display);
+  font-size: 34px;
+  letter-spacing: 0.02em;
+}
+
+.pike-header-right {
+  display: flex;
+  align-items: center;
+}
+
+.active-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+.status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--alert);
+}
+
+.status-dot.live {
+  background: var(--sprout);
+  box-shadow: 0 0 0 3px rgba(132, 199, 96, 0.25);
+}
+
+.complete-label {
+  font-family: var(--mono);
+  font-size: 14px;
+  color: var(--forest);
+}
+
+.pike-error {
+  background: rgba(166, 72, 58, 0.12);
+  border: 1px solid var(--alert);
+  color: var(--alert);
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+}
+
+.pike-body {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 860px) {
+  .pike-body {
+    grid-template-columns: 1fr;
+  }
+}
+
+.pike-camera-col,
+.pike-stats-col {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ---- viewfinder ---- */
+
+.pike-pushup-viewfinder {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  background: var(--panel);
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--panel-line);
+  flex-shrink: 0;
+}
+
+.pike-pushup-viewfinder-video {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+}
+
+.pike-pushup-viewfinder-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  transform: scaleX(-1);
+}
+
+.pike-pushup-viewfinder-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  text-align: center;
+  padding: 0 16px;
+}
+
+.pike-pushup-viewfinder-placeholder span {
+  font-size: 28px;
+}
+
+.pike-setup-tip {
+  font-family: var(--sans);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+  background: rgba(76, 111, 57, 0.08);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+/* ---- progress / sets ---- */
+
+.progress-track {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--forest);
+  transition: width 0.2s ease;
+}
+
+.progress-caption {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.set-dots {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+.set-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--line);
+}
+
+.set-dot.current {
+  background: var(--amber);
+}
+
+.set-dot.done {
+  background: var(--forest);
+}
+
+.session-summary {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+.session-summary-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-family: var(--mono);
+  font-size: 12px;
+  min-width: 64px;
+}
+
+.session-summary-item .k {
+  color: var(--muted);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.session-summary-item .v {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.session-summary-item.good .v {
+  color: var(--forest);
+}
+
+.session-summary-item.flawed .v {
+  color: var(--amber);
+}
+
+.rest-overlay-caption {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-family: var(--mono);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.rest-countdown {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--amber);
+}
+
+/* ---- session builder (setup phase) ---- */
+
+.session-builder {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 18px;
+}
+
+.builder-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.builder-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
+
+.builder-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.reps-input {
+  width: 64px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  font-family: var(--mono);
+  font-size: 14px;
+}
+
+.reps-presets {
+  display: flex;
+  gap: 6px;
+}
+
+.reps-preset {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: transparent;
+  font-family: var(--mono);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.reps-preset.active {
+  background: var(--forest);
+  border-color: var(--forest);
+  color: var(--paper);
+}
+
+.builder-total {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.start-btn {
+  padding: 12px 20px;
+  border-radius: 10px;
+  border: none;
+  background: var(--forest);
+  color: var(--paper);
+  font-family: var(--sans);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.start-btn.full-width {
+  width: 100%;
+}
+
+.stop-btn {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--alert);
+  background: transparent;
+  color: var(--alert);
+  font-family: var(--sans);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+/* ---- rest panel ---- */
+
+.rest-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 24px;
+}
+
+.rest-panel-title {
+  font-family: var(--sans);
+  font-weight: 600;
+}
+
+.rest-panel-big-countdown {
+  font-family: var(--display);
+  font-size: 52px;
+  color: var(--amber);
+}
+
+.rest-panel-caption {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+
+.rest-panel-grid {
+  margin-bottom: 12px;
+}
+
+/* ---- live stats panel ---- */
+
+.single-arm-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.arm-panel {
+  background: var(--panel);
+  color: var(--paper);
+  border-radius: 14px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-family: var(--sans);
+}
+
+.arm-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.arm-panel-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.pose-pill {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  text-transform: uppercase;
+}
+
+.pose-pill.ok {
+  background: rgba(132, 199, 96, 0.18);
+  color: var(--sprout);
+}
+
+.pose-pill.warn {
+  background: rgba(184, 134, 46, 0.18);
+  color: var(--amber);
+}
+
+.pose-pill.bad {
+  background: rgba(166, 72, 58, 0.18);
+  color: var(--alert);
+}
+
+.arm-panel-rep-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.arm-panel-rep-count {
+  font-family: var(--display);
+  font-size: 46px;
+  line-height: 1;
+}
+
+.stage-badge {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(242, 239, 228, 0.1);
+}
+
+.stage-badge.up {
+  color: var(--amber);
+}
+
+.stage-badge.down {
+  color: var(--sprout);
+}
+
+/* pike elbow-angle gauge */
+
+.pike-gauge {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pike-gauge-track {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(242, 239, 228, 0.12);
+  overflow: hidden;
+}
+
+.pike-gauge-fill {
+  height: 100%;
+  transition: width 0.15s ease;
+}
+
+.pike-gauge-fill.down {
+  background: var(--sprout);
+}
+
+.pike-gauge-fill.up {
+  background: var(--amber);
+}
+
+.pike-gauge-labels {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.arm-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.arm-grid-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: rgba(242, 239, 228, 0.06);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.arm-grid-item .k {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.arm-grid-item .v {
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.quality-badge {
+  align-self: flex-start;
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: capitalize;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(242, 239, 228, 0.1);
+}
+
+.quality-badge.good {
+  color: var(--sprout);
+}
+
+.quality-badge.needs_improvement {
+  color: var(--amber);
+}
+
+.posture-line {
+  font-family: var(--sans);
+  font-size: 12.5px;
+  line-height: 1.4;
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+
+.posture-line.ok {
+  background: rgba(132, 199, 96, 0.1);
+  color: var(--sprout);
+}
+
+.posture-line.bad {
+  background: rgba(166, 72, 58, 0.12);
+  color: #e39a8d;
+}
+
+.feedback-box {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 13px;
+}
+
+.feedback-box strong {
+  display: block;
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.feedback-box.needs_improvement {
+  border-color: var(--amber);
+}
+
+.feedback-box.good {
+  border-color: var(--forest);
+}
+
+/* ---- results panel ---- */
+
+.results-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 18px;
+}
+
+.results-totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.results-table {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+}
+
+.results-row {
+  display: grid;
+  grid-template-columns: 0.6fr 1fr 1fr 1fr 1fr;
+  gap: 6px;
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--line);
+}
+
+.results-head {
+  color: var(--muted);
+  text-transform: uppercase;
+  font-size: 10px;
+  border-bottom: 1px solid var(--ink);
+}
+
+.good-text {
+  color: var(--forest);
+}
+
+.flawed-text {
+  color: var(--amber);
+}
+
+.empty-hint {
+  color: var(--muted);
+  grid-column: 1 / -1;
+}
