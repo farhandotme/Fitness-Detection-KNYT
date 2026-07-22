@@ -22,6 +22,9 @@ import BirdDogPage from "./pages/BirdDogPage";
 import CalfRaisePage from "./pages/CalfRaisePage";
 import TreePosePage from "./pages/TreePosePage";
 import WarriorIIPage from "./pages/WarrioriiPage";
+import CobraPosePage from "./pages/CobraPosePage";
+import ChairPosePage from "./pages/ChairPosePage";
+import DownwardDogPage from "./pages/DownwardDogPage";
 
 function App() {
   return (
@@ -55,6 +58,9 @@ function App() {
           <Route path="calf_raise" element={<CalfRaisePage />} />
           <Route path="tree_pose" element={<TreePosePage />} />
           <Route path="warriorII" element={<WarriorIIPage />} />
+          <Route path="cobra_pose" element={<CobraPosePage />} />
+          <Route path="chair_pose" element={<ChairPosePage />} />
+          <Route path="downward_dog" element={<DownwardDogPage />} />
           <Route
             path="/exercises/mountain-climber"
             element={<MountainClimberPage />}
