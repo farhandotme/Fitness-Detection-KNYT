@@ -25,6 +25,11 @@ import WarriorIIPage from "./pages/WarrioriiPage";
 import CobraPosePage from "./pages/CobraPosePage";
 import ChairPosePage from "./pages/ChairPosePage";
 import DownwardDogPage from "./pages/DownwardDogPage";
+import PikePushupPage from "./pages/PikePushupPage";
+import TuckJumpPage from "./pages/TuckJumpPage";
+import SumoSquatPage from "./pages/SumoSquatPage";
+import TrianglePosePage from "./pages/TrianglePosePage";
+import StandingForwardFoldPage from "./pages/StandingForwardFoldPage";
 
 function App() {
   return (
@@ -61,6 +66,14 @@ function App() {
           <Route path="cobra_pose" element={<CobraPosePage />} />
           <Route path="chair_pose" element={<ChairPosePage />} />
           <Route path="downward_dog" element={<DownwardDogPage />} />
+          <Route path="pike_pushup" element={<PikePushupPage />} />
+          <Route path="tuck_jump" element={<TuckJumpPage />} />
+          <Route path="sumo_squat" element={<SumoSquatPage />} />
+          <Route path="triangle_pose" element={<TrianglePosePage />} />
+          <Route
+            path="standing_forward_fold"
+            element={<StandingForwardFoldPage />}
+          />
           <Route
             path="/exercises/mountain-climber"
             element={<MountainClimberPage />}
