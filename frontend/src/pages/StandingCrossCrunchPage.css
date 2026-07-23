@@ -1,0 +1,378 @@
+.ccrunch-page {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 24px 16px 64px;
+  color: #f2efe4;
+  font-family: inherit;
+}
+
+.ccrunch-header h1 {
+  margin: 0 0 4px;
+  font-size: 1.8rem;
+}
+
+.ccrunch-subtitle {
+  margin: 0 0 24px;
+  opacity: 0.7;
+  font-size: 0.95rem;
+}
+
+.ccrunch-setup {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  background: #1c1c22;
+  border-radius: 16px;
+  padding: 24px;
+}
+
+.ccrunch-setup-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ccrunch-setup-label {
+  font-size: 0.85rem;
+  opacity: 0.7;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.ccrunch-preset-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ccrunch-preset-btn {
+  padding: 8px 16px;
+  border-radius: 10px;
+  border: 1px solid #3a3a44;
+  background: #26262e;
+  color: #f2efe4;
+  cursor: pointer;
+  font-size: 0.95rem;
+}
+
+.ccrunch-preset-btn.selected {
+  background: #84c760;
+  color: #10130b;
+  border-color: #84c760;
+  font-weight: 600;
+}
+
+.ccrunch-howto {
+  background: #14151a;
+  border-radius: 12px;
+  padding: 16px 20px;
+}
+
+.ccrunch-howto h3 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+}
+
+.ccrunch-howto ul {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.9rem;
+  opacity: 0.85;
+}
+
+.ccrunch-start-btn,
+.ccrunch-stop-btn,
+.ccrunch-skip-btn {
+  padding: 14px 20px;
+  border-radius: 12px;
+  border: none;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ccrunch-start-btn {
+  background: #84c760;
+  color: #10130b;
+}
+
+.ccrunch-stop-btn {
+  background: #3a2020;
+  color: #f2b0b0;
+  margin-top: 16px;
+}
+
+.ccrunch-skip-btn {
+  background: #26262e;
+  color: #f2efe4;
+  border: 1px solid #3a3a44;
+}
+
+.ccrunch-active-top {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.95rem;
+  opacity: 0.85;
+  margin-bottom: 8px;
+}
+
+.ccrunch-progress-track {
+  width: 100%;
+  height: 8px;
+  border-radius: 4px;
+  background: #26262e;
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+
+.ccrunch-progress-fill {
+  height: 100%;
+  background: #84c760;
+  transition: width 0.2s ease;
+}
+
+.ccrunch-active-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: 20px;
+}
+
+@media (max-width: 720px) {
+  .ccrunch-active-body {
+    grid-template-columns: 1fr;
+  }
+}
+
+.ccrunch-viewfinder {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  background: #000;
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.ccrunch-viewfinder-video,
+.ccrunch-viewfinder-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+}
+
+.ccrunch-viewfinder-placeholder {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-align: center;
+  padding: 24px;
+  opacity: 0.7;
+}
+
+.ccrunch-viewfinder-placeholder span {
+  font-size: 2.5rem;
+}
+
+.ccrunch-panel {
+  background: #1c1c22;
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  height: fit-content;
+}
+
+.ccrunch-panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.ccrunch-panel-label {
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  opacity: 0.6;
+}
+
+.ccrunch-pose-pill {
+  font-size: 0.75rem;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #3a3a44;
+}
+
+.ccrunch-pose-pill.ok {
+  background: #2c4b22;
+  color: #b9f29c;
+}
+
+.ccrunch-pose-pill.warn {
+  background: #4b3f22;
+  color: #f2d99c;
+}
+
+.ccrunch-pose-pill.bad {
+  background: #4b2222;
+  color: #f29c9c;
+}
+
+.ccrunch-rep-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.ccrunch-rep-count {
+  font-size: 2.6rem;
+  font-weight: 700;
+}
+
+.ccrunch-stage-badge {
+  font-size: 0.75rem;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #3a3a44;
+  text-transform: uppercase;
+}
+
+.ccrunch-stage-badge.up {
+  background: #4b3f22;
+  color: #f2d99c;
+}
+
+.ccrunch-side-row {
+  display: flex;
+  gap: 10px;
+}
+
+.ccrunch-side-chip {
+  flex: 1;
+  background: #14151a;
+  border-radius: 10px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid transparent;
+}
+
+.ccrunch-side-chip.active {
+  border-color: #84c760;
+}
+
+.ccrunch-side-chip .k {
+  font-size: 0.7rem;
+  opacity: 0.6;
+}
+
+.ccrunch-side-chip .v {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.ccrunch-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.ccrunch-grid-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ccrunch-grid-item .k {
+  font-size: 0.7rem;
+  opacity: 0.6;
+}
+
+.ccrunch-grid-item .v {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.ccrunch-alert {
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 0.9rem;
+}
+
+.ccrunch-alert.warn {
+  background: #4b3f22;
+  color: #f2d99c;
+}
+
+.ccrunch-alert.notice {
+  background: #22344b;
+  color: #9cc7f2;
+}
+
+.ccrunch-alert.bad {
+  background: #4b2222;
+  color: #f29c9c;
+}
+
+.ccrunch-feedback {
+  font-size: 0.95rem;
+  opacity: 0.85;
+  border-top: 1px solid #2a2a32;
+  padding-top: 12px;
+}
+
+.ccrunch-last-rep {
+  margin-top: 16px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  font-size: 0.95rem;
+}
+
+.ccrunch-last-rep.good {
+  background: #2c4b22;
+  color: #b9f29c;
+}
+
+.ccrunch-last-rep.flawed {
+  background: #4b3f22;
+  color: #f2d99c;
+}
+
+.ccrunch-resting,
+.ccrunch-complete {
+  background: #1c1c22;
+  border-radius: 16px;
+  padding: 32px 24px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.ccrunch-rest-timer {
+  font-size: 3rem;
+  font-weight: 700;
+}
+
+.ccrunch-summary-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0;
+}
+
+.ccrunch-summary-table th,
+.ccrunch-summary-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #2a2a32;
+  font-size: 0.9rem;
+  text-align: center;
+}
