@@ -30,6 +30,7 @@ import TuckJumpPage from "./pages/TuckJumpPage";
 import SumoSquatPage from "./pages/SumoSquatPage";
 import TrianglePosePage from "./pages/TrianglePosePage";
 import StandingForwardFoldPage from "./pages/StandingForwardFoldPage";
+import ReverseWarriorPage from "./pages/ReverseWarriorPage";
 
 function App() {
   return (
@@ -70,6 +71,7 @@ function App() {
           <Route path="tuck_jump" element={<TuckJumpPage />} />
           <Route path="sumo_squat" element={<SumoSquatPage />} />
           <Route path="triangle_pose" element={<TrianglePosePage />} />
+          <Route path="reverse_warrior" element={<ReverseWarriorPage />} />
           <Route
             path="standing_forward_fold"
             element={<StandingForwardFoldPage />}

@@ -29,6 +29,7 @@ from src.routes.tuckJumpRoutes import router as tuckJumpRouter
 from src.routes.sumoSquatRoutes import router as sumoSquatRouter
 from src.routes.triangleRoutes import router as trianglePoseRouter
 from src.routes.standingForwardFoldRoutes import router as standingForwardFoldRouter
+from src.routes.reverseWarriorRoutes import router as reverseWarriorRouter
 
 app = FastAPI()
 app.add_middleware(
@@ -71,6 +72,7 @@ app.include_router(pikePushupRouter, prefix="/ws", tags="pike-pushup-router")
 app.include_router(tuckJumpRouter, prefix="/ws", tags="tuck-jump-router")
 app.include_router(sumoSquatRouter, prefix="/ws", tags="sumo-squat-router")
 app.include_router(trianglePoseRouter, prefix="/ws", tags="triangle-pose-router")
+app.include_router(reverseWarriorRouter, prefix="/ws", tags="reverse-warrior-router")
 app.include_router(
     standingForwardFoldRouter, prefix="/ws", tags="standing-forward-fold-router"
 )

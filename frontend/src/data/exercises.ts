@@ -359,6 +359,30 @@ export const EXERCISES: ExerciseMeta[] = [
     route: "/standing_forward_fold",
   },
   {
+    id: "reverse-warrior",
+    name: "Reverse Warrior",
+    category: "Mobility",
+    difficulty: "Beginner",
+    equipment: "Bodyweight",
+    emoji: "🔁",
+    description: "Tracks shoulder, hip and leg alignment.",
+    tags: ["yoga", "stretch"],
+    status: "available",
+    route: "/reverse_warrior",
+  },
+  {
+    id: "standing-cross-crunch",
+    name: "Standing Cross Crunch",
+    category: "Mobility",
+    difficulty: "Beginner",
+    equipment: "Bodyweight",
+    emoji: "🧍🏼",
+    description: "Tracks shoulder, hip and leg alignment.",
+    tags: ["Cardio", "stretch"],
+    status: "available",
+    route: "/standing_cross_crunch",
+  },
+  {
     id: "arm-circles",
     name: "Arm Circles",
     category: "Mobility",
@@ -367,7 +391,8 @@ export const EXERCISES: ExerciseMeta[] = [
     emoji: "🔄",
     description: "Shoulder mobility exercise with repetition tracking.",
     tags: ["warmup", "mobility", "shoulders"],
-    status: "coming_soon",
+    status: "available",
+    route: "/arm_circles",
   },
   {
     id: "butt-kicks",
@@ -380,7 +405,6 @@ export const EXERCISES: ExerciseMeta[] = [
     tags: ["cardio", "warmup"],
     status: "coming_soon",
   },
-
   {
     id: "wall-sit",
     name: "Wall Sit",
