@@ -23,9 +23,26 @@ SIDE_LANDMARKS = {
 
 CORE_LANDMARKS = (LEFT_SHOULDER, RIGHT_SHOULDER, LEFT_HIP, RIGHT_HIP)
 
-ALIGN_BROKEN = 145.0
-ALIGN_RESUME = 155.0
-ALIGN_IDEAL = 168.0
+ALIGN_BROKEN = 110.0
+ALIGN_RESUME = 120.0
+ALIGN_IDEAL = 140.0
+
+# A standing person also has a near-straight shoulder-hip-knee line, so
+# alignment_angle alone can't tell "bridge" apart from "standing in frame".
+# These extra checks confirm the person is actually lying down with hips
+# raised and knees bent, not just standing upright doing nothing.
+KNEE_ANGLE_MIN = 55.0
+KNEE_ANGLE_MAX = 120.0
+LYING_ASPECT_RATIO = (
+    1.15  # torso must be wider (horizontal) than tall to count as lying down
+)
+HIP_ELEVATION_MARGIN = 0.02  # normalized-coord margin; hip.y must be this much smaller (higher) than shoulder.y/ankle.y
+
+POSTURE_ISSUE_MESSAGES = {
+    "not_lying_down": "Lie down on your back, side-on to the camera.",
+    "hips_not_raised": "Lift your hips higher off the floor.",
+    "knees_not_bent": "Bend your knees to roughly a right angle, feet flat on the floor.",
+}
 
 SCORE_HISTORY = 30
 SCORE_SAMPLE_INTERVAL = 1.0
@@ -48,6 +65,23 @@ def _side_visibility(landmarks, side: str) -> float:
     return min(vals) if vals else 0.0
 
 
+def _is_lying_down(shoulder, ankle) -> bool:
+    """True if the body is spread out horizontally (side-on to camera),
+    as opposed to stacked vertically like someone standing up."""
+    horizontal_span = abs(ankle.x - shoulder.x)
+    vertical_span = abs(ankle.y - shoulder.y)
+    return horizontal_span > vertical_span * LYING_ASPECT_RATIO
+
+
+def _hip_is_elevated(shoulder, hip, ankle) -> bool:
+    """True if the hip sits meaningfully higher (smaller y) than both the
+    shoulder and the ankle, i.e. actually lifted off the ground."""
+    return (
+        hip.y < shoulder.y - HIP_ELEVATION_MARGIN
+        and hip.y < ankle.y - HIP_ELEVATION_MARGIN
+    )
+
+
 def _angle_deg(a, b, c) -> float:
     ang = math.degrees(
         math.atan2(c.y - b.y, c.x - b.x) - math.atan2(a.y - b.y, a.x - b.x)
@@ -65,6 +99,8 @@ class BridgeHoldAnalyzer:
         self.hold_active = False
         self.started = False
         self.hold_seconds = 0.0
+        self.good_seconds = 0.0
+        self.flawed_seconds = 0.0
         self.current_streak_seconds = 0.0
         self.best_streak_seconds = 0.0
         self.break_count = 0
@@ -117,6 +153,8 @@ class BridgeHoldAnalyzer:
             ),
             "is_holding": False,
             "hold_seconds": round(self.hold_seconds, 2),
+            "good_seconds": round(self.good_seconds, 2),
+            "flawed_seconds": round(self.flawed_seconds, 2),
             "current_streak_seconds": round(self.current_streak_seconds, 2),
             "best_streak_seconds": round(self.best_streak_seconds, 2),
             "break_count": self.break_count,
@@ -157,18 +195,29 @@ class BridgeHoldAnalyzer:
         alignment_angle = _angle_deg(shoulder, hip, knee)
         knee_angle = _angle_deg(hip, knee, ankle)
 
+        lying_down = _is_lying_down(shoulder, ankle)
+        hip_elevated = _hip_is_elevated(shoulder, hip, ankle)
+        knee_bent_ok = KNEE_ANGLE_MIN <= knee_angle <= KNEE_ANGLE_MAX
+
+        posture_issues = []
+        if not lying_down:
+            posture_issues.append("not_lying_down")
+        if not hip_elevated:
+            posture_issues.append("hips_not_raised")
+        if not knee_bent_ok:
+            posture_issues.append("knees_not_bent")
+
         align_broken = alignment_angle < (
             ALIGN_BROKEN if self.hold_active else ALIGN_RESUME
         )
 
-        holding_now = not align_broken
+        holding_now = not align_broken and lying_down and hip_elevated and knee_bent_ok
 
         if holding_now:
             if not self.hold_active:
                 self.current_streak_seconds = 0.0
             self.hold_active = True
             self.started = True
-            self.hold_seconds += dt
             self.current_streak_seconds += dt
             self.best_streak_seconds = max(
                 self.best_streak_seconds, self.current_streak_seconds
@@ -178,6 +227,17 @@ class BridgeHoldAnalyzer:
                 "good" if alignment_angle >= ALIGN_IDEAL else "needs_improvement"
             )
             form_score = max(0, int(100 - max(0, ALIGN_IDEAL - alignment_angle)))
+
+            # Only genuinely ideal-form frames count toward completing the
+            # exercise. A frame that's merely "not broken" but below the
+            # ideal threshold is real, detected holding — just not the
+            # correct position — so it's tracked separately and doesn't
+            # advance the target timer.
+            if hold_quality == "good":
+                self.hold_seconds += dt
+                self.good_seconds += dt
+            else:
+                self.flawed_seconds += dt
         else:
             self._register_broken_frame()
             hold_quality = None
@@ -195,11 +255,14 @@ class BridgeHoldAnalyzer:
                 self.form_scores.append(form_score)
                 self._last_score_sample_time = t
 
-        feedback = (
-            "Holding bridge."
-            if holding_now
-            else "Bridge broken — adjust shoulder to hip to knee alignment."
-        )
+        posture_messages = [POSTURE_ISSUE_MESSAGES[i] for i in posture_issues]
+
+        if holding_now:
+            feedback = "Holding bridge."
+        elif posture_messages:
+            feedback = posture_messages[0]
+        else:
+            feedback = "Bridge broken — adjust shoulder to hip to knee alignment."
 
         response.update(
             {
@@ -211,11 +274,17 @@ class BridgeHoldAnalyzer:
                 "is_holding": holding_now,
                 "target_reached": target_reached,
                 "hold_quality": hold_quality,
+                "posture_ok": not posture_issues,
+                "posture_issues": posture_issues,
+                "posture_messages": posture_messages,
                 "form_score": form_score,
                 "avg_form_score": self._avg(self.form_scores),
                 "feedback": feedback,
                 "debug": {
                     "align_broken": align_broken,
+                    "lying_down": lying_down,
+                    "hip_elevated": hip_elevated,
+                    "knee_bent_ok": knee_bent_ok,
                     "side": self.active_side,
                 },
             }
@@ -226,6 +295,8 @@ class BridgeHoldAnalyzer:
     def _progress_fields(self) -> dict[str, Any]:
         return {
             "hold_seconds": round(self.hold_seconds, 2),
+            "good_seconds": round(self.good_seconds, 2),
+            "flawed_seconds": round(self.flawed_seconds, 2),
             "current_streak_seconds": round(self.current_streak_seconds, 2),
             "best_streak_seconds": round(self.best_streak_seconds, 2),
             "break_count": self.break_count,
