@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import type { Landmark } from "../hooks/useWarrioriiSocket";
+import type { Landmark } from "../hooks/useArmCirclesSocket";
 
 interface SkeletonEntity {
   points: Landmark[];
@@ -15,12 +15,13 @@ interface Props {
 }
 
 /**
- * Same capture pipeline as the other exercise cameras, but requests a
- * landscape-biased resolution — Warrior II is judged front-on with both
- * arms reaching straight out to the sides and a wide lunge stance, so the
- * useful frame is wide (arm-tip to arm-tip across the width), not tall.
+ * Arm circles are done standing, facing the camera, with both arms
+ * extended out to the sides — that needs width more than height, so this
+ * requests a 4:3 landscape-leaning feed (same convention as the push-up
+ * camera), rather than the portrait framing used for standing-tall poses
+ * like Standing Forward Fold.
  */
-export default function WarriorIICamera({
+export default function ArmCirclesCamera({
   active,
   sendFrame,
   skeleton,
@@ -59,8 +60,8 @@ export default function WarriorIICamera({
           video: {
             facingMode: "user",
             width: { ideal: 854 },
-            height: { ideal: 480 }, // landscape — arms + wide stance need horizontal room
-            aspectRatio: { ideal: 16 / 9 },
+            height: { ideal: 640 }, // wide — both arms out to the sides need to fit
+            aspectRatio: { ideal: 4 / 3 },
           },
           audio: false,
         });
@@ -172,7 +173,7 @@ export default function WarriorIICamera({
   }
 
   return (
-    <div className="warrior-viewfinder">
+    <div className="arm-circles-viewfinder">
       {active ? (
         <>
           <video
@@ -180,17 +181,17 @@ export default function WarriorIICamera({
             autoPlay
             muted
             playsInline
-            className="warrior-viewfinder-video"
+            className="arm-circles-viewfinder-video"
           />
-          <canvas ref={overlayRef} className="warrior-viewfinder-overlay" />
+          <canvas ref={overlayRef} className="arm-circles-viewfinder-overlay" />
           <canvas ref={canvasRef} style={{ display: "none" }} />
         </>
       ) : (
-        <div className="warrior-viewfinder-placeholder">
+        <div className="arm-circles-viewfinder-placeholder">
           <span>📷</span>
           <p>
-            Camera turns on when you hit Start — face the camera, step into a
-            wide lunge, and reach both arms straight out to your sides
+            Camera turns on when you hit Start — face the camera, both arms
+            out to the sides, both shoulders and hands in frame
           </p>
         </div>
       )}

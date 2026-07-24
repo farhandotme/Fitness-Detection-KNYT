@@ -30,6 +30,12 @@ from src.routes.sumoSquatRoutes import router as sumoSquatRouter
 from src.routes.triangleRoutes import router as trianglePoseRouter
 from src.routes.standingForwardFoldRoutes import router as standingForwardFoldRouter
 from src.routes.reverseWarriorRoutes import router as reverseWarriorRouter
+from src.routes.armCirclesRoutes import router as armCirclesRouter
+from src.routes.standingCrossCrunchRoutes import router as standingCrossCrunchRouter
+from src.routes.peacockPoseRoutes import router as peacockPoseRouter
+from src.routes.windmillRotationStretchRoutes import (
+    router as windmillRotationStretchRouter,
+)
 
 app = FastAPI()
 app.add_middleware(
@@ -73,6 +79,14 @@ app.include_router(tuckJumpRouter, prefix="/ws", tags="tuck-jump-router")
 app.include_router(sumoSquatRouter, prefix="/ws", tags="sumo-squat-router")
 app.include_router(trianglePoseRouter, prefix="/ws", tags="triangle-pose-router")
 app.include_router(reverseWarriorRouter, prefix="/ws", tags="reverse-warrior-router")
+app.include_router(armCirclesRouter, prefix="/ws", tags="arm-circles-router")
+app.include_router(peacockPoseRouter, prefix="/ws", tags="peacock-pose-router")
+app.include_router(
+    windmillRotationStretchRouter, prefix="/ws", tags="windmill-rotation-stretch-router"
+)
+app.include_router(
+    standingCrossCrunchRouter, prefix="/ws", tags="standing-cross-crunch-router"
+)
 app.include_router(
     standingForwardFoldRouter, prefix="/ws", tags="standing-forward-fold-router"
 )

@@ -14,30 +14,18 @@ MODEL_PATH = str(
     / "pose_landmarker.task"
 )
 
-# Defaults tuned for close-up rep counting (squats/curls/pushups), where the
-# person fills most of the frame and landmarks are large and sharp.
-DEFAULT_MIN_DETECTION_CONFIDENCE = 0.75
-DEFAULT_MIN_PRESENCE_CONFIDENCE = 0.75
-DEFAULT_MIN_TRACKING_CONFIDENCE = 0.7
+# Defaults tuned for general rep counting.
+DEFAULT_MIN_DETECTION_CONFIDENCE = 0.7
+DEFAULT_MIN_PRESENCE_CONFIDENCE = 0.7
+DEFAULT_MIN_TRACKING_CONFIDENCE = 0.65
 
-# Full-body / farther-away exercises (e.g. calf raises — the whole body,
-# head to feet, has to fit in frame, so ankles/heels/toes end up smaller
-# and less sharp than in a close-up shot) do better with a lower
-# confidence floor than the close-up defaults above. Pass these to
-# `PoseEngine(...)` instead of the defaults for that kind of exercise.
+# More forgiving for full-body / farther-away exercises.
 FULL_BODY_MIN_DETECTION_CONFIDENCE = 0.6
 FULL_BODY_MIN_PRESENCE_CONFIDENCE = 0.6
 FULL_BODY_MIN_TRACKING_CONFIDENCE = 0.55
 
-# How many consecutive frames with *no* detected pose we tolerate before
-# reporting "no person" to callers. MediaPipe's tracker briefly drops the
-# pose on fast/blurry motion (very common mid-rep, especially on squats
-# where the whole body moves quickly) even though the person never left
-# the frame. Re-using the last good landmarks for a few frames avoids the
-# analyzers seeing a false "no person detected" / losing calibration every
-# time that happens, while still correctly reporting "no person" if they
-# actually step out of frame.
-MAX_HOLD_FRAMES = 6
+# How many consecutive frames with no detected pose to tolerate.
+MAX_HOLD_FRAMES = 4
 
 # Pose landmark indices (MediaPipe BlazePose topology)
 NOSE = 0
@@ -82,8 +70,6 @@ class PoseEngine:
         if not os.path.exists(MODEL_PATH):
             raise FileNotFoundError(f"{MODEL_PATH} not found.")
 
-        # Avoid using a module attribute directly as a default in the
-        # signature (can cause "variable not allowed in type expression").
         if running_mode is None:
             running_mode = vision.RunningMode.VIDEO
         self.running_mode = running_mode
@@ -99,22 +85,16 @@ class PoseEngine:
         )
         self.landmarker = vision.PoseLandmarker.create_from_options(options)
 
-        # MediaPipe's VIDEO mode requires strictly increasing timestamps.
         self._last_timestamp_ms: Optional[int] = None
-
-        # Short-term hold buffer for brief detection dropouts (see
-        # MAX_HOLD_FRAMES above). Only meaningful in VIDEO mode.
         self._last_landmarks: Optional[list[NormalizedLandmark]] = None
         self._missed_frames = 0
 
     def detect(
         self, frame, timestamp_ms: int = 0
     ) -> Optional[list[NormalizedLandmark]]:
-        """Run pose detection once. Returns the 33-point landmark list, or
-        None if no person was detected (or the frame/timestamp was invalid).
-        `timestamp_ms` is ignored in IMAGE mode (single still photos)."""
+        """Run pose detection once. Returns landmarks or None."""
 
-        if frame is None or frame.size == 0:
+        if frame is None or getattr(frame, "size", 0) == 0:
             return None
 
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -122,11 +102,12 @@ class PoseEngine:
 
         if self.running_mode == vision.RunningMode.IMAGE:
             result = self.landmarker.detect(mp_image)
-            return result.pose_landmarks[0] if result.pose_landmarks else None
+            if result.pose_landmarks:
+                self._last_landmarks = result.pose_landmarks[0]
+                self._missed_frames = 0
+                return self._last_landmarks
+            return None
 
-        # Guard against non-monotonic / duplicate timestamps, which would
-        # otherwise raise inside the MediaPipe C++ runtime and kill the
-        # websocket loop.
         if (
             self._last_timestamp_ms is not None
             and timestamp_ms <= self._last_timestamp_ms
@@ -137,8 +118,6 @@ class PoseEngine:
         result = self.landmarker.detect_for_video(mp_image, timestamp_ms)
 
         if not result.pose_landmarks:
-            # Momentary miss — reuse the last good frame for a short window
-            # instead of instantly reporting "no person".
             if (
                 self._last_landmarks is not None
                 and self._missed_frames < MAX_HOLD_FRAMES
@@ -146,6 +125,7 @@ class PoseEngine:
                 self._missed_frames += 1
                 return self._last_landmarks
             self._last_landmarks = None
+            self._missed_frames = 0
             return None
 
         self._last_landmarks = result.pose_landmarks[0]

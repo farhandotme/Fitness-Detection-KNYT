@@ -31,6 +31,10 @@ import SumoSquatPage from "./pages/SumoSquatPage";
 import TrianglePosePage from "./pages/TrianglePosePage";
 import StandingForwardFoldPage from "./pages/StandingForwardFoldPage";
 import ReverseWarriorPage from "./pages/ReverseWarriorPage";
+import ArmCirclesPage from "./pages/ArmCirclesPage";
+import StandingCrossCrunchPage from "./pages/StandingCrossCrunchPage";
+import PeacockPosePage from "./pages/PeacockPosePage";
+import WindmillPage from "./pages/windMillRotationStretchPage";
 
 function App() {
   return (
@@ -72,6 +76,13 @@ function App() {
           <Route path="sumo_squat" element={<SumoSquatPage />} />
           <Route path="triangle_pose" element={<TrianglePosePage />} />
           <Route path="reverse_warrior" element={<ReverseWarriorPage />} />
+          <Route path="arm_circles" element={<ArmCirclesPage />} />
+          <Route path="peacock_pose" element={<PeacockPosePage />} />
+          <Route path="wind_mill_rotation" element={<WindmillPage />} />
+          <Route
+            path="standing_cross_crunch"
+            element={<StandingCrossCrunchPage />}
+          />
           <Route
             path="standing_forward_fold"
             element={<StandingForwardFoldPage />}
