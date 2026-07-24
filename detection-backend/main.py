@@ -33,6 +33,7 @@ from src.routes.reverseWarriorRoutes import router as reverseWarriorRouter
 from src.routes.armCirclesRoutes import router as armCirclesRouter
 from src.routes.standingCrossCrunchRoutes import router as standingCrossCrunchRouter
 from src.routes.peacockPoseRoutes import router as peacockPoseRouter
+from src.routes.hollowHoldRoutes import router as hollowHoldRouter
 from src.routes.windmillRotationStretchRoutes import (
     router as windmillRotationStretchRouter,
 )
@@ -81,6 +82,7 @@ app.include_router(trianglePoseRouter, prefix="/ws", tags="triangle-pose-router"
 app.include_router(reverseWarriorRouter, prefix="/ws", tags="reverse-warrior-router")
 app.include_router(armCirclesRouter, prefix="/ws", tags="arm-circles-router")
 app.include_router(peacockPoseRouter, prefix="/ws", tags="peacock-pose-router")
+app.include_router(hollowHoldRouter, prefix="/ws", tags="hollow-hold-router")
 app.include_router(
     windmillRotationStretchRouter, prefix="/ws", tags="windmill-rotation-stretch-router"
 )

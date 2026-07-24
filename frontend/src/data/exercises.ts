@@ -419,6 +419,18 @@ export const EXERCISES: ExerciseMeta[] = [
     route: "/wind_mill_rotation",
   },
   {
+    id: "hollow-hold",
+    name: "Hollow Hold",
+    category: "Mobility",
+    difficulty: "Beginner",
+    equipment: "Bodyweight",
+    emoji: "⭕",
+    description: "Shoulder mobility exercise with repetition tracking.",
+    tags: ["warmup", "mobility", "shoulders"],
+    status: "available",
+    route: "/hollow_hold",
+  },
+  {
     id: "butt-kicks",
     name: "Butt Kicks",
     category: "Cardio",
