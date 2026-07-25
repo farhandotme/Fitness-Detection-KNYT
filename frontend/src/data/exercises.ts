@@ -431,6 +431,18 @@ export const EXERCISES: ExerciseMeta[] = [
     route: "/hollow_hold",
   },
   {
+    id: "flutter_kicks",
+    name: "Flutter Kicks",
+    category: "Mobility",
+    difficulty: "Beginner",
+    equipment: "Bodyweight",
+    emoji: "🍃",
+    description: "Shoulder mobility exercise with repetition tracking.",
+    tags: ["warmup", "mobility", "shoulders"],
+    status: "available",
+    route: "/flutter_kicks",
+  },
+  {
     id: "butt-kicks",
     name: "Butt Kicks",
     category: "Cardio",
