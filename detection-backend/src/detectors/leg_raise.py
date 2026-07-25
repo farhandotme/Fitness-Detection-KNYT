@@ -1,57 +1,3 @@
-"""
-Double / lying leg raise — synchronized two-leg rep counter.
-
-Design
-------
-This is a REP-COUNTING exercise (not a hold, unlike `plank_hold.py` /
-`side_plank.py`), so the state machine follows the same "down"/"up"
-hysteresis pattern `pushup.py` uses, driven by an angle at a joint rather
-than a raw pixel distance:
-
-    left_leg_angle  = angle(LEFT_SHOULDER,  LEFT_HIP,  LEFT_ANKLE)
-    right_leg_angle = angle(RIGHT_SHOULDER, RIGHT_HIP, RIGHT_ANKLE)
-
-Lying supine with legs flat and in line with the torso, this angle reads
-close to a straight 180°. As the legs lift toward vertical it falls
-toward ~90° (less if hip flexion goes past vertical). That is exactly the
-same "angle at a joint, hysteresis band drives the rep" technique
-`pushup.py` uses for the elbow — reused here instead of a raw pixel
-distance because it stays meaningful across side, front, and angled
-camera placements (a joint angle degrades gracefully with mild
-foreshortening; a raw pixel gap does not).
-
-Both legs must be tracked and averaged together — this deliberately does
-NOT alternate left/right the way a marching or high-knees detector would.
-`legs_in_sync` and the per-leg angles are exposed so the frontend can
-flag "one leg lagging" as a form note, but the rep clock always runs off
-the two-leg average, and a single well-tracked leg (the other briefly
-occluded) is enough to keep counting — see `_effective_angles` below.
-
-False-negative aversion
-------------------------
-Per the product requirement, a correct rep must never go uncounted:
-
-    * The top/bottom angle thresholds are deliberately generous (no
-      requirement to reach a strict 90°) — see TOP_ANGLE / BOTTOM_ANGLE.
-    * Angle smoothing (`_smooth`) absorbs single-frame landmark jitter
-      without adding a multi-frame confirmation delay that could clip a
-      fast rep.
-    * If one leg's ankle/knee briefly drops out of tracking, the other
-      leg's angle carries the rep alone instead of stalling the state
-      machine (see `_effective_angles`).
-    * A short grace window (`GRACE_FRAMES`) keeps `ready` from flapping
-      off on a single bad frame of the lying-position gate.
-
-Camera framing
----------------
-Works from a side, front, or angled placement — the shared
-`_assess_body_position` gate (same technique as `pushup.py`'s floor
-check) just needs the torso to read as roughly horizontal in frame. A
-front/top-oblique placement is called out in the UI copy because it's
-the only angle that reliably shows both legs at once without one
-occluding the other, but the angle math itself does not require it.
-"""
-
 import math
 from typing import Any, Optional
 
@@ -77,11 +23,11 @@ MIN_ANGLE_DELTA = 12.0
 MIN_REP_DURATION = 0.35
 MAX_REP_DURATION = 12.0
 
-KNEE_STRAIGHT_MIN_DEG = 155.0
-SYNC_SOFT_TOLERANCE_DEG = 18.0
-SYNC_BLOCK_TOLERANCE_DEG = 60.0
+KNEE_SLIGHT_BEND_OK_DEG = 140.0
+KNEE_CLEAR_BEND_BAD_DEG = 125.0
 
-BACK_ARCH_THRESHOLD = 0.16
+SYNC_SOFT_TOLERANCE_DEG = 22.0
+SYNC_BLOCK_TOLERANCE_DEG = 75.0
 
 TORSO_INCLINE_SUPINE_MAX_DEG = 45.0
 TORSO_INCLINE_READY_MAX_DEG = 60.0
@@ -250,6 +196,9 @@ class LegRaiseAnalyzer:
         self.ready = False
 
         self._current_rep_issues: set[str] = set()
+        self._sync_bad_frames = 0
+        self._knee_bad_frames = 0
+        self._issue_debounce_frames = 4
 
     def _classify_tempo(self, duration: Optional[float]) -> Optional[str]:
         if duration is None:
@@ -299,7 +248,6 @@ class LegRaiseAnalyzer:
             "elapsed_time": round(elapsed, 2),
             "view_mode": None,
             "knee_bend_ok": True,
-            "back_control_ok": True,
             "variation": self.variation,
             "rep_duration": None,
             "rep_avg_speed": None,
@@ -388,11 +336,6 @@ class LegRaiseAnalyzer:
             position_message = None
         response["position_message"] = position_message
 
-        left_ok = _visible((l_shoulder, l_hip, l_ankle))
-        right_ok = _visible((r_shoulder, r_hip, r_ankle))
-        left_knee_ok = _visible((l_hip, l_knee, l_ankle))
-        right_knee_ok = _visible((r_hip, r_knee, r_ankle))
-
         left_far = (
             l_ankle
             if _visible((l_ankle,))
@@ -459,35 +402,13 @@ class LegRaiseAnalyzer:
         knee_bend_ok = True
         if self.variation == "straight":
             knee_angles = []
-            if left_knee_ok:
+            if _visible((l_hip, l_knee, l_ankle)):
                 knee_angles.append(_angle_deg(l_hip, l_knee, l_ankle))
-            if right_knee_ok:
+            if _visible((r_hip, r_knee, r_ankle)):
                 knee_angles.append(_angle_deg(r_hip, r_knee, r_ankle))
-            if knee_angles and min(knee_angles) < KNEE_STRAIGHT_MIN_DEG:
+            if knee_angles and min(knee_angles) < KNEE_CLEAR_BEND_BAD_DEG:
                 knee_bend_ok = False
         response["knee_bend_ok"] = knee_bend_ok
-
-        back_control_ok = True
-        leg_far = None
-        if left_far is not None and right_far is not None:
-            leg_far = _midpoint(left_far, right_far)
-        elif left_far is not None:
-            leg_far = left_far
-        elif right_far is not None:
-            leg_far = right_far
-
-        if position_ok and leg_far is not None:
-            dx = leg_far.x - mid_shoulder.x
-            if abs(dx) > 0.05:
-                frac = (mid_hip.x - mid_shoulder.x) / dx
-                if 0.0 <= frac <= 1.0:
-                    expected_hip_y = mid_shoulder.y + frac * (
-                        leg_far.y - mid_shoulder.y
-                    )
-                    deviation = abs(mid_hip.y - expected_hip_y) / torso_length
-                    if deviation > BACK_ARCH_THRESHOLD:
-                        back_control_ok = False
-        response["back_control_ok"] = back_control_ok
 
         feedback = framing_message
 
@@ -499,6 +420,8 @@ class LegRaiseAnalyzer:
                 self.rep_start_time = None
                 self._rep_angle_acc = 0.0
                 self._current_rep_issues = set()
+                self._sync_bad_frames = 0
+                self._knee_bad_frames = 0
                 if feedback is None:
                     feedback = "Lost lying position mid-rep — not counted. Reset flat on your back and try again."
             if feedback is None:
@@ -509,19 +432,31 @@ class LegRaiseAnalyzer:
                 self.rep_start_time = t
                 self._rep_angle_acc = 0.0
                 self._current_rep_issues = set()
+                self._sync_bad_frames = 0
+                self._knee_bad_frames = 0
 
             if self.last_angle is not None:
                 self._rep_angle_acc += abs(self.smoothed_angle - self.last_angle)
 
             if self.stage == "up":
-                if angle_diff > SYNC_BLOCK_TOLERANCE_DEG:
-                    self._current_rep_issues.add("legs_not_synced")
-                elif not legs_in_sync:
-                    self._current_rep_issues.add("legs_not_synced")
+                if angle_diff > SYNC_SOFT_TOLERANCE_DEG:
+                    self._sync_bad_frames += 1
+                else:
+                    self._sync_bad_frames = 0
+
                 if not knee_bend_ok:
+                    self._knee_bad_frames += 1
+                else:
+                    self._knee_bad_frames = 0
+
+                if self._sync_bad_frames >= self._issue_debounce_frames:
+                    if angle_diff > SYNC_BLOCK_TOLERANCE_DEG:
+                        self._current_rep_issues.add("legs_out_of_sync_unusable")
+                    else:
+                        self._current_rep_issues.add("legs_not_synced")
+
+                if self._knee_bad_frames >= self._issue_debounce_frames:
                     self._current_rep_issues.add("knees_bent")
-                if not back_control_ok:
-                    self._current_rep_issues.add("back_arch")
 
             if self.stage == "up" and self.smoothed_angle >= BOTTOM_ANGLE:
                 self.stage = "down"
@@ -531,8 +466,6 @@ class LegRaiseAnalyzer:
                 feedback = "Move both legs together — one is lagging behind the other."
             if feedback is None and not knee_bend_ok:
                 feedback = "Straighten your knees more if possible."
-            if feedback is None and not back_control_ok:
-                feedback = "Keep your back from arching — brace your core."
 
             if rep_completed:
                 rep_duration = (
@@ -543,8 +476,11 @@ class LegRaiseAnalyzer:
                 if rep_duration and rep_duration > 0:
                     rep_avg_speed = self._rep_angle_acc / rep_duration
 
+                unusable = "legs_out_of_sync_unusable" in self._current_rep_issues
+
                 valid = (
-                    rep_duration is not None
+                    not unusable
+                    and rep_duration is not None
                     and MIN_REP_DURATION <= rep_duration <= MAX_REP_DURATION
                     and self._rep_angle_acc >= MIN_ANGLE_DELTA
                 )
@@ -553,14 +489,20 @@ class LegRaiseAnalyzer:
                     self.rep_count += 1
                     rep_class = self._classify_tempo(rep_duration)
 
-                    if self._current_rep_issues:
+                    hard_issues = {"knees_bent", "legs_out_of_sync_unusable"}
+                    if any(issue in hard_issues for issue in self._current_rep_issues):
                         rep_form_quality = "needs_improvement"
                         self.flawed_reps += 1
                         issue_text = ", ".join(
                             i.replace("_", " ")
                             for i in sorted(self._current_rep_issues)
+                            if i != "legs_out_of_sync_unusable"
                         )
-                        feedback = f"Rep {self.rep_count} counted, but watch your form ({issue_text})."
+                        feedback = (
+                            f"Rep {self.rep_count} counted, but watch your form ({issue_text})."
+                            if issue_text
+                            else f"Rep {self.rep_count} counted."
+                        )
                     else:
                         rep_form_quality = "good"
                         self.good_reps += 1
@@ -572,7 +514,11 @@ class LegRaiseAnalyzer:
                             )
                 else:
                     rep_completed = False
-                    if rep_duration is not None and rep_duration < MIN_REP_DURATION:
+                    if unusable:
+                        feedback = (
+                            "That wasn't a synchronized two-leg rep — not counted."
+                        )
+                    elif rep_duration is not None and rep_duration < MIN_REP_DURATION:
                         feedback = (
                             "Too fast — that one wasn't counted, control the movement."
                         )
@@ -584,6 +530,8 @@ class LegRaiseAnalyzer:
                 self.rep_start_time = None
                 self._rep_angle_acc = 0.0
                 self._current_rep_issues = set()
+                self._sync_bad_frames = 0
+                self._knee_bad_frames = 0
 
         self.last_angle = self.smoothed_angle
         self.last_timestamp_s = t
