@@ -34,6 +34,7 @@ from src.routes.armCirclesRoutes import router as armCirclesRouter
 from src.routes.standingCrossCrunchRoutes import router as standingCrossCrunchRouter
 from src.routes.peacockPoseRoutes import router as peacockPoseRouter
 from src.routes.hollowHoldRoutes import router as hollowHoldRouter
+from src.routes.flutterKicksRoutes import router as flutterKicksRouter
 from src.routes.windmillRotationStretchRoutes import (
     router as windmillRotationStretchRouter,
 )
@@ -83,6 +84,7 @@ app.include_router(reverseWarriorRouter, prefix="/ws", tags="reverse-warrior-rou
 app.include_router(armCirclesRouter, prefix="/ws", tags="arm-circles-router")
 app.include_router(peacockPoseRouter, prefix="/ws", tags="peacock-pose-router")
 app.include_router(hollowHoldRouter, prefix="/ws", tags="hollow-hold-router")
+app.include_router(flutterKicksRouter, prefix="/ws", tags="flutter-kicks-router")
 app.include_router(
     windmillRotationStretchRouter, prefix="/ws", tags="windmill-rotation-stretch-router"
 )
