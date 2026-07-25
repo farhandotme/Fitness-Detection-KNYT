@@ -37,6 +37,7 @@ import PeacockPosePage from "./pages/PeacockPosePage";
 import WindmillPage from "./pages/windMillRotationStretchPage";
 import HollowHoldPage from "./pages/HollowHoldPage";
 import FlutterKicksPage from "./pages/FlutterKicksPage";
+import ButtKicksPage from "./pages/ButtKicksPage";
 
 function App() {
   return (
@@ -83,6 +84,7 @@ function App() {
           <Route path="wind_mill_rotation" element={<WindmillPage />} />
           <Route path="hollow_hold" element={<HollowHoldPage />} />
           <Route path="flutter_kicks" element={<FlutterKicksPage />} />
+          <Route path="butt_kicks" element={<ButtKicksPage />} />
           <Route
             path="standing_cross_crunch"
             element={<StandingCrossCrunchPage />}

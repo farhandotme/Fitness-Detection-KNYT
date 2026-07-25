@@ -451,7 +451,8 @@ export const EXERCISES: ExerciseMeta[] = [
     emoji: "🏃‍♂️",
     description: "Tracks heel-to-glute movement and cadence.",
     tags: ["cardio", "warmup"],
-    status: "coming_soon",
+    status: "available",
+    route: "/butt_kicks",
   },
   {
     id: "wall-sit",
