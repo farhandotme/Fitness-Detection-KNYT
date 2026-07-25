@@ -463,9 +463,21 @@ export const EXERCISES: ExerciseMeta[] = [
     emoji: "🪑",
     description: "Measures hold time and squat angle.",
     tags: ["legs", "isometric", "wall"],
-    status: "coming_soon",
+    status: "available",
+    route: "/wall_sit",
   },
-
+  {
+    id: "leg_raise",
+    name: "Leg Raise",
+    category: "Core",
+    difficulty: "Intermediate",
+    equipment: "Bodyweight",
+    emoji: "🦿",
+    description: "Tracks torso rotation and core engagement.",
+    tags: ["core", "obliques"],
+    status: "available",
+    route: "/leg_raise",
+  },
   {
     id: "russian-twist",
     name: "Russian Twist",
@@ -475,7 +487,8 @@ export const EXERCISES: ExerciseMeta[] = [
     emoji: "🌀",
     description: "Tracks torso rotation and core engagement.",
     tags: ["core", "obliques"],
-    status: "coming_soon",
+    status: "available",
+    route: "/russian_twist",
   },
 ];
 
