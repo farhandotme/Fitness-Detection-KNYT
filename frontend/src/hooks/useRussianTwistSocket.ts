@@ -17,6 +17,9 @@ export interface RussianTwistData {
   framing_message: string | null;
   torso_rotation_deg: number | null;
   raw_rotation_deg: number | null;
+  shoulder_hip_ratio: number | null;
+  baseline_ratio: number | null;
+  rotation_envelope_deg: number | null;
   phase: "center" | "left" | "right";
   left_count: number;
   right_count: number;
@@ -54,6 +57,9 @@ const EMPTY_RESULT: RussianTwistData = {
   framing_message: null,
   torso_rotation_deg: null,
   raw_rotation_deg: null,
+  shoulder_hip_ratio: null,
+  baseline_ratio: null,
+  rotation_envelope_deg: null,
   phase: "center",
   left_count: 0,
   right_count: 0,

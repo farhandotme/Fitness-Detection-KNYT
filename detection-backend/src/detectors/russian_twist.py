@@ -14,24 +14,57 @@ one side, returns through center, then rotates to the other side."
 
 Signal
 ------
-`torso_rotation_deg` compares the **orientation of the shoulder line to
-the orientation of the hip line**, per the spec — but computed in the
-x-z (top-down) plane, not the x-y (image) plane. That distinction
-matters: rotating the torso about a vertical axis while facing the
-camera is exactly the motion that barely moves x-y (the image-plane
-angle between the two lines stays close to flat), because it's a
-rotation *around* the axis the camera is looking down. What it does
-move is depth — one shoulder comes toward the camera, the other goes
-away — which is what MediaPipe's `z` estimate (roughly the same scale as
-`x`, relative to the hips) captures. So each line's "orientation" here is
-`atan2(dz, dx)` of its two endpoints (0 = both endpoints at equal depth,
-i.e. that segment is square to the camera), and `torso_rotation_deg` is
-the shoulder line's orientation minus the hip line's — literally the
-same "compare two body-segment lines" idea `PlankHoldAnalyzer` /
-`SidePlankAnalyzer` use, just in the depth-sensitive plane instead of the
-image plane, since that's the plane this particular rotation actually
-shows up in for a front-facing camera. Sign convention: positive = torso
-turned to the wearer's left, negative = turned to the wearer's right.
+Earlier revisions tried to read torso rotation straight out of an angle
+(first the shoulder/hip line angle in the image plane, then the same
+thing using MediaPipe's `z` depth estimate). Both turned out to be the
+wrong shape of signal to depend on for counting: the image-plane version
+barely moves for a rotation about a vertical axis facing the camera, and
+`z` on its own is too noisy/inconsistently scaled across setups to trust
+as an absolute angle. This version splits the signal into two parts that
+are each individually more robust:
+
+  * **Magnitude — self-calibrating, 2D only, no `z` needed.** As the
+    torso twists and the hips stay anchored (the whole point of the
+    seated base), the shoulder line foreshortens in the image while the
+    hip line doesn't. So `shoulder_width / hip_width` shrinks as the
+    twist gets bigger, regardless of camera distance/zoom (it's a ratio
+    of two things in the same frame, so it's scale-invariant). The
+    analyzer tracks a running `baseline_ratio` — effectively "what does
+    this ratio look like when facing forward" — as the highest ratio
+    it's seen while **confirmed at center** (facing forward is, by
+    construction, the widest the shoulder line ever gets relative to the
+    hips), then converts however compressed the *current* ratio is back
+    into a magnitude in degrees via `acos(ratio / baseline_ratio)` (a
+    simple foreshortening model: apparent width ≈ true width *
+    cos(twist angle)). No absolute calibration or body-proportion
+    assumption required — it adapts to whoever is in frame. Critically,
+    the baseline only ever updates while genuinely at a confirmed
+    center, never mid-twist — otherwise a twist that's *held* rather
+    than quickly flicked through would slowly get absorbed into "this is
+    just what forward looks like," eroding its own measured magnitude
+    toward zero the longer it's held.
+  * **Direction — still needs `z`, but only its sign.** Which shoulder is
+    nearer the camera than the other tells you which way the torso
+    turned; `z`'s noisiness is mostly a magnitude problem, not a sign
+    problem, so this only ever asks "is the left shoulder closer or the
+    right," not "by how many degrees." As a second, `z`-independent vote
+    on the same question, it also folds in which way the shoulder
+    midpoint has drifted relative to the hip midpoint (a secondary,
+    purely-2D cue) — the two are weighted-summed and only the sign of
+    that sum is used.
+
+`torso_rotation_deg = magnitude_deg * sign(direction_vote)`. Positive =
+torso turned to the wearer's left, negative = right (if this comes out
+mirrored for a given setup, flip the one-line `DIRECTION_SIGN` constant
+below rather than anything structural).
+
+On top of that, the enter/exit rotation thresholds that drive the phase
+machine (below) are themselves relative to a **running envelope** of how
+much rotation this specific person/setup has actually been producing
+(`_envelope_deg`), not fixed absolute degrees — so however the geometry
+above happens to scale in a given room/camera/body, "you need to get
+back to roughly half of your best recent twist" stays the standard,
+rather than a hardcoded number that might not match reality.
 
 Two counting modes, one event stream
 -------------------------------------
@@ -55,19 +88,18 @@ Gates (checked every frame, independent of the rotation angle itself)
   * **Framing** — full torso in frame, not too close/far. Same style as
     the push-up's `_framing_feedback`.
   * **Both shoulders + both hips visible** — hard requirement. Without
-    all four points the rotation angle isn't trustworthy, so detection
-    simply refuses to start (mirrors the push-up's "can't see your
-    torso" bail-out).
+    all four points neither the ratio nor the direction vote is
+    trustworthy, so detection simply refuses to start (mirrors the
+    push-up's "can't see your torso" bail-out).
   * **Seated base** — a loose geometric check that only rules out the two
     failure modes that are actually detectable from a front camera:
     standing up, or lying flat. It does **not** try to hard-require a
     measurable backward lean — from a front-on camera a backward lean is
-    mostly a depth change, the same way torso rotation is, and gating
-    `ready` on an image-plane lean angle that rarely shows up would block
-    counting almost permanently. "Sit back slightly" is still shown as a
-    coaching tip, just not as a hard gate. Debounced by a stability
-    streak the same way the push-up gates its floor-position check
-    (`STABLE_SEATED_FRAMES` / `GRACE_FRAMES`).
+    mostly a depth change, and gating `ready` on an image-plane lean
+    angle that rarely shows up would block counting almost permanently.
+    "Sit back slightly" is still shown as a coaching tip, just not as a
+    hard gate. Debounced by a stability streak the same way the push-up
+    gates its floor-position check (`STABLE_SEATED_FRAMES` / `GRACE_FRAMES`).
   * **Leg stability** — a *counting* gate only, per the spec: legs are
     tracked (knee, falling back to ankle — knees read as more stable than
     ankles in a seated, bent-knee pose) over a short rolling time window,
@@ -79,8 +111,9 @@ Gates (checked every frame, independent of the rotation angle itself)
 
 Hysteresis
 ----------
-Two angle bands (`ROT_ENTER_DEG` to leave center, smaller `ROT_EXIT_DEG`
-to re-enter center) plus a consecutive-frame dwell requirement
+Two angle bands (`rot_enter` to leave center, smaller `rot_exit` to
+re-enter center — both derived from the adaptive envelope above, not
+fixed constants) plus a consecutive-frame dwell requirement
 (`STABLE_FRAMES`) before a phase change is actually committed. This is
 the same two-part hysteresis pattern `SidePlankAnalyzer` uses for its
 `ALIGN_BROKEN` / `ALIGN_RESUME` band, just applied on both sides of
@@ -112,20 +145,37 @@ MIN_LANDMARK_VISIBILITY = 0.4
 REQUIRED_LANDMARKS = (LEFT_SHOULDER, RIGHT_SHOULDER, LEFT_HIP, RIGHT_HIP)
 CORE_VISIBILITY_MIN = 0.4
 
-# ---- rotation angle thresholds (degrees) — hysteresis band ----
-# Tuned against the depth-based (x-z) rotation signal — see module
-# docstring. Real seated-twist rotation ranges roughly 15-45 degrees of
-# yaw; these sit comfortably inside that range without requiring an
-# extreme twist to register.
-ROT_ENTER_DEG = 14.0  # must exceed this (from center) to start entering a side
-ROT_EXIT_DEG = 6.0  # must fall back below this to be considered at center
-ROT_PARTIAL_MIN_DEG = 4.0  # engaged enough to be a real attempt, not noise
+# ---- direction sign convention ----
+# Flip to -1 in one place if left/right come out mirrored for a given
+# camera/mirroring setup, rather than touching anything structural.
+DIRECTION_SIGN = 1
+
+# ---- magnitude: self-calibrating shoulder/hip width-ratio model ----
+BASELINE_RATIO_DECAY = 0.999  # slow decay so the "facing forward" baseline can drift
+BASELINE_RATIO_FLOOR = 0.3  # sanity floor so a bad first frame can't wreck the ratio
+LATERAL_SHIFT_WEIGHT = 0.35  # secondary, purely-2D direction vote weight vs. z's
+
+# ---- rotation hysteresis: relative to a running envelope of THIS
+# person/setup's observed motion, not fixed absolute degrees, so it
+# self-tunes regardless of how the geometry above happens to scale in a
+# given room/camera/body. Floors keep it from getting noise-sensitive
+# before the envelope has built up.
+ENVELOPE_DECAY = 0.985  # per-frame decay toward the floor when motion quiets down
+ENVELOPE_MIN_DEG = 10.0
+ENVELOPE_MAX_DEG = 75.0
+ENTER_FRACTION = 0.45  # must exceed this fraction of the envelope to enter a side
+EXIT_FRACTION = 0.18  # must fall back below this fraction to be considered at center
+PARTIAL_FRACTION = 0.14  # engaged enough to be a real attempt, not noise
+ROT_ENTER_FLOOR_DEG = 6.0
+ROT_EXIT_FLOOR_DEG = 2.5
+ROT_PARTIAL_FLOOR_DEG = 2.0
+
 STABLE_FRAMES = 3  # consecutive frames required to commit a phase change
 ANGLE_SMOOTH_ALPHA = 0.5
 
 # ---- timing validity for a side touch (center -> side) ----
 MIN_TOUCH_DURATION = 0.10  # seconds — faster than this = tracking glitch
-MAX_TOUCH_DURATION = 5.0  # seconds — slower than this = a pause, not a fluid rep
+MAX_TOUCH_DURATION = 6.0  # seconds — slower than this = a pause, not a fluid rep
 
 # ---- seated base-position gate ----
 # Only the two failure modes that are actually detectable from a front
@@ -138,8 +188,8 @@ STABLE_SEATED_FRAMES = 4
 GRACE_FRAMES = 10
 
 # ---- leg stability gate (counting gate only, per spec) ----
-LEG_STABILITY_WINDOW_SECONDS = 0.6
-LEG_SWING_THRESHOLD = 0.35  # normalized (by torso length) positional range
+LEG_STABILITY_WINDOW_SECONDS = 0.7
+LEG_SWING_THRESHOLD = 0.4  # normalized (by torso length) positional range
 
 # ---- camera framing ----
 FRAME_EDGE_MARGIN = 0.03
@@ -173,30 +223,28 @@ def _dist(a, b) -> float:
     return math.hypot(a.x - b.x, a.y - b.y)
 
 
-def _line_orientation_deg(a, b) -> float:
-    """Orientation of the segment a->b in the x-z (top-down) plane:
-    atan2(dz, dx) in degrees. 0 = both endpoints at equal camera depth
-    (segment square to the camera). This is the plane a torso's yaw
-    rotation actually shows up in for a front-facing camera — see module
-    docstring for why the image (x-y) plane is the wrong one to use."""
-    dx = b.x - a.x
-    dz = b.z - a.z
-    return math.degrees(math.atan2(dz, dx))
+def _shoulder_hip_ratio(l_shoulder, r_shoulder, l_hip, r_hip) -> float:
+    """2D shoulder width / hip width. Scale-invariant (both shrink/grow
+    together with camera distance), and shrinks specifically as the
+    shoulder line foreshortens relative to the (anchored) hip line during
+    a twist — see module docstring."""
+    shoulder_width = _dist(l_shoulder, r_shoulder)
+    hip_width = max(_dist(l_hip, r_hip), 1e-6)
+    return shoulder_width / hip_width
 
 
-def _rotation_deg(l_shoulder, r_shoulder, l_hip, r_hip) -> float:
-    """Signed torso rotation: the shoulder line's x-z orientation minus
-    the hip line's x-z orientation, wrapped to [-180, 180]. 0 = shoulders
-    square with the hips (facing forward). Positive = torso turned to the
-    wearer's left, negative = turned to the wearer's right (this sign
-    convention falls out of MediaPipe's left/right landmark labeling and
-    the mirrored "facingMode: user" camera feed the frontend requests)."""
-    shoulder_orient = _line_orientation_deg(l_shoulder, r_shoulder)
-    hip_orient = _line_orientation_deg(l_hip, r_hip)
-    diff = shoulder_orient - hip_orient
-    # wrap to [-180, 180]
-    diff = (diff + 180) % 360 - 180
-    return diff
+def _direction_vote(
+    l_shoulder, r_shoulder, mid_shoulder, mid_hip, shoulder_width
+) -> float:
+    """Signed, unitless vote for which way the torso is twisted — used
+    only for its sign. Combines two independent cues (see docstring):
+    which shoulder is nearer the camera (from `z`), and which way the
+    shoulder midpoint has drifted relative to the hip midpoint (2D
+    only). Neither is trusted for magnitude, only for sign, and only
+    when the torso rotation magnitude clears a noise floor anyway."""
+    z_vote = l_shoulder.z - r_shoulder.z
+    lateral_vote = (mid_shoulder.x - mid_hip.x) / max(shoulder_width, 1e-6)
+    return z_vote + LATERAL_SHIFT_WEIGHT * lateral_vote
 
 
 def _torso_lean_deg(mid_shoulder, mid_hip) -> float:
@@ -294,6 +342,14 @@ class RussianTwistAnalyzer:
         self.smoothed_rotation: Optional[float] = None
         self._last_phase_change_time: Optional[float] = None
 
+        # Self-calibrating magnitude model (see module docstring) — the
+        # highest shoulder/hip width ratio seen recently, standing in for
+        # "what does facing-forward look like for this person/camera."
+        self._baseline_ratio: Optional[float] = None
+        # Running envelope of observed |rotation| — the enter/exit
+        # thresholds are a fraction of this, not fixed absolute degrees.
+        self._envelope_deg = ENVELOPE_MIN_DEG
+
         # Counting
         self.left_count = 0
         self.right_count = 0
@@ -361,6 +417,9 @@ class RussianTwistAnalyzer:
             "framing_message": None,
             "torso_rotation_deg": None,
             "raw_rotation_deg": None,
+            "shoulder_hip_ratio": None,
+            "baseline_ratio": None,
+            "rotation_envelope_deg": None,
             "phase": self.phase,
             "left_count": self.left_count,
             "right_count": self.right_count,
@@ -494,8 +553,34 @@ class RussianTwistAnalyzer:
         response["legs_visible"] = legs_visible
         response["leg_message"] = None if legs_stable else "Keep your legs still."
 
-        # ---- rotation angle ----
-        raw_rotation = _rotation_deg(l_shoulder, r_shoulder, l_hip, r_hip)
+        # ---- rotation magnitude: self-calibrating shoulder/hip ratio ----
+        shoulder_width = _dist(l_shoulder, r_shoulder)
+        ratio = _shoulder_hip_ratio(l_shoulder, r_shoulder, l_hip, r_hip)
+
+        # Only recalibrate the baseline while the phase machine is at a
+        # CONFIRMED center (self.phase reflects last frame's committed
+        # state, not yet updated for this frame) — never while mid-twist.
+        # A naive "always decay toward whatever we're currently seeing"
+        # approach would slowly absorb a *held* twist into the baseline,
+        # eroding the signal to zero the longer a side is held — this is
+        # what stops that.
+        if self._baseline_ratio is None:
+            self._baseline_ratio = max(ratio, BASELINE_RATIO_FLOOR)
+        elif self.phase == "center":
+            self._baseline_ratio = max(
+                ratio, self._baseline_ratio * BASELINE_RATIO_DECAY, BASELINE_RATIO_FLOOR
+            )
+
+        ratio_frac = max(0.0, min(1.0, ratio / self._baseline_ratio))
+        magnitude_deg = math.degrees(math.acos(ratio_frac))
+
+        # ---- rotation direction: sign only, from two weak-but-cheap votes ----
+        direction_vote = _direction_vote(
+            l_shoulder, r_shoulder, mid_shoulder, mid_hip, shoulder_width
+        )
+        sign = 1.0 if direction_vote >= 0 else -1.0
+        raw_rotation = DIRECTION_SIGN * sign * magnitude_deg
+
         if self.smoothed_rotation is None:
             self.smoothed_rotation = raw_rotation
         else:
@@ -505,6 +590,23 @@ class RussianTwistAnalyzer:
             )
         response["raw_rotation_deg"] = round(raw_rotation, 1)
         response["torso_rotation_deg"] = round(self.smoothed_rotation, 1)
+        response["shoulder_hip_ratio"] = round(ratio, 3)
+        response["baseline_ratio"] = round(self._baseline_ratio, 3)
+
+        # ---- adaptive envelope: thresholds scale to what THIS person/setup
+        # actually produces, rather than a fixed absolute degree value ----
+        self._envelope_deg = max(
+            abs(self.smoothed_rotation),
+            self._envelope_deg * ENVELOPE_DECAY,
+        )
+        self._envelope_deg = max(
+            ENVELOPE_MIN_DEG, min(ENVELOPE_MAX_DEG, self._envelope_deg)
+        )
+        response["rotation_envelope_deg"] = round(self._envelope_deg, 1)
+
+        rot_enter = max(ROT_ENTER_FLOOR_DEG, ENTER_FRACTION * self._envelope_deg)
+        rot_exit = max(ROT_EXIT_FLOOR_DEG, EXIT_FRACTION * self._envelope_deg)
+        rot_partial = max(ROT_PARTIAL_FLOOR_DEG, PARTIAL_FRACTION * self._envelope_deg)
 
         feedback = framing_message
 
@@ -522,14 +624,14 @@ class RussianTwistAnalyzer:
 
             # ---- hysteresis phase classification ----
             if self.phase == "center":
-                if rot >= ROT_ENTER_DEG:
+                if rot >= rot_enter:
                     target_phase = "left"
-                elif rot <= -ROT_ENTER_DEG:
+                elif rot <= -rot_enter:
                     target_phase = "right"
                 else:
                     target_phase = "center"
             else:
-                if abs(rot) <= ROT_EXIT_DEG:
+                if abs(rot) <= rot_exit:
                     target_phase = "center"
                 else:
                     target_phase = self.phase
@@ -605,16 +707,16 @@ class RussianTwistAnalyzer:
                     self._attempt_peak_deg = rot
                 elif (
                     not self._attempt_flagged
-                    and abs(self._attempt_peak_deg) >= ROT_PARTIAL_MIN_DEG
-                    and abs(self._attempt_peak_deg) < ROT_ENTER_DEG
-                    and abs(rot) < abs(self._attempt_peak_deg) - 3.0
+                    and abs(self._attempt_peak_deg) >= rot_partial
+                    and abs(self._attempt_peak_deg) < rot_enter
+                    and abs(rot) < abs(self._attempt_peak_deg) - rot_exit / 2
                 ):
                     self._attempt_flagged = True
                     direction = "left" if self._attempt_peak_deg > 0 else "right"
                     if feedback is None:
                         feedback = f"Rotate further {direction}."
 
-                if abs(rot) < ROT_EXIT_DEG / 2:
+                if abs(rot) < rot_exit / 2:
                     self._attempt_peak_deg = 0.0
                     self._attempt_flagged = False
 
