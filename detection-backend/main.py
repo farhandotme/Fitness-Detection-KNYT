@@ -39,6 +39,7 @@ from src.routes.wallSitRoutes import router as wallSitRouter
 from src.routes.legRaiseRoutes import router as legRaiseRouter
 from src.routes.russianTwistRoutes import router as russianTwistRouter
 from src.routes.flutterKicksRoutes import router as flutterKicksRouter
+from src.routes.singleLegSquatRoutes import router as singleLegSquatRouter
 from src.routes.windmillRotationStretchRoutes import (
     router as windmillRotationStretchRouter,
 )
@@ -93,6 +94,7 @@ app.include_router(buttKicksRouter, prefix="/ws", tags="butt-kicks-router")
 app.include_router(wallSitRouter, prefix="/ws", tags="wall-sit-router")
 app.include_router(legRaiseRouter, prefix="/ws", tags="leg-raise-router")
 app.include_router(russianTwistRouter, prefix="/ws", tags="russian-twist-router")
+app.include_router(singleLegSquatRouter, prefix="/ws", tags="single-leg-squat-router")
 app.include_router(
     windmillRotationStretchRouter, prefix="/ws", tags="windmill-rotation-stretch-router"
 )
