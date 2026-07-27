@@ -14,20 +14,12 @@ MODEL_PATH = str(
     / "pose_landmarker.task"
 )
 
-# Defaults tuned for general rep counting.
-DEFAULT_MIN_DETECTION_CONFIDENCE = 0.7
-DEFAULT_MIN_PRESENCE_CONFIDENCE = 0.7
-DEFAULT_MIN_TRACKING_CONFIDENCE = 0.65
+DEFAULT_MIN_DETECTION_CONFIDENCE = 0.35
+DEFAULT_MIN_PRESENCE_CONFIDENCE = 0.35
+DEFAULT_MIN_TRACKING_CONFIDENCE = 0.35
 
-# More forgiving for full-body / farther-away exercises.
-FULL_BODY_MIN_DETECTION_CONFIDENCE = 0.6
-FULL_BODY_MIN_PRESENCE_CONFIDENCE = 0.6
-FULL_BODY_MIN_TRACKING_CONFIDENCE = 0.55
-
-# How many consecutive frames with no detected pose to tolerate.
 MAX_HOLD_FRAMES = 4
 
-# Pose landmark indices (MediaPipe BlazePose topology)
 NOSE = 0
 LEFT_EYE_INNER = 1
 LEFT_EYE = 2
@@ -58,8 +50,6 @@ RIGHT_FOOT_INDEX = 32
 
 
 class PoseEngine:
-    """Owns exactly one PoseLandmarker. Call `detect()` once per frame."""
-
     def __init__(
         self,
         running_mode: Optional[vision.RunningMode] = None,
@@ -72,6 +62,7 @@ class PoseEngine:
 
         if running_mode is None:
             running_mode = vision.RunningMode.VIDEO
+
         self.running_mode = running_mode
 
         base_options = mp_python.BaseOptions(model_asset_path=MODEL_PATH)
@@ -92,8 +83,6 @@ class PoseEngine:
     def detect(
         self, frame, timestamp_ms: int = 0
     ) -> Optional[list[NormalizedLandmark]]:
-        """Run pose detection once. Returns landmarks or None."""
-
         if frame is None or getattr(frame, "size", 0) == 0:
             return None
 

@@ -1,31 +1,29 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-import asyncio
 import base64
-import time
 
 import cv2
 import numpy as np
 
-from src.detectors.single_leg_squat import SingleLegSquatSession, VALID_MODES, VALID_SIDES
+from src.detectors.single_leg_squat import (
+    SingleLegSquatSession,
+    VALID_MODES,
+    VALID_SIDES,
+)
 
 router = APIRouter()
 
 
 def decode_frame(raw: str):
     if "," in raw:
-        raw = raw.split(",")[1]
+        raw = raw.split(",", 1)[1]
 
     image_bytes = base64.b64decode(raw)
     np_array = np.frombuffer(image_bytes, dtype=np.uint8)
-
     return cv2.imdecode(np_array, cv2.IMREAD_COLOR)
 
 
 def _query_int(websocket: WebSocket, name: str, default: int, lo: int, hi: int) -> int:
-    """Same convention as `pushupRoutes.py` / `legRaiseRoutes.py` — the
-    coach-assigned plan reaches the backend via query params, and only
-    `SingleLegSquatSession` decides whether it's been met."""
     raw = websocket.query_params.get(name)
     if raw is None:
         return default
@@ -42,9 +40,6 @@ def _query_choice(websocket: WebSocket, name: str, default: str, choices) -> str
 
 
 def _log_rep_progress(label: str, result: dict, exercise_already_logged: bool) -> bool:
-    """Print exactly one line per completed rep, and one line when the
-    exercise finishes — never per-frame. Same convention as
-    `pushupRoutes.py` / `legRaiseRoutes.py`."""
     if result.get("rep_completed"):
         rep_count = result.get("rep_count")
         target_reps = result.get("target_reps")
@@ -88,25 +83,34 @@ async def single_leg_squat(websocket: WebSocket):
         mode=mode,
     )
 
+    frame_ts_ms = 0
+
     try:
         exercise_logged = False
+
         while True:
-            image = await websocket.receive_text()
+            raw = await websocket.receive_text()
+            frame = decode_frame(raw)
 
-            frame = decode_frame(image)
+            if frame is None:
+                await websocket.send_json(
+                    {
+                        "pose_detected": False,
+                        "feedback": "Invalid frame received.",
+                    }
+                )
+                continue
 
-            timestamp = int(time.time() * 1000)
+            frame_ts_ms += 33
 
-            result = counter.detect(frame, timestamp)
-
-            exercise_logged = _log_rep_progress("SingleLegSquat", result, exercise_logged)
+            result = counter.detect(frame, frame_ts_ms)
+            exercise_logged = _log_rep_progress(
+                "SingleLegSquat", result, exercise_logged
+            )
 
             await websocket.send_json(result)
 
-            await asyncio.sleep(0.001)
-
     except WebSocketDisconnect:
         print("Disconnected: Single Leg Squat")
-
     finally:
         counter.close()
