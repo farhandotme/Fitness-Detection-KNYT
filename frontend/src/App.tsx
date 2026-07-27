@@ -42,6 +42,7 @@ import WallSitPage from "./pages/WallSitPage";
 import LegRaisePage from "./pages/LegRaisePage";
 import RussianTwistPage from "./pages/RussianTwistPage";
 import SingleLegSquatPage from "./pages/SingleLegSquatPage";
+import HalfMoonPage from "./pages/HalfMoonPage";
 
 function App() {
   return (
@@ -93,6 +94,7 @@ function App() {
           <Route path="leg_raise" element={<LegRaisePage />} />
           <Route path="russian_twist" element={<RussianTwistPage />} />
           <Route path="single_leg_squat" element={<SingleLegSquatPage />} />
+          <Route path="half_moon_pose" element={<HalfMoonPage />} />
           <Route
             path="standing_cross_crunch"
             element={<StandingCrossCrunchPage />}

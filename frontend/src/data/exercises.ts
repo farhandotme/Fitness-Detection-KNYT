@@ -502,6 +502,18 @@ export const EXERCISES: ExerciseMeta[] = [
     status: "available",
     route: "/single_leg_squat",
   },
+  {
+    id: "half_moon_pose",
+    name: "Half Moon Pose",
+    category: "Full Body",
+    difficulty: "Intermediate",
+    equipment: "Bodyweight",
+    emoji: "🌙",
+    description: "Tracks torso rotation and core engagement.",
+    tags: ["Yoga", "obliques"],
+    status: "available",
+    route: "/half_moon_pose",
+  },
 ];
 
 /** True if a search term matches an exercise's name/category/tags. */
