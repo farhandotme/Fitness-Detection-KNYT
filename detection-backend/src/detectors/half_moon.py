@@ -1,87 +1,3 @@
-"""
-Half Moon Pose (Ardha Chandrasana) hold timing + posture correction.
-
-Design
-------
-Same family as `PlankHoldAnalyzer` / `SidePlankAnalyzer` / `WallSitAnalyzer`
-— Half Moon has no reps, it's a single continuous balance hold, so this
-does **not** run a rep state machine. It runs the identical **hold timer
-that only advances while the person is verified, frame by frame, to
-actually be in a valid Half Moon shape**:
-
-    * The instant the pose breaks (both feet down, the lifted leg drops,
-      the torso folds all the way down, or the camera loses the person)
-      the timer **pauses**. It never silently resets to zero, so
-      accumulated `hold_seconds` is monotonic for the lifetime of a set.
-      `current_streak_seconds` (time since the last break) is what
-      resets, giving live feedback on the *current* attempt without
-      punishing total progress.
-    * The instant a valid shape returns, the timer picks back up from
-      exactly where it left off.
-
-Balance wobble is expected and is explicitly NOT treated the same as a
-hard break: small shifts show up as `balance_confidence` dipping (a
-rolling measure of how consistently the last couple of seconds held
-pose), not as the timer stopping — only a genuine loss of the shape
-(foot down, leg dropped, torso collapsed, framing gone) pauses it.
-
-Which leg is standing vs. lifted
----------------------------------
-Unlike the other hold exercises, Half Moon is asymmetric — the two legs
-have different jobs — so the very first thing each frame does is work
-out `standing_side`: whichever ankle sits clearly lower in the frame
-(closer to the floor) is standing; the other is lifted. Once a side is
-established, it's kept "sticky" across frames (like `active_side` in the
-side plank) so a single noisy frame doesn't spin the pose around.
-
-Form signal
------------
-Core gating (hard-break) signals, evaluated using the standing leg's own
-proportions as the reference scale (so it doesn't matter how close/far
-the person is from the camera):
-
-  * `leg_height_ratio` = how far above the standing foot the lifted ankle
-    sits, normalized by standing-leg length. Near 0 = both feet basically
-    level (not lifted at all); this is the main "is a leg actually up"
-    gate.
-  * `lifted_knee_angle` = angle(hip, knee, ankle) on the lifted leg.
-    Needs to read as reasonably straight — a tightly bent/tucked knee
-    looks like tree pose, not an extended Half Moon leg.
-  * `standing_knee_angle` = angle(hip, knee, ankle) on the standing leg.
-    A slight bend is fine (explicitly allowed for balance), but it can't
-    collapse into a deep bend or this becomes a lunge/squat.
-  * `standing_hip_angle` = angle(shoulder, hip, knee) on the standing
-    side. Guards against a full forward fold — Half Moon opens the torso
-    sideways, it doesn't hinge the torso all the way down over the leg.
-
-Softer, secondary signals (grade quality, never pause the timer):
-
-  * `rotation_signal` = |shoulder_L.z - shoulder_R.z| (relative depth
-    between the shoulders). Near 0 means the chest is still square to the
-    camera; a real Half Moon rotates the chest open, which shows up as
-    the shoulders separating in depth. Low value → "hips_not_open".
-  * `standing_side_lean_angle` = tilt of the standing-side shoulder->hip
-    line from vertical. Some lean is normal (the torso reaches out over
-    the standing leg), but a lot of it reads as leaning on the standing
-    side rather than lengthening open.
-  * `top_arm_reach` = how far the top wrist (assumed to be on the same
-    side as the lifted leg, per the classic shape) sits above its
-    shoulder, normalized by torso length.
-
-Support modifier
-----------------
-There's no object-detection model in this codebase to see a literal wall
-or block — `PoseEngine` only returns body landmarks — so support is
-handled the same way `target_seconds` is: the frontend tells the backend
-what's being used (`support_mode` = "free" | "wall" | "block", a session
-query param, same convention as the target/set params), and the analyzer
-uses it purely as a **threshold modifier**: a wall relaxes the lean
-check (leaning briefly into a wall is expected), a block relaxes the
-lift-height check slightly (the "floor" is effectively raised). This
-matches "use it as a support modifier, not a disqualifier" without
-pretending to detect an object that isn't there.
-"""
-
 import math
 from collections import deque
 from typing import Any, Optional
@@ -100,10 +16,6 @@ from src.engines.poseEngine import (  # type: ignore
     RIGHT_WRIST,
 )
 
-# -------------------------------------------------------------------------
-# Tunable constants
-# -------------------------------------------------------------------------
-
 MIN_LANDMARK_VISIBILITY = 0.4
 
 LEG_LANDMARKS = {
@@ -115,65 +27,39 @@ CORE_LANDMARKS = (LEFT_SHOULDER, RIGHT_SHOULDER, LEFT_HIP, RIGHT_HIP)
 
 SUPPORT_MODES = ("free", "wall", "block")
 
-# ---- which leg is standing vs lifted ----
-# Ankle-height difference (normalized to frame height) needed before one
-# side is confidently called "standing" and the other "lifted". Below
-# this, both feet read as roughly level (i.e. not a Half Moon stance yet).
 STANCE_MARGIN = 0.10
 
-# ---- lifted-leg height (normalized by standing leg length) ----
 LIFT_BREAK = 0.28
 LIFT_RESUME = 0.36
 LIFT_IDEAL = 0.55
 
-# ---- lifted knee angle (hip-knee-ankle), degrees — must read "extended" ----
 EXTENSION_BREAK = 118.0
 EXTENSION_RESUME = 130.0
 
-# ---- standing knee angle (hip-knee-ankle), degrees ----
-# A slight bend is explicitly allowed for balance — only a deep bend
-# (turning this into a lunge/squat) is a hard break.
 STANDING_KNEE_BREAK = 120.0
 STANDING_KNEE_RESUME = 132.0
-STANDING_KNEE_LOCKED_ABOVE = 174.0  # soft note: almost hyperextended
+STANDING_KNEE_OVEREXTENDED = 178.0
 
-# ---- standing-side hip angle (shoulder-hip-knee), degrees ----
-# Guards against a full forward fold — the torso opens sideways in Half
-# Moon, it doesn't hinge all the way down over the standing leg.
 FOLD_BREAK = 55.0
 FOLD_RESUME = 68.0
 
-# ---- torso rotation ("chest openness"), relative shoulder depth ----
 ROTATION_IDEAL = 0.09
 
-# ---- standing-side lean angle (shoulder->hip vs vertical), degrees ----
 LEAN_SOFT_MAX = 40.0
 
-# ---- top-arm reach, (shoulder.y - wrist.y) / torso length ----
 REACH_IDEAL = 0.35
 
-# Per-issue form_score penalty (applied per frame while holding).
 MISTAKE_PENALTY = {
-    "standing_knee_locked": 8,
     "lifted_leg_low": 14,
     "hips_not_open": 16,
-    "top_arm_not_reaching": 10,
-    "leaning_into_standing_side": 12,
+    "top_arm_not_reaching": 8,
+    "leaning_into_standing_side": 10,
 }
 
 SCORE_HISTORY = 30
-SCORE_SAMPLE_INTERVAL = 1.0  # seconds
-
-# Rolling "is this frame currently holding" window used for
-# `balance_confidence` — reflects wobble over roughly the last 1.5s,
-# independent of (and faster-updating than) `avg_form_score`.
+SCORE_SAMPLE_INTERVAL = 1.0
 BALANCE_WINDOW = 45
 
-# -------------------------------------------------------------------------
-# Camera framing thresholds (front / slight front-side oblique view — the
-# whole spread-out shape needs to be in frame, not just a tight upright
-# crop like the wall sit).
-# -------------------------------------------------------------------------
 FRAME_EDGE_MARGIN = 0.03
 BODY_SPAN_TOO_CLOSE = 0.95
 BODY_SPAN_TOO_FAR = 0.22
@@ -185,7 +71,7 @@ def _looks_like_a_person(landmarks) -> bool:
         for i in CORE_LANDMARKS
         if landmarks[i].visibility is not None and landmarks[i].visibility > 0.6
     )
-    return visible_core >= 2  # an oblique/side-leaning view may not show all 4 cleanly
+    return visible_core >= 2
 
 
 def _leg_visibility(landmarks, side: str) -> float:
@@ -196,33 +82,7 @@ def _leg_visibility(landmarks, side: str) -> float:
     return min(scores) if scores else 0.0
 
 
-# Threshold used specifically to decide standing-vs-lifted role. Deciding
-# a role only needs the hip and ankle (see `_stance_visibility` below) —
-# requiring the full leg tuple (which also includes the knee and
-# shoulder) here was too strict: an actively-extended lifted leg is
-# routinely scored lower confidence by the pose model than a normally
-# planted one even when it's clearly visible on camera, which was
-# rejecting genuinely correct Half Moon attempts as "can't see your legs."
-STANCE_VISIBILITY_MIN = 0.3
-
-
-def _stance_visibility(landmarks, side: str) -> float:
-    """Lowest visibility between just the hip and ankle on `side` — the
-    only two landmarks `_pick_standing_side` actually reads. Deliberately
-    lighter than `_leg_visibility` (which also checks the knee and
-    shoulder) so a well-tracked-but-lower-confidence extended leg still
-    gets picked up."""
-    _, hip_i, _, ankle_i = LEG_LANDMARKS[side]
-    hip_v = landmarks[hip_i].visibility
-    ankle_v = landmarks[ankle_i].visibility
-    return min(
-        hip_v if hip_v is not None else 0.0,
-        ankle_v if ankle_v is not None else 0.0,
-    )
-
-
 def _angle_deg(a, b, c) -> float:
-    """Angle at vertex `b`, between rays b->a and b->c, in degrees."""
     ang = math.degrees(
         math.atan2(c.y - b.y, c.x - b.x) - math.atan2(a.y - b.y, a.x - b.x)
     )
@@ -237,8 +97,6 @@ def _dist(a, b) -> float:
 
 
 def _vertical_deviation_deg(top, bottom) -> float:
-    """Angle of the vector top->bottom from straight-down vertical, in
-    degrees. 0deg = perfectly plumb."""
     dx = bottom.x - top.x
     dy = bottom.y - top.y
     if dx == 0 and dy == 0:
@@ -247,14 +105,6 @@ def _vertical_deviation_deg(top, bottom) -> float:
 
 
 def _framing_feedback(all_points) -> Optional[str]:
-    """Coaches the user into a good spot for the camera to judge a Half
-    Moon from — checked every frame, independent of exercise form.
-
-    Half Moon's silhouette is wide and spread out (lifted leg extended
-    to one side, top arm reaching up), so this only checks edge-clipping
-    and overall distance — it does NOT require an upright body shape
-    the way the wall sit's framing check does.
-    """
     for p in all_points:
         if (
             p.x < FRAME_EDGE_MARGIN
@@ -280,13 +130,6 @@ def _framing_feedback(all_points) -> Optional[str]:
 
 
 class HalfMoonAnalyzer:
-    """Stateful Half Moon hold timer + posture checker.
-
-    No `target_reps` here — the coach-assigned target is a duration,
-    `target_seconds`. `session_complete` is `hold_seconds >= target_seconds`,
-    exactly mirroring the other hold analyzers.
-    """
-
     def __init__(
         self,
         target_seconds: Optional[int] = None,
@@ -309,29 +152,17 @@ class HalfMoonAnalyzer:
         self.last_timestamp_s: Optional[float] = None
         self.session_start_time: Optional[float] = None
 
-        self._was_complete = False  # for edge-triggering `target_reached`
-
+        self._was_complete = False
         self.form_scores: deque[int] = deque(maxlen=SCORE_HISTORY)
         self._last_score_sample_time: Optional[float] = None
-
-        # Rolling holding/not-holding window for balance_confidence.
         self._balance_window: deque[bool] = deque(maxlen=BALANCE_WINDOW)
 
-    # ---------------------------------------------------------------
     def _is_complete(self) -> bool:
         return (
             self.target_seconds is not None and self.hold_seconds >= self.target_seconds
         )
 
     def _pick_standing_side(self, landmarks) -> Optional[str]:
-        """Decide standing vs lifted leg from relative ankle height, with
-        stickiness so a single noisy frame can't flip which leg is which
-        mid-hold.
-
-        `diff` is left-ankle-y minus right-ankle-y: positive means the
-        left ankle sits lower in the frame (closer to the floor, i.e.
-        left is standing); negative means right is standing.
-        """
         vis = {side: _leg_visibility(landmarks, side) for side in ("left", "right")}
         if (
             vis["left"] < MIN_LANDMARK_VISIBILITY
@@ -344,21 +175,16 @@ class HalfMoonAnalyzer:
         diff = l_ankle.y - r_ankle.y
 
         if self.standing_side == "left":
-            # Only hand off to "right" if right has become clearly (not
-            # marginally) the more-grounded foot.
             return "right" if diff < -STANCE_MARGIN else "left"
         if self.standing_side == "right":
             return "left" if diff > STANCE_MARGIN else "right"
 
-        # No prior assignment yet — require a clear, unambiguous margin
-        # before committing to a side at all.
         if diff > STANCE_MARGIN:
             return "left"
         if diff < -STANCE_MARGIN:
             return "right"
         return None
 
-    # ---------------------------------------------------------------
     def update(self, landmarks, timestamp_ms: int) -> dict[str, Any]:
         t = timestamp_ms / 1000.0
         if self.session_start_time is None:
@@ -406,13 +232,14 @@ class HalfMoonAnalyzer:
             "form_score": None,
             "avg_form_score": self._avg(self.form_scores),
             "feedback": None,
+            "soft_notes": [],
             "low_visibility": False,
             "elapsed_time": round(elapsed, 2),
         }
 
         dt = 0.0
         if self.last_timestamp_s is not None:
-            dt = max(0.0, min(t - self.last_timestamp_s, 0.5))  # clamp huge gaps
+            dt = max(0.0, min(t - self.last_timestamp_s, 0.5))
         self.last_timestamp_s = t
 
         if landmarks is None or not _looks_like_a_person(landmarks):
@@ -493,18 +320,11 @@ class HalfMoonAnalyzer:
             (lifted_shoulder.y - top_wrist.y) / torso_len if top_arm_visible else None
         )
 
-        # ---- support-mode threshold modifiers ----
-        # A wall makes some lean into it expected; a block effectively
-        # raises the floor a little, so the lift-height bar can be a touch
-        # lower without it being a worse pose. Neither relaxes the core
-        # "is this actually Half Moon" gates (extension, standing knee,
-        # fold) — support only changes how forgiving the softer checks are.
         lean_soft_max = LEAN_SOFT_MAX * (1.4 if self.support_mode == "wall" else 1.0)
         lift_break = LIFT_BREAK * (0.85 if self.support_mode == "block" else 1.0)
         lift_resume = LIFT_RESUME * (0.85 if self.support_mode == "block" else 1.0)
         lift_ideal = LIFT_IDEAL * (0.9 if self.support_mode == "block" else 1.0)
 
-        # ---- resolve hold-validity this frame (with hysteresis) ----
         if self.hold_active:
             leg_too_low = leg_height_ratio < lift_break
             knee_not_extended = lifted_knee_angle < EXTENSION_BREAK
@@ -521,16 +341,17 @@ class HalfMoonAnalyzer:
         )
         holding_now = framing_message is None and not hard_break
 
-        # ---- form tiering (only meaningful while holding) ----
         issues: list[str] = []
         messages: list[str] = []
+        soft_notes: list[str] = []
         hip_opening_ok = True
         top_arm_reach_ok = True
 
         if holding_now:
-            if standing_knee_angle > STANDING_KNEE_LOCKED_ABOVE:
-                issues.append("standing_knee_locked")
-                messages.append("Soften the standing knee slightly for balance.")
+            if standing_knee_angle >= STANDING_KNEE_OVEREXTENDED:
+                soft_notes.append(
+                    "Soften the standing knee a touch; avoid locking it out."
+                )
 
             if leg_height_ratio < lift_ideal:
                 issues.append("lifted_leg_low")
@@ -550,13 +371,10 @@ class HalfMoonAnalyzer:
                 top_arm_reach_ok = False
 
             if standing_side_lean_angle > lean_soft_max:
-                issues.append("leaning_into_standing_side")
-                messages.append(
-                    "Lengthen up and out through both sides, rather than "
-                    "leaning into your standing leg."
+                soft_notes.append(
+                    "Lengthen up and out through both sides, rather than leaning into your standing leg."
                 )
 
-        # ---- advance / pause the timer ----
         form_score = None
         hold_quality = None
         if holding_now:
@@ -600,7 +418,6 @@ class HalfMoonAnalyzer:
         target_reached = is_complete and not self._was_complete
         self._was_complete = is_complete
 
-        # ---- feedback priority: framing > hard break > form flaws > praise ----
         feedback = framing_message
         if feedback is None and leg_too_low:
             feedback = "Lift the other leg out and up — extend it away from your body."
@@ -618,6 +435,8 @@ class HalfMoonAnalyzer:
             )
         if feedback is None and messages:
             feedback = messages[0]
+        if feedback is None and soft_notes:
+            feedback = soft_notes[0]
         if feedback is None and not self.started and holding_now:
             feedback = "Nice — you're balanced in Half Moon, stay steady!"
         if feedback is None and target_reached:
@@ -627,8 +446,6 @@ class HalfMoonAnalyzer:
         if feedback is None and holding_now:
             feedback = "Press into the standing leg — reach the top arm up!"
         if feedback is None and self.hold_active is False and self.started:
-            # A wobble that hasn't fully broken form yet — reassurance,
-            # not a hard error, per the beginner-friendly requirement.
             feedback = "A little wobble is fine — find your gaze point and reset."
         if feedback is None:
             feedback = (
@@ -664,12 +481,12 @@ class HalfMoonAnalyzer:
                 "form_score": form_score,
                 "avg_form_score": self._avg(self.form_scores),
                 "feedback": feedback,
+                "soft_notes": soft_notes,
             }
         )
         response.update(self._progress_fields())
         return response
 
-    # ---------------------------------------------------------------
     def _register_broken_frame(self):
         if self.hold_active:
             self.break_count += 1
@@ -695,16 +512,6 @@ class HalfMoonAnalyzer:
 
 
 class HalfMoonSession:
-    """Full Half Moon session: one shared pose model + one analyzer.
-
-    `target_seconds` / `target_sets` / `set_number` / `support_mode` are
-    the coach-assigned plan for this user, supplied by the caller (the
-    websocket route, from query params) — same convention as the other
-    hold sessions. The frontend does not decide on its own whether a
-    set/exercise is done; `session_complete` and `exercise_complete` are
-    both computed here.
-    """
-
     def __init__(
         self,
         target_seconds: Optional[int] = None,
