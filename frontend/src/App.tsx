@@ -41,6 +41,7 @@ import ButtKicksPage from "./pages/ButtKicksPage";
 import WallSitPage from "./pages/WallSitPage";
 import LegRaisePage from "./pages/LegRaisePage";
 import RussianTwistPage from "./pages/RussianTwistPage";
+import SingleLegSquatPage from "./pages/SingleLegSquatPage";
 
 function App() {
   return (
@@ -91,6 +92,7 @@ function App() {
           <Route path="wall_sit" element={<WallSitPage />} />
           <Route path="leg_raise" element={<LegRaisePage />} />
           <Route path="russian_twist" element={<RussianTwistPage />} />
+          <Route path="single_leg_squat" element={<SingleLegSquatPage />} />
           <Route
             path="standing_cross_crunch"
             element={<StandingCrossCrunchPage />}

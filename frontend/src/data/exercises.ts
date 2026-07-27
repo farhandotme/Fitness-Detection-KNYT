@@ -490,6 +490,18 @@ export const EXERCISES: ExerciseMeta[] = [
     status: "available",
     route: "/russian_twist",
   },
+  {
+    id: "single_leg_squat",
+    name: "Single Leg Squat",
+    category: "Core",
+    difficulty: "Intermediate",
+    equipment: "Bodyweight",
+    emoji: "🦵",
+    description: "Tracks torso rotation and core engagement.",
+    tags: ["core", "obliques"],
+    status: "available",
+    route: "/single_leg_squat",
+  },
 ];
 
 /** True if a search term matches an exercise's name/category/tags. */
