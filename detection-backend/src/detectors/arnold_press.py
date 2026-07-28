@@ -20,10 +20,16 @@ tracking the other carries the rep alone instead of stalling it.
 What actually makes it an "Arnold" press vs. a plain overhead/shoulder
 press is the palm-rotation through the movement — and that's not
 something a 2D pose skeleton can see at all (no hand-orientation data,
-just a wrist point). So this detector counts the press motion itself
-(the part that's actually measurable) and leaves the rotation cue as
-coaching copy rather than something it grades — same honesty tradeoff
-`leg_raise.py` makes about not being able to see forearm rotation either.
+just a wrist point). What IS visible, though, is the consequence of that
+rotation: an Arnold press starts with elbows tucked together in front of
+the chest and flares them outward as the arms extend, while a standard
+shoulder press starts with elbows already out near shoulder-width and
+doesn't need to widen further. That tuck-and-flare pattern is measured
+(elbow-to-elbow distance, normalized by shoulder width) and used as a
+hard requirement — a rep that starts already flared, or doesn't widen
+enough through the press, is rejected as "that looked like a shoulder
+press" rather than counted. See `ELBOW_GAP_RACK_MAX_RATIO` /
+`MIN_ELBOW_WIDEN_RATIO` below.
 
 Why no calibration step (unlike `single_leg_squat.py`)
 --------------------------------------------------------
@@ -97,6 +103,24 @@ MAX_REP_DURATION = 10.0
 # requires the wrist to sit above the shoulder line by this fraction of
 # torso length.
 WRIST_ABOVE_SHOULDER_MIN = 0.10
+
+# Arnold-press-vs-shoulder-press discrimination.
+#
+# A 2D pose skeleton has no hand-orientation landmark at all — there's no
+# way to directly see palms rotating from facing-in to facing-forward, so
+# the rotation itself genuinely cannot be measured. But the rotation
+# isn't incidental to the movement — it's *why* an Arnold press starts
+# with elbows tucked together in front of the chest and flares them out
+# as the arms extend, while a standard shoulder/military press starts
+# with elbows already out near shoulder-width and doesn't need to widen
+# further. That tuck-and-flare pattern IS measurable (elbow-to-elbow
+# distance, normalized by shoulder width), and a plain shoulder press
+# structurally can't produce it — so it's used as the stand-in signal
+# instead of pretending to detect rotation directly.
+ELBOW_GAP_RACK_MAX_RATIO = (
+    0.85  # elbows must start this much narrower than shoulder-width
+)
+MIN_ELBOW_WIDEN_RATIO = 0.18  # and widen by at least this much through the press
 
 # "Rack" confirmation at the bottom — wrist roughly at shoulder height,
 # not down at the hip (which would also read a bent elbow on some builds).
@@ -253,6 +277,9 @@ class ArnoldPressAnalyzer:
         self._rep_angle_acc = 0.0
         self._current_rep_issues: set[str] = set()
         self._rep_start_torso_incline: Optional[float] = None
+        self._rack_elbow_gap_ratio: Optional[float] = None  # tracked while resting
+        self._rep_start_elbow_gap_ratio: Optional[float] = None
+        self._rep_max_elbow_gap_ratio: Optional[float] = None
 
         self.session_start_time: Optional[float] = None
 
@@ -313,6 +340,8 @@ class ArnoldPressAnalyzer:
             "torso_stable_ok": True,
             "rep_duration": None,
             "rep_avg_speed": None,
+            "rack_confirmed": False,
+            "elbow_gap_ratio": None,
         }
 
         if landmarks is None or not _looks_like_a_person(landmarks):
@@ -339,6 +368,7 @@ class ArnoldPressAnalyzer:
         mid_shoulder = _midpoint(l_shoulder, r_shoulder)
         mid_hip = _midpoint(l_hip, r_hip)
         torso_length = max(_dist(mid_shoulder, mid_hip), 1e-6)
+        shoulder_width = max(_dist(l_shoulder, r_shoulder), 1e-6)
 
         torso_incline = _torso_incline_deg(mid_shoulder, mid_hip)
 
@@ -436,6 +466,14 @@ class ArnoldPressAnalyzer:
         arms_in_sync = angle_diff <= SYNC_SOFT_TOLERANCE_DEG
         response["arms_in_sync"] = arms_in_sync
 
+        # ---- elbow-to-elbow gap (drives the Arnold-vs-shoulder-press check) ----
+        elbow_gap_ratio = None
+        if _visible((l_elbow,)) and _visible((r_elbow,)):
+            elbow_gap_ratio = _dist(l_elbow, r_elbow) / shoulder_width
+        response["elbow_gap_ratio"] = (
+            round(elbow_gap_ratio, 2) if elbow_gap_ratio is not None else None
+        )
+
         # ---- "actually overhead", not just "elbow is straight" ----
         wrist_overhead_ok = True
         gaps = []
@@ -479,6 +517,8 @@ class ArnoldPressAnalyzer:
                 self._rep_angle_acc = 0.0
                 self._current_rep_issues = set()
                 self._rep_start_torso_incline = None
+                self._rep_start_elbow_gap_ratio = None
+                self._rep_max_elbow_gap_ratio = None
                 if feedback is None:
                     feedback = (
                         "Lost upright position mid-rep — not counted. "
@@ -494,6 +534,12 @@ class ArnoldPressAnalyzer:
             )
             if self.stage == "down" and self.rep_start_time is None:
                 self._rep_start_torso_incline = torso_incline
+                if elbow_gap_ratio is not None:
+                    self._rack_elbow_gap_ratio = elbow_gap_ratio
+            response["rack_confirmed"] = (
+                self._rack_elbow_gap_ratio is not None
+                and self._rack_elbow_gap_ratio <= ELBOW_GAP_RACK_MAX_RATIO
+            )
 
             if self.last_angle is not None:
                 self._rep_angle_acc += abs(self.smoothed_angle - self.last_angle)
@@ -508,6 +554,16 @@ class ArnoldPressAnalyzer:
                 self.rep_start_time = t
                 self._rep_angle_acc = 0.0
                 self._current_rep_issues = set()
+                self._rep_start_elbow_gap_ratio = self._rack_elbow_gap_ratio
+                self._rep_max_elbow_gap_ratio = self._rack_elbow_gap_ratio
+
+            if self.rep_start_time is not None and elbow_gap_ratio is not None:
+                if self._rep_max_elbow_gap_ratio is None:
+                    self._rep_max_elbow_gap_ratio = elbow_gap_ratio
+                else:
+                    self._rep_max_elbow_gap_ratio = max(
+                        self._rep_max_elbow_gap_ratio, elbow_gap_ratio
+                    )
 
             if self.rep_start_time is not None:
                 if not arms_in_sync and angle_diff <= SYNC_BLOCK_TOLERANCE_DEG:
@@ -535,6 +591,16 @@ class ArnoldPressAnalyzer:
                 and not wrist_overhead_ok
             ):
                 feedback = "Press all the way overhead, not out to the side."
+            if (
+                feedback is None
+                and self.stage == "down"
+                and self.rep_start_time is None
+                and not response["rack_confirmed"]
+            ):
+                feedback = (
+                    "Tuck your elbows in front of your chest, palms facing "
+                    "you — that's the Arnold press start, not a shoulder-press stance."
+                )
 
             if rep_completed:
                 rep_duration = (
@@ -545,7 +611,19 @@ class ArnoldPressAnalyzer:
                 if rep_duration and rep_duration > 0:
                     rep_avg_speed = self._rep_angle_acc / rep_duration
 
-                unusable = angle_diff > SYNC_BLOCK_TOLERANCE_DEG
+                not_tucked_start = (
+                    self._rep_start_elbow_gap_ratio is None
+                    or self._rep_start_elbow_gap_ratio > ELBOW_GAP_RACK_MAX_RATIO
+                )
+                insufficient_widen = (
+                    self._rep_start_elbow_gap_ratio is None
+                    or self._rep_max_elbow_gap_ratio is None
+                    or (self._rep_max_elbow_gap_ratio - self._rep_start_elbow_gap_ratio)
+                    < MIN_ELBOW_WIDEN_RATIO
+                )
+                not_arnold_style = not_tucked_start or insufficient_widen
+
+                unusable = angle_diff > SYNC_BLOCK_TOLERANCE_DEG or not_arnold_style
 
                 valid = (
                     not unusable
@@ -577,7 +655,13 @@ class ArnoldPressAnalyzer:
                             )
                 else:
                     rep_completed = False
-                    if unusable:
+                    if not_arnold_style:
+                        feedback = (
+                            "That looked like a shoulder press, not an Arnold press — "
+                            "not counted. Start with elbows tucked in front of your "
+                            "chest and flare them out as you press."
+                        )
+                    elif angle_diff > SYNC_BLOCK_TOLERANCE_DEG:
                         feedback = (
                             "That wasn't a synchronized two-arm press — not counted."
                         )
@@ -594,6 +678,8 @@ class ArnoldPressAnalyzer:
                 self._rep_angle_acc = 0.0
                 self._current_rep_issues = set()
                 self._rep_start_torso_incline = None
+                self._rep_start_elbow_gap_ratio = None
+                self._rep_max_elbow_gap_ratio = None
 
             elif (
                 not wrist_near_rack_ok

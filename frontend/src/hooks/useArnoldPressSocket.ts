@@ -36,6 +36,11 @@ export interface ArnoldPressData {
   torso_stable_ok: boolean;
   rep_duration: number | null;
   rep_avg_speed: number | null;
+  /** True once the resting elbow position is tucked in tight enough to
+   * count as a genuine Arnold-press rack (vs. a shoulder-press stance).
+   * See `ELBOW_GAP_RACK_MAX_RATIO` in arnold_press.py. */
+  rack_confirmed: boolean;
+  elbow_gap_ratio: number | null;
   landmarks: Landmark[];
   /** Which set (of the coach-assigned plan) this connection is for. */
   set_number?: number;
@@ -77,6 +82,8 @@ const EMPTY_RESULT: ArnoldPressData = {
   torso_stable_ok: true,
   rep_duration: null,
   rep_avg_speed: null,
+  rack_confirmed: false,
+  elbow_gap_ratio: null,
   landmarks: [],
   set_number: undefined,
   target_sets: undefined,

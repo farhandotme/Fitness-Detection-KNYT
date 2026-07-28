@@ -124,11 +124,19 @@ export default function ArnoldPressStatsPanel({ data }: Props) {
       </div>
 
       <div
-        className={`posture-line ${(data?.stage === "up" && data?.wrist_overhead_ok === false) ? "bad" : ""}`}
+        className={`posture-line ${data?.stage === "up" && data?.wrist_overhead_ok === false ? "bad" : ""}`}
       >
         {data?.stage === "up" && data?.wrist_overhead_ok === false
           ? "Not quite overhead yet — press higher"
           : "Overhead extension looks good"}
+      </div>
+
+      <div
+        className={`posture-line ${data?.stage === "down" && data?.rack_confirmed === false ? "bad" : "ok"}`}
+      >
+        {data?.stage === "down" && data?.rack_confirmed === false
+          ? "Elbows too flared — tuck in for an Arnold press, not a shoulder press"
+          : "Rack position confirmed — elbows tucked in"}
       </div>
     </div>
   );
