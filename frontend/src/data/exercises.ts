@@ -556,7 +556,7 @@ export const EXERCISES: ExerciseMeta[] = [
     category: "Full Body",
     difficulty: "Intermediate",
     equipment: "Bodyweight",
-    emoji: "🏋️‍♀️",
+    emoji: "🕺",
     description: "Tracks torso rotation and core engagement.",
     tags: ["Yoga", "obliques"],
     status: "available",
