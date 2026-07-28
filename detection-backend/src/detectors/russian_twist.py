@@ -118,6 +118,21 @@ fixed constants) plus a consecutive-frame dwell requirement
 the same two-part hysteresis pattern `SidePlankAnalyzer` uses for its
 `ALIGN_BROKEN` / `ALIGN_RESUME` band, just applied on both sides of
 center instead of one break threshold.
+
+A separate timing check used to also live here — reject a side touch if
+it arrived faster than `MIN_TOUCH_DURATION` (0.10s) since the last one.
+That constant sat right at the theoretical minimum the dwell mechanism
+above already takes (`STABLE_FRAMES` frames at whatever interval frames
+actually arrive), so it was rejecting genuinely-paced reps essentially
+at random depending on rounding, not because anyone actually moved
+implausibly fast — a real bug, not a tuning nitpick, and the direct
+cause of "tracking looks fine but it's not counting." It's gone now; the
+dwell requirement above already filters real jitter, so a second check
+on top of it added no protection, only missed reps. `STABLE_FRAMES` and
+`ANGLE_SMOOTH_ALPHA` are also tuned to settle and commit fast enough to
+keep up with a quick, energetic pace (validated down to a full
+center->side->center->side cycle roughly every 4 frames) without
+reopening the door to jitter.
 """
 
 import math
@@ -170,13 +185,10 @@ ROT_ENTER_FLOOR_DEG = 6.0
 ROT_EXIT_FLOOR_DEG = 2.5
 ROT_PARTIAL_FLOOR_DEG = 2.0
 
-STABLE_FRAMES = 3  # consecutive frames required to commit a phase change
-ANGLE_SMOOTH_ALPHA = 0.5
+STABLE_FRAMES = 2  # consecutive frames required to commit a phase change
+ANGLE_SMOOTH_ALPHA = 0.65
 
 # ---- timing validity for a side touch (center -> side) ----
-MIN_TOUCH_DURATION = 0.10  # seconds — faster than this = tracking glitch
-MAX_TOUCH_DURATION = 6.0  # seconds — slower than this = a pause, not a fluid rep
-
 # ---- seated base-position gate ----
 # Only the two failure modes that are actually detectable from a front
 # camera are hard gates — see module docstring for why a lean-angle
@@ -340,7 +352,6 @@ class RussianTwistAnalyzer:
         self._candidate_streak = 0
 
         self.smoothed_rotation: Optional[float] = None
-        self._last_phase_change_time: Optional[float] = None
 
         # Self-calibrating magnitude model (see module docstring) — the
         # highest shoulder/hip width ratio seen recently, standing in for
@@ -652,29 +663,21 @@ class RussianTwistAnalyzer:
                 phase_changed = True
 
                 if self.phase in ("left", "right"):
-                    # ---- a side touch: validate timing + leg stability ----
-                    duration = (
-                        (t - self._last_phase_change_time)
-                        if self._last_phase_change_time is not None
-                        else None
-                    )
-                    self._last_phase_change_time = t
-
-                    valid_timing = (
-                        duration is None
-                        or MIN_TOUCH_DURATION <= duration <= MAX_TOUCH_DURATION
-                    )
+                    # A timing-based accept/reject window used to live
+                    # here (MIN/MAX_TOUCH_DURATION), but MIN_TOUCH_DURATION
+                    # (0.10s) sits right at the theoretical minimum the
+                    # dwell mechanism above already takes (STABLE_FRAMES *
+                    # one frame interval — e.g. 3 * ~33ms = 99ms at
+                    # 30fps), so it was rejecting genuinely-paced reps
+                    # essentially at random depending on rounding, not
+                    # because anyone actually moved implausibly fast — the
+                    # exact same bug independently found and fixed in
+                    # `bicycle_crunch.py`. The dwell requirement already
+                    # filters real jitter/glitches; this check added no
+                    # protection beyond that and only caused missed reps.
 
                     if not legs_stable:
                         feedback = "Keep your legs still."
-                    elif (
-                        not valid_timing
-                        and duration is not None
-                        and duration < MIN_TOUCH_DURATION
-                    ):
-                        feedback = "Too fast — that twist wasn't counted, control the movement."
-                    elif not valid_timing:
-                        feedback = "That twist took too long — not counted. Keep the rotation flowing."
                     elif self.phase == self._last_counted_side:
                         feedback = f"Rotate to the other side to keep the rep going."
                     else:
@@ -695,9 +698,6 @@ class RussianTwistAnalyzer:
                             feedback = f"{side.capitalize()} side — now rotate to the other side."
 
                         self._last_counted_side = side
-                else:
-                    self._last_phase_change_time = t
-
                 self._attempt_peak_deg = 0.0
                 self._attempt_flagged = False
 
@@ -721,6 +721,15 @@ class RussianTwistAnalyzer:
                     self._attempt_flagged = False
 
         response["phase"] = self.phase
+        # Refresh cumulative counters from current state — they were
+        # populated at the top of this function before this frame's
+        # possible increment, so re-assigning here keeps `side_completed`
+        # / `rep_completed` consistent with the counts in the same
+        # message instead of trailing by one frame (same fix applied to
+        # `bicycle_crunch.py`).
+        response["left_count"] = self.left_count
+        response["right_count"] = self.right_count
+        response["rep_count"] = self.rep_count
 
         if feedback is None and not seated_ok:
             feedback = (

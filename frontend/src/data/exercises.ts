@@ -514,6 +514,30 @@ export const EXERCISES: ExerciseMeta[] = [
     status: "available",
     route: "/half_moon_pose",
   },
+  {
+    id: "bicycle_crunch",
+    name: "Bicycle Crunch",
+    category: "Full Body",
+    difficulty: "Intermediate",
+    equipment: "Bodyweight",
+    emoji: "🚲",
+    description: "Tracks torso rotation and core engagement.",
+    tags: ["cardio", "obliques"],
+    status: "available",
+    route: "/bicycle_crunch",
+  },
+  {
+    id: "hindu_pushup",
+    name: "Hindu Pushup",
+    category: "Full Body",
+    difficulty: "Intermediate",
+    equipment: "Bodyweight",
+    emoji: "🧘‍♂️",
+    description: "Tracks torso rotation and core engagement.",
+    tags: ["cardio", "obliques"],
+    status: "available",
+    route: "/hindu_pushup",
+  },
 ];
 
 /** True if a search term matches an exercise's name/category/tags. */
