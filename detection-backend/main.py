@@ -1,6 +1,5 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
 from src.routes.bicepRoutes import router as bicepRouter
 from src.routes.fingerRoutes import router as fingerRouter
 from src.routes.squatRoutes import router as squatRouter
@@ -41,6 +40,8 @@ from src.routes.russianTwistRoutes import router as russianTwistRouter
 from src.routes.flutterKicksRoutes import router as flutterKicksRouter
 from src.routes.singleLegSquatRoutes import router as singleLegSquatRouter
 from src.routes.halfMoonRoutes import router as halfMoonRouter
+from src.routes.bicycleCrunchRoutes import router as bicycleCrunchRouter
+from src.routes.hinduPushupRoutes import router as hinduPushupRouter
 from src.routes.windmillRotationStretchRoutes import (
     router as windmillRotationStretchRouter,
 )
@@ -97,6 +98,8 @@ app.include_router(legRaiseRouter, prefix="/ws", tags="leg-raise-router")
 app.include_router(russianTwistRouter, prefix="/ws", tags="russian-twist-router")
 app.include_router(singleLegSquatRouter, prefix="/ws", tags="single-leg-squat-router")
 app.include_router(halfMoonRouter, prefix="/ws", tags="half-moon-router")
+app.include_router(bicycleCrunchRouter, prefix="/ws", tags="bicycle-crunch-router")
+app.include_router(hinduPushupRouter, prefix="/ws", tags="hindu-pushup-router")
 app.include_router(
     windmillRotationStretchRouter, prefix="/ws", tags="windmill-rotation-stretch-router"
 )
