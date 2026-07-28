@@ -3,6 +3,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 import asyncio
 import base64
 import time
+import traceback
 
 import cv2
 import numpy as np
@@ -69,22 +70,91 @@ async def bicycle_crunch(websocket: WebSocket):
     target_sets = _query_int(websocket, "target_sets", default=1, lo=1, hi=20)
     set_number = _query_int(websocket, "set_number", default=1, lo=1, hi=target_sets)
 
-    counter = BicycleCrunchSession(
-        target_reps=target_reps,
-        target_sets=target_sets,
-        set_number=set_number,
-    )
+    # ---- session construction (this is where PoseEngine.__init__ runs) ----
+    # This used to happen with no error handling at all — if the installed
+    # `mediapipe` version doesn't support the legacy `mp.solutions.pose.Pose`
+    # API that `poseEngine.py` uses (recent mediapipe releases removed
+    # `mp.solutions` entirely in favor of the newer Tasks API), this throws
+    # immediately, before a single frame is ever processed. From the
+    # frontend that's indistinguishable from "not detecting/counting at
+    # all" — nothing ever starts. Catching it here at least turns that into
+    # a clear, actionable message instead of a silent dead connection.
+    try:
+        counter = BicycleCrunchSession(
+            target_reps=target_reps,
+            target_sets=target_sets,
+            set_number=set_number,
+        )
+    except Exception as exc:  # noqa: BLE001 — deliberately broad, see comment above
+        tb = traceback.format_exc()
+        print(f"[BicycleCrunch] FAILED TO START SESSION: {exc}\n{tb}")
+        await websocket.send_json(
+            {
+                "pose_detected": False,
+                "error": f"{type(exc).__name__}: {exc}",
+                "feedback": (
+                    "Couldn't start pose tracking — check the backend terminal. "
+                    "If the error mentions 'mediapipe' and 'solutions', your "
+                    "installed mediapipe version doesn't support the API "
+                    'poseEngine.py uses (run: python3 -c "import mediapipe as '
+                    "mp; print(dir(mp))\" and check whether 'solutions' is in "
+                    "the list)."
+                ),
+            }
+        )
+        await websocket.close()
+        return
 
     try:
         exercise_logged = False
         while True:
             image = await websocket.receive_text()
 
-            frame = decode_frame(image)
+            # ---- decode + detect are wrapped per-frame on purpose ----
+            # If anything throws here — a malformed frame, or a mismatch
+            # between what this file expects from PoseEngine.detect() and
+            # what your actual poseEngine.py returns — the old behavior
+            # was to let the exception propagate and kill the socket
+            # silently. From the frontend that looks exactly like "not
+            # counting at all," with no indication anything went wrong.
+            # Catching it here means the REAL error (with a full
+            # traceback, printed server-side) is what surfaces, instead
+            # of a generic disconnect.
+            try:
+                frame = decode_frame(image)
+                if frame is None:
+                    await websocket.send_json(
+                        {
+                            "pose_detected": False,
+                            "error": (
+                                "Received frame couldn't be decoded as an image "
+                                "(decode_frame returned None) — check the "
+                                "frontend is sending valid JPEG data URLs."
+                            ),
+                            "feedback": "Camera frame error — check server logs.",
+                        }
+                    )
+                    continue
 
-            timestamp = int(time.time() * 1000)
+                timestamp = int(time.time() * 1000)
+                result = counter.detect(frame, timestamp)
 
-            result = counter.detect(frame, timestamp)
+            except (
+                Exception
+            ) as exc:  # noqa: BLE001 — deliberately broad, see comment above
+                tb = traceback.format_exc()
+                print(f"[BicycleCrunch] ERROR processing frame: {exc}\n{tb}")
+                await websocket.send_json(
+                    {
+                        "pose_detected": False,
+                        "error": f"{type(exc).__name__}: {exc}",
+                        "feedback": (
+                            "Server error while processing this frame — check "
+                            "the backend terminal for the full traceback."
+                        ),
+                    }
+                )
+                continue
 
             exercise_logged = _log_rep_progress(
                 "BicycleCrunch", result, exercise_logged

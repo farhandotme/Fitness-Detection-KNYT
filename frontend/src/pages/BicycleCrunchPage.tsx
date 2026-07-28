@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import useBicycleCrunchSocket from "../hooks/useBicycleCrunchSocket";
-import "./BicycleCrunchPage.css";
 import BicycleCrunchCamera from "../conponents/BicycleCrunchCamera";
 import BicycleCrunchStatsPanel from "../conponents/BicycleCrunchStatsPanel";
+import "./BicycleCrunchPage.css";
 
 const POSE_CONNECTIONS: [number, number][] = [
   [11, 12], // shoulder line
@@ -207,6 +207,12 @@ function BicycleCrunchPage() {
 
       {socketError && <div className="bcrunch-error">{socketError}</div>}
       {cameraError && <div className="bcrunch-error">{cameraError}</div>}
+      {result.error && (
+        <div className="bcrunch-error">
+          Backend error: {result.error} — check the backend terminal for the
+          full traceback.
+        </div>
+      )}
 
       <div className="bcrunch-body">
         <div className="bcrunch-camera-col">

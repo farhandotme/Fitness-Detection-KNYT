@@ -34,6 +34,8 @@ export interface BicycleCrunchData {
   feedback: string | null;
   elapsed_time: number;
   landmarks: Landmark[];
+  /** Present only if the backend hit an exception processing this frame — see route error handling. */
+  error?: string;
   set_number?: number;
   target_sets?: number;
   /**
