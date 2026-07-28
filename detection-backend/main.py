@@ -42,6 +42,7 @@ from src.routes.singleLegSquatRoutes import router as singleLegSquatRouter
 from src.routes.halfMoonRoutes import router as halfMoonRouter
 from src.routes.bicycleCrunchRoutes import router as bicycleCrunchRouter
 from src.routes.hinduPushupRoutes import router as hinduPushupRouter
+from src.routes.arnoldPressRoutes import router as arnoldPressRouter
 from src.routes.windmillRotationStretchRoutes import (
     router as windmillRotationStretchRouter,
 )
@@ -100,6 +101,7 @@ app.include_router(singleLegSquatRouter, prefix="/ws", tags="single-leg-squat-ro
 app.include_router(halfMoonRouter, prefix="/ws", tags="half-moon-router")
 app.include_router(bicycleCrunchRouter, prefix="/ws", tags="bicycle-crunch-router")
 app.include_router(hinduPushupRouter, prefix="/ws", tags="hindu-pushup-router")
+app.include_router(arnoldPressRouter, prefix="/ws", tags="arnold-press-router")
 app.include_router(
     windmillRotationStretchRouter, prefix="/ws", tags="windmill-rotation-stretch-router"
 )

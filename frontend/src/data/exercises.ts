@@ -538,6 +538,30 @@ export const EXERCISES: ExerciseMeta[] = [
     status: "available",
     route: "/hindu_pushup",
   },
+  {
+    id: "arnold_press",
+    name: "Arnold Press",
+    category: "Full Body",
+    difficulty: "Intermediate",
+    equipment: "Bodyweight",
+    emoji: "🏋️‍♀️",
+    description: "Tracks torso rotation and core engagement.",
+    tags: ["cardio", "obliques"],
+    status: "available",
+    route: "/arnold_press",
+  },
+  {
+    id: "dancer_pose",
+    name: "Dancer Pose",
+    category: "Full Body",
+    difficulty: "Intermediate",
+    equipment: "Bodyweight",
+    emoji: "🏋️‍♀️",
+    description: "Tracks torso rotation and core engagement.",
+    tags: ["Yoga", "obliques"],
+    status: "available",
+    route: "/dancer_pose",
+  },
 ];
 
 /** True if a search term matches an exercise's name/category/tags. */

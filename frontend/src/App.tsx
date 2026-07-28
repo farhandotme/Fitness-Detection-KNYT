@@ -45,6 +45,7 @@ import SingleLegSquatPage from "./pages/SingleLegSquatPage";
 import HalfMoonPage from "./pages/HalfMoonPage";
 import BicycleCrunchPage from "./pages/BicycleCrunchPage";
 import HinduPushupPage from "./pages/HinduPushupPage";
+import ArnoldPressPage from "./pages/ArnoldPressPage";
 
 function App() {
   return (
@@ -99,6 +100,7 @@ function App() {
           <Route path="half_moon_pose" element={<HalfMoonPage />} />
           <Route path="bicycle_crunch" element={<BicycleCrunchPage />} />
           <Route path="hindu_pushup" element={<HinduPushupPage />} />
+          <Route path="arnold_press" element={<ArnoldPressPage />} />
           <Route
             path="standing_cross_crunch"
             element={<StandingCrossCrunchPage />}
