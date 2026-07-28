@@ -1,0 +1,747 @@
+/* ---------------------------------
+   Hindu Push-up page — fully self-contained styling. Uses the same design
+   tokens (--paper, --ink, --panel, --forest, --sprout, --amber, --alert,
+   --mono, etc.) defined globally in index.css, but does not depend on any
+   other page's stylesheet.
+--------------------------------- */
+
+.hindu-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 20px 24px 40px;
+  color: var(--ink);
+  font-family: var(--sans);
+}
+
+/* ---- header ---- */
+.hindu-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.hindu-title {
+  font-family: var(--display);
+  font-size: 34px;
+  letter-spacing: 0.02em;
+  margin: 0;
+}
+
+.hindu-header-right {
+  display: flex;
+  align-items: center;
+}
+
+.hindu-active-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.hindu-status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--alert);
+  flex-shrink: 0;
+}
+
+.hindu-status-dot.live {
+  background: var(--sprout);
+  box-shadow: 0 0 0 3px rgba(132, 199, 96, 0.25);
+}
+
+.hindu-active-label {
+  color: var(--muted);
+}
+
+.hindu-complete-label {
+  font-weight: 600;
+  color: var(--forest);
+}
+
+.hindu-start-btn,
+.hindu-stop-btn {
+  border: none;
+  border-radius: 8px;
+  padding: 9px 16px;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  transition: filter 0.15s ease;
+}
+
+.hindu-start-btn {
+  background: var(--forest);
+  color: var(--paper);
+}
+
+.hindu-start-btn:hover {
+  filter: brightness(1.1);
+}
+
+.hindu-start-btn.full-width {
+  width: 100%;
+  padding: 13px;
+  font-size: 13px;
+  margin-top: 18px;
+}
+
+.hindu-stop-btn {
+  background: transparent;
+  color: var(--alert);
+  border: 1px solid var(--alert);
+}
+
+.hindu-stop-btn:hover {
+  background: rgba(166, 72, 58, 0.08);
+}
+
+.hindu-error {
+  background: rgba(166, 72, 58, 0.1);
+  border: 1px solid var(--alert);
+  color: var(--alert);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+}
+
+/* ---- body layout ---- */
+.hindu-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .hindu-body {
+    grid-template-columns: 1fr;
+  }
+}
+
+.hindu-camera-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.hindu-stats-col {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* ---- camera viewfinder (used by HinduPushupCamera.tsx) ---- */
+.hindu-pushup-viewfinder {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  background: var(--panel);
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--panel-line);
+  flex-shrink: 0;
+}
+
+.hindu-pushup-viewfinder-video {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+}
+
+.hindu-pushup-viewfinder-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  transform: scaleX(-1);
+}
+
+.hindu-pushup-viewfinder-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  text-align: center;
+  padding: 0 20px;
+}
+
+.hindu-pushup-viewfinder-placeholder span {
+  font-size: 28px;
+}
+
+/* ---- rest overlay ---- */
+.hindu-rest-overlay-caption {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.hindu-rest-countdown {
+  font-family: var(--display);
+  font-size: 26px;
+  color: var(--forest);
+}
+
+/* ---- progress ---- */
+.hindu-progress-track {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.hindu-progress-fill {
+  height: 100%;
+  background: var(--forest);
+  transition: width 0.25s ease;
+}
+
+.hindu-progress-caption {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.hindu-set-dots {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+.hindu-set-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--line);
+}
+
+.hindu-set-dot.current {
+  background: var(--amber);
+}
+
+.hindu-set-dot.done {
+  background: var(--forest);
+}
+
+/* ---- session summary strip ---- */
+.hindu-session-summary {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.hindu-session-summary-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  background: var(--panel);
+  color: var(--paper);
+  border-radius: 10px;
+  padding: 8px 14px;
+  min-width: 70px;
+}
+
+.hindu-session-summary-item .k {
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.hindu-session-summary-item .v {
+  font-family: var(--display);
+  font-size: 20px;
+}
+
+.hindu-session-summary-item.good .v {
+  color: var(--sprout);
+}
+
+.hindu-session-summary-item.flawed .v {
+  color: var(--amber);
+}
+
+/* ---- setup builder ---- */
+.hindu-session-builder {
+  background: var(--panel);
+  border: 1px solid var(--panel-line);
+  border-radius: 14px;
+  padding: 18px;
+  color: var(--paper);
+}
+
+.hindu-builder-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--panel-line);
+}
+
+.hindu-builder-row:last-of-type {
+  border-bottom: none;
+}
+
+.hindu-builder-label {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.hindu-builder-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.hindu-reps-input {
+  width: 54px;
+  background: var(--paper);
+  border: 1px solid var(--panel-line);
+  border-radius: 6px;
+  padding: 5px 6px;
+  font-family: var(--mono);
+  font-size: 13px;
+  text-align: center;
+  color: var(--ink);
+}
+
+.hindu-reps-presets {
+  display: flex;
+  gap: 6px;
+}
+
+.hindu-reps-preset {
+  border: 1px solid var(--panel-line);
+  background: transparent;
+  color: var(--paper);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-family: var(--mono);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.hindu-reps-preset.active {
+  background: var(--sprout);
+  color: var(--ink);
+  border-color: var(--sprout);
+  font-weight: 600;
+}
+
+.hindu-builder-total {
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 14px;
+}
+
+.hindu-builder-total strong {
+  color: var(--paper);
+}
+
+.hindu-setup-tip {
+  margin-top: 14px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+  background: rgba(242, 239, 228, 0.04);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+/* ---- rest panel ---- */
+.hindu-rest-panel {
+  background: var(--panel);
+  border: 1px solid var(--panel-line);
+  border-radius: 14px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  color: var(--paper);
+}
+
+.hindu-rest-panel-title {
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+.hindu-rest-panel-big-countdown {
+  font-family: var(--display);
+  font-size: 56px;
+  color: var(--amber);
+  line-height: 1;
+}
+
+.hindu-rest-panel-caption {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+
+.hindu-rest-panel-grid {
+  margin-bottom: 14px;
+}
+
+/* ---- generic small grid (rest panel summary) ---- */
+.hindu-arm-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  width: 100%;
+}
+
+.hindu-arm-grid-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  background: rgba(242, 239, 228, 0.05);
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.hindu-arm-grid-item .k {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.hindu-arm-grid-item .v {
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* ---- active-phase wrapper + coach feedback ---- */
+.hindu-single-arm-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.hindu-feedback-box {
+  background: var(--panel);
+  border: 1px solid var(--panel-line);
+  border-left: 4px solid var(--sprout);
+  border-radius: 10px;
+  padding: 12px 14px;
+  color: var(--paper);
+}
+
+.hindu-feedback-box strong {
+  display: block;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.hindu-feedback-box p {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.4;
+}
+
+.hindu-feedback-box.needs_improvement {
+  border-left-color: var(--amber);
+}
+
+/* ---- results / summary panel ---- */
+.hindu-results-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.hindu-results-totals {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.hindu-results-table {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.hindu-results-row {
+  display: grid;
+  grid-template-columns: 0.6fr 1fr 1fr 1fr 1fr;
+  padding: 8px 12px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  border-bottom: 1px solid var(--line);
+}
+
+.hindu-results-row:last-child {
+  border-bottom: none;
+}
+
+.hindu-results-head {
+  background: var(--panel);
+  color: var(--paper);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
+}
+
+.good-text {
+  color: var(--forest);
+  font-weight: 600;
+}
+
+.flawed-text {
+  color: var(--amber);
+  font-weight: 600;
+}
+
+.empty-hint {
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* ---------------------------------
+   Stats panel (HinduPushupStatsPanel.tsx) — shares .arm-panel / .arm-grid /
+   .pose-pill / .stage-badge / .quality-badge / .posture-line class names
+   with the rest of the app's per-exercise panels, but every rule needed to
+   render them correctly is defined right here (self-contained, no reliance
+   on another page's stylesheet loading first).
+--------------------------------- */
+.arm-panel {
+  background: var(--panel);
+  border: 1px solid var(--panel-line);
+  border-radius: 14px;
+  padding: 18px;
+  color: var(--paper);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.arm-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.arm-panel-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.pose-pill {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.pose-pill.ok {
+  background: rgba(132, 199, 96, 0.15);
+  color: var(--sprout);
+}
+
+.pose-pill.warn {
+  background: rgba(184, 134, 46, 0.18);
+  color: var(--amber);
+}
+
+.pose-pill.bad {
+  background: rgba(166, 72, 58, 0.18);
+  color: var(--alert);
+}
+
+.arm-panel-rep-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.arm-panel-rep-count {
+  font-family: var(--display);
+  font-size: 48px;
+  line-height: 1;
+}
+
+.stage-badge {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  letter-spacing: 0.05em;
+  background: rgba(242, 239, 228, 0.08);
+}
+
+.stage-badge.updog {
+  background: rgba(184, 134, 46, 0.2);
+  color: var(--amber);
+}
+
+.stage-badge.downdog {
+  background: rgba(132, 199, 96, 0.15);
+  color: var(--sprout);
+}
+
+/* ---- arc gauge (HinduPushupStatsPanel's ArcGauge) ---- */
+.hindu-arc-gauge {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.hindu-arc-gauge-track {
+  position: relative;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(242, 239, 228, 0.1);
+  overflow: hidden;
+}
+
+.hindu-arc-gauge-zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+
+.hindu-arc-gauge-zone.downdog-zone {
+  background: rgba(132, 199, 96, 0.35);
+}
+
+.hindu-arc-gauge-zone.updog-zone {
+  background: rgba(184, 134, 46, 0.35);
+}
+
+.hindu-arc-gauge-marker {
+  position: absolute;
+  top: -3px;
+  width: 4px;
+  height: 16px;
+  background: var(--paper);
+  border-radius: 2px;
+  transform: translateX(-2px);
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.5);
+}
+
+.hindu-arc-gauge-labels {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--muted);
+}
+
+.hindu-arc-gauge-labels .active {
+  color: var(--paper);
+  font-weight: 600;
+}
+
+.arm-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.arm-grid-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: rgba(242, 239, 228, 0.05);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.arm-grid-item .k {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.arm-grid-item .v {
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.quality-badge {
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 6px;
+  border-radius: 8px;
+  background: rgba(242, 239, 228, 0.06);
+  color: var(--muted);
+}
+
+.quality-badge.good {
+  background: rgba(132, 199, 96, 0.15);
+  color: var(--sprout);
+}
+
+.quality-badge.needs_improvement {
+  background: rgba(184, 134, 46, 0.18);
+  color: var(--amber);
+}
+
+.posture-line {
+  font-size: 12px;
+  line-height: 1.4;
+  padding: 6px 10px;
+  border-radius: 8px;
+}
+
+.posture-line.ok {
+  background: rgba(132, 199, 96, 0.08);
+  color: var(--sprout);
+}
+
+.posture-line.bad {
+  background: rgba(166, 72, 58, 0.1);
+  color: var(--alert);
+}
