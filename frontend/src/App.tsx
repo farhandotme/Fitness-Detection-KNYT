@@ -47,6 +47,7 @@ import BicycleCrunchPage from "./pages/BicycleCrunchPage";
 import HinduPushupPage from "./pages/HinduPushupPage";
 import ArnoldPressPage from "./pages/ArnoldPressPage";
 import DancerPosePage from "./pages/DancerPosePage";
+import SupermanPage from "./pages/SupermanPage";
 
 function App() {
   return (
@@ -103,6 +104,7 @@ function App() {
           <Route path="hindu_pushup" element={<HinduPushupPage />} />
           <Route path="arnold_press" element={<ArnoldPressPage />} />
           <Route path="dancer_pose" element={<DancerPosePage />} />
+          <Route path="supermen_pose" element={<SupermanPage />} />
           <Route
             path="standing_cross_crunch"
             element={<StandingCrossCrunchPage />}

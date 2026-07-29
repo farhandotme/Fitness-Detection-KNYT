@@ -559,6 +559,18 @@ export const EXERCISES: ExerciseMeta[] = [
     emoji: "💃",
     route: "/dancer_pose",
   },
+  {
+    id: "supermen_pose",
+    name: "Supermen Pose",
+    category: "Mobility",
+    description: "Tracks balance",
+    difficulty: "Intermediate",
+    tags: ["shoulders", "arms", "press"],
+    equipment: "Bodyweight",
+    status: "available",
+    emoji: "🦸",
+    route: "/supermen_pose",
+  },
 ];
 
 /** True if a search term matches an exercise's name/category/tags. */
