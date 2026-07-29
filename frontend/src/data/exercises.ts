@@ -571,6 +571,18 @@ export const EXERCISES: ExerciseMeta[] = [
     emoji: "🦸",
     route: "/supermen_pose",
   },
+  {
+    id: "side_leg_swing",
+    name: "Side Leg Swing",
+    category: "Mobility",
+    description: "Tracks balance",
+    difficulty: "Intermediate",
+    tags: ["shoulders", "arms", "press"],
+    equipment: "Bodyweight",
+    status: "available",
+    emoji: "🦵🏿",
+    route: "/side_leg_swing",
+  },
 ];
 
 /** True if a search term matches an exercise's name/category/tags. */

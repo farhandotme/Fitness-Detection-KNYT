@@ -48,6 +48,7 @@ import HinduPushupPage from "./pages/HinduPushupPage";
 import ArnoldPressPage from "./pages/ArnoldPressPage";
 import DancerPosePage from "./pages/DancerPosePage";
 import SupermanPage from "./pages/SupermanPage";
+import SideLegSwingPage from "./pages/SideLegSwingPage";
 
 function App() {
   return (
@@ -105,6 +106,7 @@ function App() {
           <Route path="arnold_press" element={<ArnoldPressPage />} />
           <Route path="dancer_pose" element={<DancerPosePage />} />
           <Route path="supermen_pose" element={<SupermanPage />} />
+          <Route path="side_leg_swing" element={<SideLegSwingPage />} />
           <Route
             path="standing_cross_crunch"
             element={<StandingCrossCrunchPage />}
