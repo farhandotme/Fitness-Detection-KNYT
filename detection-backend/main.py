@@ -45,6 +45,7 @@ from src.routes.hinduPushupRoutes import router as hinduPushupRouter
 from src.routes.arnoldPressRoutes import router as arnoldPressRouter
 from src.routes.dancerPoseRoutes import router as dancerPoseRouter
 from src.routes.supermanRoutes import router as supermenPoseRouter
+from src.routes.sideLegSwingRoutes import router as sideLegSwingRouter
 from src.routes.windmillRotationStretchRoutes import (
     router as windmillRotationStretchRouter,
 )
@@ -106,6 +107,7 @@ app.include_router(hinduPushupRouter, prefix="/ws", tags="hindu-pushup-router")
 app.include_router(arnoldPressRouter, prefix="/ws", tags="arnold-press-router")
 app.include_router(dancerPoseRouter, prefix="/ws", tags="dancer-pose-router")
 app.include_router(supermenPoseRouter, prefix="/ws", tags="supermen-pose-router")
+app.include_router(sideLegSwingRouter, prefix="/ws", tags="side-leg-swing-router")
 app.include_router(
     windmillRotationStretchRouter, prefix="/ws", tags="windmill-rotation-stretch-router"
 )
