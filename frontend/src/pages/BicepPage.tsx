@@ -55,7 +55,7 @@ function BicepPage() {
   const [restRemaining, setRestRemaining] = useState(0);
   const [setSummaries, setSetSummaries] = useState<SetSummary[]>([]);
   const [cameraError, setCameraError] = useState<string | null>(null);
-
+  console.log("this is bicep page !");
   const {
     connected,
     result,

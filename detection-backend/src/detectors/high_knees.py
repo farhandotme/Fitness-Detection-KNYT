@@ -132,13 +132,17 @@ def _framing_feedback(l_shoulder, r_shoulder, l_hip, r_hip) -> Optional[str]:
             or p.x > 1 - FRAME_EDGE_MARGIN
             or p.y < FRAME_EDGE_MARGIN
         ):
-            return "You're partly out of frame — center yourself with space on both sides."
+            return (
+                "You're partly out of frame — center yourself with space on both sides."
+            )
 
     torso_span = abs(mid_hip.y - mid_shoulder.y)
     if torso_span > TORSO_SPAN_TOO_CLOSE:
         return "You're too close to the camera — step back until your whole body fits in frame."
     if torso_span < TORSO_SPAN_TOO_FAR:
-        return "You're too far from the camera — move a bit closer for accurate tracking."
+        return (
+            "You're too far from the camera — move a bit closer for accurate tracking."
+        )
 
     if abs(mid_hip.x - 0.5) > CENTER_X_TOLERANCE:
         side = "left" if mid_hip.x < 0.5 else "right"
@@ -278,7 +282,7 @@ class HighKneeAnalyzer:
             response["pose_detected"] = True
             response["low_visibility"] = True
             response["feedback"] = (
-                "Can't see your full body clearly — step back so your torso "
+                "Can't see your full body clearly — step back so your torso"
                 "and both legs are in frame."
             )
             return response
@@ -477,7 +481,9 @@ class HighKneeAnalyzer:
             else:
                 rep_completed = False
                 if rep_duration is not None and rep_duration < MIN_REP_DURATION:
-                    feedback = "Too fast — that one wasn't counted, control the movement."
+                    feedback = (
+                        "Too fast — that one wasn't counted, control the movement."
+                    )
                 elif rep_duration is not None and rep_duration > MAX_REP_DURATION:
                     feedback = "That rep took too long — not counted. Keep moving."
                 else:
@@ -512,7 +518,9 @@ class HighKneeAnalyzer:
             {
                 "rep_completed": rep_completed,
                 "rep_leg": rep_leg,
-                "rep_duration": round(rep_duration, 2) if rep_duration is not None else None,
+                "rep_duration": (
+                    round(rep_duration, 2) if rep_duration is not None else None
+                ),
                 "rep_classification": rep_class,
                 "rep_form_quality": rep_form_quality,
                 "alternation_ok": alternation_ok,

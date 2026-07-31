@@ -583,6 +583,18 @@ export const EXERCISES: ExerciseMeta[] = [
     emoji: "🦵🏿",
     route: "/side_leg_swing",
   },
+  {
+    id: "child's pose",
+    name: "Child Pose",
+    category: "Full Body",
+    description: "Tracks balance",
+    difficulty: "Intermediate",
+    tags: ["Body", "Full"],
+    equipment: "Bodyweight",
+    status: "available",
+    emoji: "👶",
+    route: "/child_pose",
+  },
 ];
 
 /** True if a search term matches an exercise's name/category/tags. */

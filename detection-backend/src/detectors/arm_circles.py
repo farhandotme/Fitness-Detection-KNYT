@@ -1,58 +1,3 @@
-"""
-Arm Circles rep (round) counting + posture correction.
-
-Design
-------
-Unlike push-ups/squats, a full arm circle has no natural "angle crosses a
-threshold" moment — the wrist sweeps continuously around the shoulder, so
-counting has to track **rotation traveled**, not a bend/extend state
-machine. Each arm gets its own independent rotation tracker:
-
-    * Every frame, the shoulder→wrist vector's angle is measured and
-      smoothed (smoothing the vector itself, not the raw angle, so there's
-      no wraparound artefact at ±180°).
-    * The signed angular step since last frame accumulates into a running
-      total for that arm, as long as steps keep pointing the same
-      rotational direction (with a small tolerance for jitter).
-    * A genuine direction **reversal** (not jitter — see `REVERSAL_TOLERANCE_DEG`)
-      discards the in-progress partial rotation and starts fresh in the new
-      direction, the same way `PushupAnalyzer` discards a rep whose plank
-      broke mid-way — an aborted attempt is simply not counted, never
-      mis-counted.
-    * Once accumulated rotation reaches 360°, that arm has completed one
-      **round**. The overshoot beyond 360° carries into the next round
-      (not discarded) so continuous circling never loses fractions of a
-      turn between rounds.
-
-Only a full circle counts a round — a false negative here (a completed
-circle not counted) would mean the exact opposite of what was asked, so
-the accumulator is deliberately generous about *when* it counts (carrying
-overshoot, tolerant of minor jitter) while still being strict about *what*
-it counts (requires the arm to stay meaningfully extended throughout, and
-requires a real directional reversal — not sensor noise — to discard
-progress).
-
-Both arms, tracked and reported
---------------------------------
-`left_arm_rounds` / `right_arm_rounds` are raw per-arm counts — always
-incrementing the instant that arm alone finishes a circle, regardless of
-what the other arm is doing. This is the "how many rounds have I done"
-data per arm.
-
-`rep_count` (the number that drives `target_reps` / `session_complete`)
-is stricter: it only advances when **both** arms complete a round within
-`SYNC_WINDOW_SECONDS` of each other — i.e. a genuine two-armed circles
-rep, not one arm doing all the work while the other hangs still. If one
-arm finishes and the other doesn't catch up in time, that pending
-completion is simply dropped (not double-counted later).
-
-Camera framing
----------------
-Front-facing, standing, arms out from the shoulders — same convention as
-jumping jacks — since arm circles are performed facing the camera with
-both shoulders and both full arms visible.
-"""
-
 import math
 from typing import Any, Optional
 
@@ -68,32 +13,17 @@ from src.engines.poseEngine import (  # type: ignore
     RIGHT_WRIST,
 )
 
-# -------------------------------------------------------------------------
-# Tunable constants
-# -------------------------------------------------------------------------
-
 MIN_LANDMARK_VISIBILITY = 0.4
 
-# ---- rotation tracking ----
-SMOOTH_ALPHA = 0.5  # EMA weight on the raw shoulder->wrist vector each frame
-MAX_STEP_DEG = 45.0  # per-frame delta clamp — rejects landmark-jitter spikes
-NOISE_FLOOR_DEG = 3.0  # step smaller than this never starts/confirms a direction
-REVERSAL_TOLERANCE_DEG = 10.0  # opposite-sign wobble up to this doesn't reset progress
+SMOOTH_ALPHA = 0.5
+MAX_STEP_DEG = 45.0
+NOISE_FLOOR_DEG = 3.0
+REVERSAL_TOLERANCE_DEG = 10.0
 ROUND_DEG = 360.0
 
-# ---- arm extension gate (radius of the circle) ----
-# Normalized by shoulder width so it's camera-distance independent. Below
-# this the "circle" is really just the hand waving near the shoulder —
-# rotation stops accumulating (pauses, doesn't reset) until re-extended.
 MIN_RADIUS_RATIO = 0.7
-
-# ---- elbow straightness (quality note only, doesn't block the count) ----
 ELBOW_STRAIGHT_DEG = 150.0
 
-# ---- both-arms sync window ----
-SYNC_WINDOW_SECONDS = 1.5
-
-# ---- framing ----
 FRAME_EDGE_MARGIN = 0.03
 BBOX_TOO_CLOSE = 0.95
 BBOX_TOO_FAR = 0.12
@@ -124,7 +54,6 @@ def _dist(a, b) -> float:
 
 
 def _angle_deg(a, b, c) -> float:
-    """Angle at vertex b, between rays b->a and b->c, in degrees."""
     ang = math.degrees(
         math.atan2(c.y - b.y, c.x - b.x) - math.atan2(a.y - b.y, a.x - b.x)
     )
@@ -135,7 +64,6 @@ def _angle_deg(a, b, c) -> float:
 
 
 def _signed_delta_deg(new_angle: float, old_angle: float) -> float:
-    """Shortest signed angular step from old_angle to new_angle, wrap-safe."""
     return ((new_angle - old_angle + 180.0) % 360.0) - 180.0
 
 
@@ -166,32 +94,23 @@ def _framing_feedback(points) -> Optional[str]:
 
 
 class _ArmRotationTracker:
-    """One arm's independent rotation accumulator.
-
-    Smooths the shoulder->wrist vector (not the raw angle, to sidestep
-    ±180° wraparound), accumulates signed angular travel with a
-    direction lock, and reports a completed round the instant accumulated
-    travel reaches 360°, carrying any overshoot into the next round.
-    """
-
     def __init__(self):
         self.smoothed_dx: Optional[float] = None
         self.smoothed_dy: Optional[float] = None
         self.last_angle: Optional[float] = None
-        self.direction: Optional[int] = None  # +1 or -1 once locked in
+        self.direction: Optional[int] = None
         self.cumulative_deg = 0.0
         self.extended = False
         self.round_had_bend = False
         self.rounds = 0
 
-    def update(self, dx: float, dy: float, extended: bool) -> tuple[bool, Optional[str]]:
-        """Feed one frame's raw shoulder->wrist vector. Returns
-        (round_completed_this_frame, direction_label)."""
+    def update(
+        self, dx: float, dy: float, extended: bool
+    ) -> tuple[bool, Optional[str]]:
         if not extended:
-            # Paused, not reset — a brief moment with the arm tucked in
-            # doesn't wipe out rotation progress already earned.
             self.extended = False
             return False, None
+
         self.extended = True
 
         if self.smoothed_dx is None:
@@ -210,7 +129,6 @@ class _ArmRotationTracker:
         self.last_angle = angle
 
         if abs(step) > MAX_STEP_DEG:
-            # Almost certainly a tracking glitch, not real motion this frame.
             return False, None
 
         if abs(step) < NOISE_FLOOR_DEG:
@@ -224,8 +142,6 @@ class _ArmRotationTracker:
         elif step_sign == self.direction:
             self.cumulative_deg += step
         else:
-            # Opposite-sign step — tolerate small wobble, otherwise treat
-            # as a genuine reversal and start the attempt over.
             if abs(step) <= REVERSAL_TOLERANCE_DEG:
                 self.cumulative_deg += step
             else:
@@ -237,7 +153,7 @@ class _ArmRotationTracker:
         if abs(self.cumulative_deg) >= ROUND_DEG:
             completed = True
             self.rounds += 1
-            self.cumulative_deg -= ROUND_DEG * self.direction  # carry overshoot
+            self.cumulative_deg -= ROUND_DEG * self.direction
 
         return completed, ("forward" if self.direction == 1 else "backward")
 
@@ -251,59 +167,21 @@ class _ArmRotationTracker:
 
 
 class ArmCirclesAnalyzer:
-    """Stateful arm-circles round counter, both arms tracked independently."""
-
     def __init__(self, target_reps: Optional[int] = None):
         self.target_reps = target_reps
-
         self.left = _ArmRotationTracker()
         self.right = _ArmRotationTracker()
 
-        self.rep_count = 0  # both-arms-synced rounds — drives session_complete
+        self.rep_count = 0
         self.good_reps = 0
         self.flawed_reps = 0
-
-        self._left_pending_time: Optional[float] = None
-        self._left_pending_flawed = False
-        self._right_pending_time: Optional[float] = None
-        self._right_pending_flawed = False
 
         self.session_start_time: Optional[float] = None
         self.last_timestamp_s: Optional[float] = None
 
-    # ---------------------------------------------------------------
     def _is_complete(self) -> bool:
         return self.target_reps is not None and self.rep_count >= self.target_reps
 
-    def _try_sync(self, t: float) -> tuple[bool, Optional[str]]:
-        """Checks whether both arms now have a pending completed round
-        within the sync window. Returns (rep_completed, quality)."""
-        if self._left_pending_time is None or self._right_pending_time is None:
-            return False, None
-
-        if abs(self._left_pending_time - self._right_pending_time) > SYNC_WINDOW_SECONDS:
-            # Too far apart — drop the older one, keep waiting on the newer.
-            if self._left_pending_time < self._right_pending_time:
-                self._left_pending_time = None
-            else:
-                self._right_pending_time = None
-            return False, None
-
-        flawed = self._left_pending_flawed or self._right_pending_flawed
-        self._left_pending_time = None
-        self._right_pending_time = None
-        self._left_pending_flawed = False
-        self._right_pending_flawed = False
-
-        self.rep_count += 1
-        if flawed:
-            self.flawed_reps += 1
-        else:
-            self.good_reps += 1
-
-        return True, ("needs_improvement" if flawed else "good")
-
-    # ---------------------------------------------------------------
     def update(self, landmarks, timestamp_ms: int) -> dict[str, Any]:
         t = timestamp_ms / 1000.0
         if self.session_start_time is None:
@@ -335,7 +213,9 @@ class ArmCirclesAnalyzer:
         }
 
         if landmarks is None or not _looks_like_a_person(landmarks):
-            response["feedback"] = "No person detected — step into frame, facing the camera."
+            response["feedback"] = (
+                "No person detected — step into frame, facing the camera."
+            )
             return response
 
         l_shoulder, r_shoulder = landmarks[LEFT_SHOULDER], landmarks[RIGHT_SHOULDER]
@@ -362,7 +242,16 @@ class ArmCirclesAnalyzer:
 
         bbox_points = [
             p
-            for p in (l_shoulder, r_shoulder, l_elbow, r_elbow, l_wrist, r_wrist, l_hip, r_hip)
+            for p in (
+                l_shoulder,
+                r_shoulder,
+                l_elbow,
+                r_elbow,
+                l_wrist,
+                r_wrist,
+                l_hip,
+                r_hip,
+            )
             if _visible((p,))
         ]
         framing_message = _framing_feedback(bbox_points)
@@ -370,9 +259,8 @@ class ArmCirclesAnalyzer:
         response["framing_message"] = framing_message
 
         feedback = framing_message
-
-        left_completed = right_completed = False
-        left_dir = right_dir = None
+        rep_completed = False
+        quality = None
 
         if framing_message is None:
             if left_arm_ok:
@@ -381,14 +269,27 @@ class ArmCirclesAnalyzer:
                 left_radius = _dist(l_shoulder, l_wrist) / shoulder_width
                 left_extended = left_radius >= MIN_RADIUS_RATIO
                 response["left_arm_extended"] = left_extended
+
                 if left_extended and left_elbow_angle < ELBOW_STRAIGHT_DEG:
                     self.left.mark_bend()
+
                 left_completed, left_dir = self.left.update(
                     l_wrist.x - l_shoulder.x, l_wrist.y - l_shoulder.y, left_extended
                 )
+                response["left_direction"] = left_dir
+
                 if left_completed:
-                    self._left_pending_time = t
-                    self._left_pending_flawed = self.left.consume_bend_flag()
+                    self.left.consume_bend_flag()
+                    self.rep_count += 1
+                    self.left.rounds = max(self.left.rounds, self.rep_count)
+                    rep_completed = True
+                    quality = (
+                        "good" if not self.left.round_had_bend else "needs_improvement"
+                    )
+                    if self.left.consume_bend_flag():
+                        self.flawed_reps += 1
+                    else:
+                        self.good_reps += 1
 
             if right_arm_ok:
                 right_elbow_angle = _angle_deg(r_shoulder, r_elbow, r_wrist)
@@ -396,66 +297,40 @@ class ArmCirclesAnalyzer:
                 right_radius = _dist(r_shoulder, r_wrist) / shoulder_width
                 right_extended = right_radius >= MIN_RADIUS_RATIO
                 response["right_arm_extended"] = right_extended
+
                 if right_extended and right_elbow_angle < ELBOW_STRAIGHT_DEG:
                     self.right.mark_bend()
+
                 right_completed, right_dir = self.right.update(
                     r_wrist.x - r_shoulder.x, r_wrist.y - r_shoulder.y, right_extended
                 )
-                if right_completed:
-                    self._right_pending_time = t
-                    self._right_pending_flawed = self.right.consume_bend_flag()
+                response["right_direction"] = right_dir
 
-        response["left_direction"] = left_dir
-        response["right_direction"] = right_dir
+                if right_completed:
+                    flawed = self.right.consume_bend_flag()
+                    self.rep_count += 1
+                    rep_completed = True
+                    quality = "needs_improvement" if flawed else "good"
+                    if flawed:
+                        self.flawed_reps += 1
+                    else:
+                        self.good_reps += 1
+
         response["left_arm_rounds"] = self.left.rounds
         response["right_arm_rounds"] = self.right.rounds
-
-        rep_completed, quality = self._try_sync(t)
-
-        if rep_completed:
-            feedback = (
-                f"Round {self.rep_count} counted!"
-                if quality == "good"
-                else f"Round {self.rep_count} counted — keep your arms straighter."
-            )
-        elif feedback is None:
-            if left_completed and self._left_pending_time is not None:
-                feedback = "Left arm completed a circle — bring the right arm around too."
-            elif right_completed and self._right_pending_time is not None:
-                feedback = "Right arm completed a circle — bring the left arm around too."
-            elif not response["left_arm_extended"] and left_arm_ok:
-                feedback = "Extend your left arm fully out to the side."
-            elif not response["right_arm_extended"] and right_arm_ok:
-                feedback = "Extend your right arm fully out to the side."
-            else:
-                feedback = "Keep circling — both arms together."
+        response["rep_count"] = self.rep_count
+        response["session_complete"] = self._is_complete()
+        response["rep_completed"] = rep_completed
+        response["rep_form_quality"] = quality
+        response["feedback"] = feedback or (
+            "Keep circling — each arm counts when it completes a full round."
+        )
 
         self.last_timestamp_s = t
-
-        response.update(
-            {
-                "rep_count": self.rep_count,
-                "good_reps": self.good_reps,
-                "flawed_reps": self.flawed_reps,
-                "session_complete": self._is_complete(),
-                "rep_completed": rep_completed,
-                "rep_form_quality": quality,
-                "feedback": feedback,
-            }
-        )
         return response
 
 
 class ArmCirclesSession:
-    """Full session: one shared pose model + one analyzer.
-
-    `target_reps` / `target_sets` / `set_number` are the coach-assigned
-    plan for this user, supplied by the caller (the websocket route, from
-    query params) — same convention as `PushupSession`. The frontend does
-    not decide on its own whether a set/exercise is done; `session_complete`
-    and `exercise_complete` are both computed here.
-    """
-
     def __init__(
         self,
         target_reps: Optional[int] = None,
