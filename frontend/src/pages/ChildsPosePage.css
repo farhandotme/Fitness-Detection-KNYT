@@ -1,0 +1,769 @@
+/* ---------------------------------
+   Child's Pose page — fully self-contained styling. Uses the same design
+   tokens (--paper, --ink, --panel, --forest, --sprout, --amber, --alert,
+   --mono, etc.) defined globally in index.css, but does not depend on any
+   other page's stylesheet.
+--------------------------------- */
+
+.childspose-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 20px 24px 40px;
+  color: var(--ink);
+  font-family: var(--sans);
+}
+
+/* ---- header ---- */
+.childspose-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.childspose-title {
+  font-family: var(--display);
+  font-size: 34px;
+  letter-spacing: 0.02em;
+  margin: 0;
+}
+
+.childspose-header-right {
+  display: flex;
+  align-items: center;
+}
+
+.childspose-active-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.childspose-status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--alert);
+  flex-shrink: 0;
+}
+
+.childspose-status-dot.live {
+  background: var(--sprout);
+  box-shadow: 0 0 0 3px rgba(132, 199, 96, 0.25);
+}
+
+.childspose-active-label {
+  color: var(--muted);
+}
+
+.childspose-complete-label {
+  font-weight: 600;
+  color: var(--forest);
+}
+
+.childspose-start-btn,
+.childspose-stop-btn {
+  border: none;
+  border-radius: 8px;
+  padding: 9px 16px;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  transition: filter 0.15s ease;
+}
+
+.childspose-start-btn {
+  background: var(--forest);
+  color: var(--paper);
+}
+
+.childspose-start-btn:hover {
+  filter: brightness(1.1);
+}
+
+.childspose-start-btn.full-width {
+  width: 100%;
+  padding: 13px;
+  font-size: 13px;
+  margin-top: 18px;
+}
+
+.childspose-stop-btn {
+  background: transparent;
+  color: var(--alert);
+  border: 1px solid var(--alert);
+}
+
+.childspose-stop-btn:hover {
+  background: rgba(166, 72, 58, 0.08);
+}
+
+.childspose-error {
+  background: rgba(166, 72, 58, 0.1);
+  border: 1px solid var(--alert);
+  color: var(--alert);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+}
+
+/* ---- body layout ---- */
+.childspose-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .childspose-body {
+    grid-template-columns: 1fr;
+  }
+}
+
+.childspose-camera-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.childspose-stats-col {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* ---- camera viewfinder (used by ChildsPoseCamera.tsx) ---- */
+.childspose-viewfinder {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  background: var(--panel);
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--panel-line);
+  flex-shrink: 0;
+}
+
+.childspose-viewfinder-video {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+}
+
+.childspose-viewfinder-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  transform: scaleX(-1);
+}
+
+.childspose-viewfinder-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  text-align: center;
+  padding: 0 20px;
+}
+
+.childspose-viewfinder-placeholder span {
+  font-size: 28px;
+}
+
+/* ---- rest overlay ---- */
+.childspose-rest-overlay-caption {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.childspose-rest-countdown {
+  font-family: var(--display);
+  font-size: 26px;
+  color: var(--forest);
+}
+
+/* ---- progress ---- */
+.childspose-progress-track {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.childspose-progress-fill {
+  height: 100%;
+  background: var(--forest);
+  transition: width 0.25s ease;
+}
+
+.childspose-progress-caption {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.childspose-set-dots {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+.childspose-set-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--line);
+}
+
+.childspose-set-dot.current {
+  background: var(--amber);
+}
+
+.childspose-set-dot.done {
+  background: var(--forest);
+}
+
+/* ---- session summary strip ---- */
+.childspose-session-summary {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.childspose-session-summary-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  background: var(--panel);
+  color: var(--paper);
+  border-radius: 10px;
+  padding: 8px 14px;
+  min-width: 70px;
+}
+
+.childspose-session-summary-item .k {
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.childspose-session-summary-item .v {
+  font-family: var(--display);
+  font-size: 20px;
+}
+
+.childspose-session-summary-item.good .v {
+  color: var(--sprout);
+}
+
+.childspose-session-summary-item.flawed .v {
+  color: var(--amber);
+}
+
+/* ---- setup builder ---- */
+.childspose-session-builder {
+  background: var(--panel);
+  border: 1px solid var(--panel-line);
+  border-radius: 14px;
+  padding: 18px;
+  color: var(--paper);
+}
+
+.childspose-builder-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--panel-line);
+}
+
+.childspose-builder-row:last-of-type {
+  border-bottom: none;
+}
+
+.childspose-builder-label {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.childspose-builder-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.childspose-reps-input {
+  width: 54px;
+  background: var(--paper);
+  border: 1px solid var(--panel-line);
+  border-radius: 6px;
+  padding: 5px 6px;
+  font-family: var(--mono);
+  font-size: 13px;
+  text-align: center;
+  color: var(--ink);
+}
+
+.childspose-reps-presets {
+  display: flex;
+  gap: 6px;
+}
+
+.childspose-reps-preset {
+  border: 1px solid var(--panel-line);
+  background: transparent;
+  color: var(--paper);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-family: var(--mono);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.childspose-reps-preset.active {
+  background: var(--sprout);
+  color: var(--ink);
+  border-color: var(--sprout);
+  font-weight: 600;
+}
+
+.childspose-builder-total {
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 14px;
+}
+
+.childspose-builder-total strong {
+  color: var(--paper);
+}
+
+.childspose-setup-tip {
+  margin-top: 14px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+  background: rgba(242, 239, 228, 0.04);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+/* ---- rest panel ---- */
+.childspose-rest-panel {
+  background: var(--panel);
+  border: 1px solid var(--panel-line);
+  border-radius: 14px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  color: var(--paper);
+}
+
+.childspose-rest-panel-title {
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+.childspose-rest-panel-big-countdown {
+  font-family: var(--display);
+  font-size: 56px;
+  color: var(--amber);
+  line-height: 1;
+}
+
+.childspose-rest-panel-caption {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+
+.childspose-rest-panel-grid {
+  margin-bottom: 14px;
+}
+
+/* ---- generic small grid (rest panel summary) ---- */
+.childspose-arm-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  width: 100%;
+}
+
+.childspose-arm-grid-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  background: rgba(242, 239, 228, 0.05);
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.childspose-arm-grid-item .k {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.childspose-arm-grid-item .v {
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* ---- active-phase wrapper + coach feedback ---- */
+.childspose-single-arm-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.childspose-feedback-box {
+  background: var(--panel);
+  border: 1px solid var(--panel-line);
+  border-left: 4px solid var(--sprout);
+  border-radius: 10px;
+  padding: 12px 14px;
+  color: var(--paper);
+}
+
+.childspose-feedback-box strong {
+  display: block;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.childspose-feedback-box p {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.4;
+}
+
+.childspose-feedback-box.needs_improvement {
+  border-left-color: var(--amber);
+}
+
+/* ---- results / summary panel ---- */
+.childspose-results-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.childspose-results-totals {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.childspose-results-table {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.childspose-results-row {
+  display: grid;
+  grid-template-columns: 0.6fr 1fr 1fr 1fr 1fr;
+  padding: 8px 12px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  border-bottom: 1px solid var(--line);
+}
+
+.childspose-results-row:last-child {
+  border-bottom: none;
+}
+
+.childspose-results-head {
+  background: var(--panel);
+  color: var(--paper);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
+}
+
+.good-text {
+  color: var(--forest);
+  font-weight: 600;
+}
+
+.flawed-text {
+  color: var(--amber);
+  font-weight: 600;
+}
+
+.empty-hint {
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* ---------------------------------
+   Stats panel (ChildsPoseStatsPanel.tsx) — shares .arm-panel / .arm-grid /
+   .pose-pill / .stage-badge / .quality-badge / .posture-line class names
+   with the rest of the app's per-exercise panels, but every rule needed to
+   render them correctly is defined right here (self-contained, no reliance
+   on another page's stylesheet loading first).
+--------------------------------- */
+/* ---- calibration UI (ChildsPoseStatsPanel — no Superman equivalent,
+   Child's Pose measures a personal baseline before the timer can start) ---- */
+.childspose-calibrating {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 0 10px;
+}
+
+.childspose-calibrating-label {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--paper);
+}
+
+.childspose-calibrating-track {
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(242, 239, 228, 0.1);
+  overflow: hidden;
+}
+
+.childspose-calibrating-fill {
+  height: 100%;
+  background: var(--amber);
+  transition: width 0.15s ease;
+}
+
+.childspose-calibrating-hint {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.arm-panel {
+  background: var(--panel);
+  border: 1px solid var(--panel-line);
+  border-radius: 14px;
+  padding: 18px;
+  color: var(--paper);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.arm-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.arm-panel-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.pose-pill {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.pose-pill.ok {
+  background: rgba(132, 199, 96, 0.15);
+  color: var(--sprout);
+}
+
+.pose-pill.warn {
+  background: rgba(184, 134, 46, 0.18);
+  color: var(--amber);
+}
+
+.pose-pill.bad {
+  background: rgba(166, 72, 58, 0.18);
+  color: var(--alert);
+}
+
+.childspose-timer {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 0 4px;
+}
+
+.childspose-timer-value {
+  font-family: var(--display);
+  font-size: 44px;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  color: var(--paper);
+  font-variant-numeric: tabular-nums;
+}
+
+.childspose-timer--broken .childspose-timer-value {
+  color: #e0a75e;
+}
+
+.childspose-timer--not_started .childspose-timer-value {
+  color: var(--muted);
+}
+
+.childspose-timer-target {
+  font-family: var(--mono);
+  font-size: 15px;
+  color: var(--muted);
+}
+
+.childspose-state-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.childspose-view-pill {
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  border: 1px solid var(--panel-line);
+  border-radius: 999px;
+  padding: 3px 9px;
+}
+
+.stage-badge {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  letter-spacing: 0.05em;
+  background: rgba(242, 239, 228, 0.08);
+}
+
+.stage-badge.up {
+  background: rgba(132, 199, 96, 0.2);
+  color: var(--sprout);
+}
+
+.stage-badge.down {
+  background: rgba(184, 134, 46, 0.18);
+  color: var(--amber);
+}
+
+.arm-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.arm-grid-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: rgba(242, 239, 228, 0.05);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.arm-grid-item .k {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.arm-grid-item .v {
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.quality-badge {
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 6px;
+  border-radius: 8px;
+  background: rgba(242, 239, 228, 0.06);
+  color: var(--muted);
+}
+
+.quality-badge.good {
+  background: rgba(132, 199, 96, 0.15);
+  color: var(--sprout);
+}
+
+.quality-badge.needs_improvement {
+  background: rgba(184, 134, 46, 0.18);
+  color: var(--amber);
+}
+
+.posture-line {
+  font-size: 12px;
+  line-height: 1.4;
+  padding: 6px 10px;
+  border-radius: 8px;
+}
+
+.posture-line.ok {
+  background: rgba(132, 199, 96, 0.08);
+  color: var(--sprout);
+}
+
+.posture-line.bad {
+  background: rgba(166, 72, 58, 0.1);
+  color: var(--alert);
+}
