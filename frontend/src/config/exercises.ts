@@ -54,34 +54,8 @@ export const exercises: ExerciseConfig[] = [
     category: "upper_body",
     setupTip: "Stand tall, curl both arms together keeping elbows fixed.",
     cameraMirror: true,
-  },
-  {
-    id: "bicep_curl_left",
-    name: "Bicep Curl (Left)",
-    wsRoute: "/ws/bicep_curl_left_arm",
-    mode: "reps",
-    defaultTarget: 10,
-    defaultSets: 3,
-    defaultRestSeconds: 45,
-    difficulty: "beginner",
-    tagline: "Left arm isolation curl",
-    category: "upper_body",
-    setupTip: "Keep elbow fixed at your side, curl left arm up fully.",
-    cameraMirror: true,
-  },
-  {
-    id: "bicep_curl_right",
-    name: "Bicep Curl (Right)",
-    wsRoute: "/ws/bicep_curl_right_arm",
-    mode: "reps",
-    defaultTarget: 10,
-    defaultSets: 3,
-    defaultRestSeconds: 45,
-    difficulty: "beginner",
-    tagline: "Right arm isolation curl",
-    category: "upper_body",
-    setupTip: "Keep elbow fixed at your side, curl right arm up fully.",
-    cameraMirror: true,
+    imageUrl:
+      "https://mrwallpaper.com/images/hd/power-in-every-curl-muscular-man-flexing-biceps-zpn40ycyn9f7rf4j.jpg",
   },
   {
     id: "shoulder_press",
@@ -96,6 +70,8 @@ export const exercises: ExerciseConfig[] = [
     category: "upper_body",
     setupTip: "Start with weights at shoulder height, press fully overhead.",
     cameraMirror: true,
+    imageUrl:
+      "https://t4.ftcdn.net/jpg/01/42/13/53/360_F_142135317_jGSJW9FTsulJRUzQRtMtMdEJcXJWuMIT.jpg",
   },
   {
     id: "lateral_raise",
@@ -110,6 +86,8 @@ export const exercises: ExerciseConfig[] = [
     category: "upper_body",
     setupTip: "Raise arms sideways to shoulder height, slight elbow bend.",
     cameraMirror: true,
+    imageUrl:
+      "https://media.istockphoto.com/id/2155499046/photo/young-muscular-man-doing-dumbbell-lateral-raise-exercise-at-gym.jpg?s=612x612&w=0&k=20&c=kAgbNo4a3GiOZbYvUxFf1pmE5JWcsDXm7ktDDeZvrLI=",
   },
   {
     id: "pike_pushup",
@@ -124,6 +102,8 @@ export const exercises: ExerciseConfig[] = [
     category: "upper_body",
     setupTip: "Form inverted V, lower head toward ground keeping hips high.",
     cameraMirror: true,
+    imageUrl:
+      "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSiGGjGMXpUb-o4Vpj7aFCoCDHSCCkF7WdiI-LsV5u_vA&s=10",
   },
   {
     id: "arnold_press",
@@ -138,6 +118,8 @@ export const exercises: ExerciseConfig[] = [
     category: "upper_body",
     setupTip: "Rotate palms in as you lower, rotate out as you press up.",
     cameraMirror: true,
+    imageUrl:
+      "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQt98kB2UvNIYw-i_OobTJnDqkPCW_zZymVDeW4HTSaiDw6oZ4XMMeWFnY&s=10",
   },
   {
     id: "bent_over_row",
@@ -153,6 +135,8 @@ export const exercises: ExerciseConfig[] = [
     setupTip:
       "Hinge at hips, pull elbows back past torso, squeeze shoulder blades.",
     cameraMirror: true,
+    imageUrl:
+      "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR8kxpppwqVIo3Z9oJtUN4JEL4WrD1Z4_YhQU_uowpfAa0ICcyoTEd7lJfp&s=10",
   },
   {
     id: "muay_thai_jab",
@@ -167,6 +151,8 @@ export const exercises: ExerciseConfig[] = [
     category: "upper_body",
     setupTip: "Guard position, extend lead hand in straight punch, rotate hip.",
     cameraMirror: true,
+    imageUrl:
+      "https://media.istockphoto.com/id/483095693/photo/boxer-throwing-jab.jpg?s=612x612&w=0&k=20&c=QpTixa3_VxSPJ2OcT8U32zYh3Q0GYGXTDHwdE8PoxUE=",
   },
 
   // Lower Body (reps)
@@ -183,6 +169,8 @@ export const exercises: ExerciseConfig[] = [
     category: "lower_body",
     setupTip: "Feet shoulder-width, chest up, knees track over toes.",
     cameraMirror: true,
+    imageUrl:
+      "https://static.vecteezy.com/system/resources/thumbnails/065/837/362/small/muscular-black-man-performing-a-squat-exercise-against-a-neutral-backdrop-photo.jpeg",
   },
   {
     id: "lunge",
@@ -197,6 +185,8 @@ export const exercises: ExerciseConfig[] = [
     category: "lower_body",
     setupTip: "Step forward, lower back knee toward floor, front knee at 90°.",
     cameraMirror: true,
+    imageUrl:
+      "https://media.istockphoto.com/id/643255584/photo/happy-male-athlete-exercising-lunges-on-the-city-street.jpg?s=612x612&w=0&k=20&c=y59mkebuQx4UjO1ZGtiJ9udGfenggOy8sWgrLeITGuU=",
   },
   {
     id: "sumo_squat",
@@ -211,6 +201,8 @@ export const exercises: ExerciseConfig[] = [
     category: "lower_body",
     setupTip: "Wide stance, toes out, squat between legs keeping chest up.",
     cameraMirror: true,
+    imageUrl:
+      "https://www.gymshark.com/_next/image?url=https%3A%2F%2Fimages.ctfassets.net%2F8urtyqugdt2l%2F6qcnhbUsmIYkzsJZEeqhLD%2F7e63c0c86c1b3540e985dd71f5689499%2Fmobile-sumo-squats_.jpg&w=3840&q=85",
   },
   {
     id: "calf_raise",
@@ -225,6 +217,8 @@ export const exercises: ExerciseConfig[] = [
     category: "lower_body",
     setupTip: "Rise up on toes fully, hold briefly at top, lower slowly.",
     cameraMirror: true,
+    imageUrl:
+      "https://media.istockphoto.com/id/1202786878/photo/trained-legs-with-muscular-calves-in-sneakers-in-training-gym-during-hard-fitness-and-gym.jpg?s=612x612&w=0&k=20&c=cA1KyWUO-e3-fyk_N1z3ZapoDr2qMPaIK1PlCOK8wbI=",
   },
   {
     id: "single_leg_squat",
@@ -239,6 +233,8 @@ export const exercises: ExerciseConfig[] = [
     category: "lower_body",
     setupTip: "Stand on one leg, lower into squat, keep standing heel flat.",
     cameraMirror: true,
+    imageUrl:
+      "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRBAa13XWEHeVYrFIU0DpzTleYBwLdiFNNVCxKVq90WkVDIj1iYlKqW5fgG&s=10",
   },
 
   // Lower Body (hold)
@@ -255,6 +251,8 @@ export const exercises: ExerciseConfig[] = [
     category: "lower_body",
     setupTip: "Lie on back, feet flat, drive hips up and squeeze glutes.",
     cameraMirror: true,
+    imageUrl:
+      "https://media.istockphoto.com/id/1419467318/photo/sporty-young-man-training-yoga-over-a-white-background.jpg?s=612x612&w=0&k=20&c=TQaDk3THsyhyMRnkITrbHzs4Sb6f29Ur0Givb01z5Jw=",
   },
   {
     id: "advanced_bridge",
@@ -269,6 +267,8 @@ export const exercises: ExerciseConfig[] = [
     category: "lower_body",
     setupTip: "Standard bridge then extend one leg, hold hips level.",
     cameraMirror: true,
+    imageUrl:
+      "https://media.istockphoto.com/id/531050998/photo/variation-of-bridge-pose.jpg?s=612x612&w=0&k=20&c=TviToH1IQFrZ4I2zs2LaJdh609a0fiHfoMk-bB9ChBU=",
   },
   {
     id: "wall_sit",
@@ -283,6 +283,7 @@ export const exercises: ExerciseConfig[] = [
     category: "lower_body",
     setupTip: "Back flat on wall, thighs parallel to floor, knees at 90°.",
     cameraMirror: true,
+    imageUrl: "",
   },
   {
     id: "chair_pose",
@@ -297,6 +298,7 @@ export const exercises: ExerciseConfig[] = [
     category: "lower_body",
     setupTip: "Feet together, sit back as if into a chair, arms overhead.",
     cameraMirror: true,
+    imageUrl: "",
   },
 
   // Core (reps)
@@ -313,6 +315,7 @@ export const exercises: ExerciseConfig[] = [
     category: "core",
     setupTip: "Alternate elbow to opposite knee in controlled rotation.",
     cameraMirror: true,
+    imageUrl: "",
   },
   {
     id: "bird_dog",
@@ -327,6 +330,7 @@ export const exercises: ExerciseConfig[] = [
     category: "core",
     setupTip: "On all fours, extend opposite arm and leg, keep back flat.",
     cameraMirror: true,
+    imageUrl: "",
   },
   {
     id: "dead_bug",
@@ -341,6 +345,7 @@ export const exercises: ExerciseConfig[] = [
     category: "core",
     setupTip: "Lie on back, lower opposite arm and leg slowly toward floor.",
     cameraMirror: true,
+    imageUrl: "",
   },
   {
     id: "flutter_kicks",
@@ -355,6 +360,7 @@ export const exercises: ExerciseConfig[] = [
     category: "core",
     setupTip: "Lie flat, legs slightly raised, alternate rapid up-down kicks.",
     cameraMirror: true,
+    imageUrl: "",
   },
   {
     id: "leg_raise",
@@ -370,6 +376,7 @@ export const exercises: ExerciseConfig[] = [
     setupTip:
       "Lie flat, raise both legs to 90° keeping lower back pressed down.",
     cameraMirror: true,
+    imageUrl: "",
   },
   {
     id: "russian_twist",
@@ -384,6 +391,7 @@ export const exercises: ExerciseConfig[] = [
     category: "core",
     setupTip: "Sit at 45°, rotate torso side to side, feet off ground.",
     cameraMirror: true,
+    imageUrl: "",
   },
 
   // Core (hold)
@@ -400,6 +408,7 @@ export const exercises: ExerciseConfig[] = [
     category: "core",
     setupTip: "Forearms on floor, body in straight line, don't let hips drop.",
     cameraMirror: true,
+    imageUrl: "",
   },
   {
     id: "side_plank",
@@ -414,6 +423,7 @@ export const exercises: ExerciseConfig[] = [
     category: "core",
     setupTip: "Stack feet, lift hips into straight line, keep hips high.",
     cameraMirror: true,
+    imageUrl: "",
   },
   {
     id: "hollow_hold",
@@ -428,6 +438,7 @@ export const exercises: ExerciseConfig[] = [
     category: "core",
     setupTip: "Lie on back, arms overhead, lift shoulders and legs slightly.",
     cameraMirror: true,
+    imageUrl: "",
   },
 
   // Cardio (reps)
@@ -444,6 +455,7 @@ export const exercises: ExerciseConfig[] = [
     category: "cardio",
     setupTip: "Jump feet wide and arms up simultaneously, then return.",
     cameraMirror: true,
+    imageUrl: "",
   },
   {
     id: "high_knees",
@@ -458,6 +470,7 @@ export const exercises: ExerciseConfig[] = [
     category: "cardio",
     setupTip: "Drive alternating knees up to hip height at a fast pace.",
     cameraMirror: true,
+    imageUrl: "",
   },
   {
     id: "mountain_climber",
@@ -472,6 +485,7 @@ export const exercises: ExerciseConfig[] = [
     category: "cardio",
     setupTip: "High plank position, alternate driving knees to chest rapidly.",
     cameraMirror: true,
+    imageUrl: "",
   },
   {
     id: "butt_kicks",
@@ -486,6 +500,7 @@ export const exercises: ExerciseConfig[] = [
     category: "cardio",
     setupTip: "Jog in place kicking heels up to touch glutes alternately.",
     cameraMirror: true,
+    imageUrl: "",
   },
   {
     id: "tuck_jump",
@@ -500,6 +515,7 @@ export const exercises: ExerciseConfig[] = [
     category: "cardio",
     setupTip: "Jump and pull both knees to chest, land softly with bent knees.",
     cameraMirror: true,
+    imageUrl: "",
   },
   {
     id: "standing_cross_crunch",
@@ -514,6 +530,7 @@ export const exercises: ExerciseConfig[] = [
     category: "cardio",
     setupTip: "Bring elbow and opposite knee together in standing crunch.",
     cameraMirror: true,
+    imageUrl: "",
   },
 
   // Full Body (reps)
@@ -530,6 +547,7 @@ export const exercises: ExerciseConfig[] = [
     category: "full_body",
     setupTip: "Start in downward dog, dive forward into upward dog, reverse.",
     cameraMirror: true,
+    imageUrl: "",
   },
   {
     id: "inchworm",
@@ -544,6 +562,7 @@ export const exercises: ExerciseConfig[] = [
     category: "full_body",
     setupTip: "Hinge forward, walk hands out to plank, walk back up, stand.",
     cameraMirror: true,
+    imageUrl: "",
   },
   {
     id: "skandha_chakra",
@@ -558,6 +577,7 @@ export const exercises: ExerciseConfig[] = [
     category: "full_body",
     setupTip: "Rotate shoulders in wide circular motion, both directions.",
     cameraMirror: true,
+    imageUrl: "",
   },
   {
     id: "arm_circles",
@@ -572,6 +592,7 @@ export const exercises: ExerciseConfig[] = [
     category: "mobility",
     setupTip: "Extend arms sideways, rotate in controlled circles.",
     cameraMirror: true,
+    imageUrl: "",
   },
 
   // Full Body (hold)
@@ -589,6 +610,7 @@ export const exercises: ExerciseConfig[] = [
     setupTip:
       "Lie face down, simultaneously lift arms, chest and legs off floor.",
     cameraMirror: true,
+    imageUrl: "",
   },
 
   // Mobility / Yoga (hold)
@@ -605,6 +627,7 @@ export const exercises: ExerciseConfig[] = [
     category: "mobility",
     setupTip: "Stand on one leg, press foot to inner thigh, arms overhead.",
     cameraMirror: true,
+    imageUrl: "",
   },
   {
     id: "warrior_ii",
@@ -619,6 +642,7 @@ export const exercises: ExerciseConfig[] = [
     category: "mobility",
     setupTip: "Wide lunge stance, arms extended, gaze over front hand.",
     cameraMirror: true,
+    imageUrl: "",
   },
   {
     id: "cobra_pose",
@@ -634,6 +658,7 @@ export const exercises: ExerciseConfig[] = [
     setupTip:
       "Lie prone, press hands under shoulders, lift chest, elbows soft.",
     cameraMirror: true,
+    imageUrl: "",
   },
   {
     id: "downward_dog",
@@ -648,6 +673,7 @@ export const exercises: ExerciseConfig[] = [
     category: "mobility",
     setupTip: "Inverted V shape, press heels toward floor, shoulders open.",
     cameraMirror: true,
+    imageUrl: "",
   },
   {
     id: "dancer_pose",
@@ -662,6 +688,7 @@ export const exercises: ExerciseConfig[] = [
     category: "mobility",
     setupTip: "Stand on one leg, hold back foot, extend arm and leg back.",
     cameraMirror: true,
+    imageUrl: "",
   },
   {
     id: "triangle_pose",
@@ -676,6 +703,7 @@ export const exercises: ExerciseConfig[] = [
     category: "mobility",
     setupTip: "Wide stance, reach forward hand down to shin, top arm up.",
     cameraMirror: true,
+    imageUrl: "",
   },
   {
     id: "peacock_pose",
@@ -690,6 +718,7 @@ export const exercises: ExerciseConfig[] = [
     category: "mobility",
     setupTip: "Balance body on both hands placed together under abdomen.",
     cameraMirror: true,
+    imageUrl: "",
   },
   {
     id: "half_moon",
@@ -704,6 +733,7 @@ export const exercises: ExerciseConfig[] = [
     category: "mobility",
     setupTip: "Balance on one leg, raise other leg parallel, top arm up.",
     cameraMirror: true,
+    imageUrl: "",
   },
   {
     id: "reverse_warrior",
@@ -718,6 +748,7 @@ export const exercises: ExerciseConfig[] = [
     category: "mobility",
     setupTip: "From Warrior II, lower back arm to back leg, lift front arm up.",
     cameraMirror: true,
+    imageUrl: "",
   },
   {
     id: "standing_forward_fold",
@@ -732,6 +763,7 @@ export const exercises: ExerciseConfig[] = [
     category: "mobility",
     setupTip: "Feet hip-width, hinge forward from hips, let head hang heavy.",
     cameraMirror: true,
+    imageUrl: "",
   },
   {
     id: "childs_pose",
@@ -746,6 +778,7 @@ export const exercises: ExerciseConfig[] = [
     category: "mobility",
     setupTip: "Kneel, sit back on heels, arms extended forward on mat.",
     cameraMirror: true,
+    imageUrl: "",
   },
   {
     id: "shoulder_stand",
@@ -760,6 +793,7 @@ export const exercises: ExerciseConfig[] = [
     category: "full_body",
     setupTip: "Lie on back, lift legs and hips, support lower back with hands.",
     cameraMirror: true,
+    imageUrl: "",
   },
 
   // Mobility (reps)
@@ -776,6 +810,7 @@ export const exercises: ExerciseConfig[] = [
     category: "mobility",
     setupTip: "Hold wall, swing leg forward and back in controlled arc.",
     cameraMirror: true,
+    imageUrl: "",
   },
   {
     id: "side_leg_swing",
@@ -790,6 +825,7 @@ export const exercises: ExerciseConfig[] = [
     category: "mobility",
     setupTip: "Hold wall, swing leg side to side across body.",
     cameraMirror: true,
+    imageUrl: "",
   },
   {
     id: "windmill",
@@ -804,6 +840,7 @@ export const exercises: ExerciseConfig[] = [
     category: "mobility",
     setupTip: "Wide stance, rotate upper body touching opposite hand to foot.",
     cameraMirror: true,
+    imageUrl: "",
   },
 ];
 
