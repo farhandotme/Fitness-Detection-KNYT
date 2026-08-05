@@ -1,33 +1,47 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { useRoute, useLocation, useSearch } from 'wouter';
-import { getExerciseById } from '@/config/exercises';
-import { useCamera } from '@/hooks/useCamera';
-import { useExerciseSocket } from '@/hooks/useExerciseSocket';
-import { CameraPreview } from '@/components/CameraPreview';
-import { RepPanel } from '@/components/RepPanel';
-import { HoldPanel } from '@/components/HoldPanel';
-import { formatTime } from '@/utils/formatTime';
-import { X, Play, Pause, CheckCircle2, Timer, Zap, Activity, Camera, ShieldCheck } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useEffect, useState, useRef, useCallback } from "react";
+import { useRoute, useLocation, useSearch } from "wouter";
+import { getExerciseById } from "@/config/exercises";
+import { useCamera } from "@/hooks/useCamera";
+import { useExerciseSocket } from "@/hooks/useExerciseSocket";
+import { CameraPreview } from "@/components/CameraPreview";
+import { RepPanel } from "@/components/RepPanel";
+import { HoldPanel } from "@/components/HoldPanel";
+import { formatTime } from "@/utils/formatTime";
+import {
+  X,
+  Play,
+  Pause,
+  CheckCircle2,
+  Timer,
+  Zap,
+  Activity,
+  Camera,
+  ShieldCheck,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { motion, AnimatePresence } from "framer-motion";
 
 export function SessionPage() {
-  const [match, params] = useRoute('/exercise/:id/session');
+  const [match, params] = useRoute("/exercise/:id/session");
   const [, setLocation] = useLocation();
   const searchString = useSearch();
   const searchParams = new URLSearchParams(searchString);
 
-  const targetStr = searchParams.get('target');
-  const setsStr = searchParams.get('sets');
-  const restStr = searchParams.get('rest');
+  const targetStr = searchParams.get("target");
+  const setsStr = searchParams.get("sets");
+  const restStr = searchParams.get("rest");
 
   const id = params?.id;
   const exercise = id ? getExerciseById(id) : undefined;
-  const defaultExercise = exercise || getExerciseById('pushup')!;
+  const defaultExercise = exercise || getExerciseById("pushup")!;
 
-  const target = targetStr ? parseInt(targetStr) : exercise?.defaultTarget || 10;
+  const target = targetStr
+    ? parseInt(targetStr)
+    : exercise?.defaultTarget || 10;
   const targetSets = setsStr ? parseInt(setsStr) : exercise?.defaultSets || 3;
-  const restSeconds = restStr ? parseInt(restStr) : exercise?.defaultRestSeconds || 45;
+  const restSeconds = restStr
+    ? parseInt(restStr)
+    : exercise?.defaultRestSeconds || 45;
 
   const [currentSet, setCurrentSet] = useState(1);
   const [isResting, setIsResting] = useState(false);
@@ -37,8 +51,16 @@ export function SessionPage() {
   const [countdown, setCountdown] = useState<number | null>(3);
   const [sessionStarted, setSessionStarted] = useState(false);
 
-  const { videoRef, canvasRef, permission, startCamera, stopCamera, captureFrame } = useCamera(defaultExercise.cameraMirror ?? true);
-  const { connected, socketError, data, lastRep, start, stop, sendFrame } = useExerciseSocket(defaultExercise);
+  const {
+    videoRef,
+    canvasRef,
+    permission,
+    startCamera,
+    stopCamera,
+    captureFrame,
+  } = useCamera(defaultExercise.cameraMirror ?? true);
+  const { connected, socketError, data, lastRep, start, stop, sendFrame } =
+    useExerciseSocket(defaultExercise);
 
   // Use refs for values that need to be read inside intervals without stale closures
   const isPausedRef = useRef(isPaused);
@@ -83,18 +105,33 @@ export function SessionPage() {
         start({
           targetSets,
           setNumber: 1,
-          ...(defaultExercise.mode === 'reps' ? { targetReps: target } : { targetSeconds: target }),
+          ...(defaultExercise.mode === "reps"
+            ? { targetReps: target }
+            : { targetSeconds: target }),
         });
       });
-      return () => { cancelled = true; };
+      return () => {
+        cancelled = true;
+      };
     }
-    const timer = window.setTimeout(() => setCountdown(value => value === null ? null : value - 1), 900);
+    const timer = window.setTimeout(
+      () => setCountdown((value) => (value === null ? null : value - 1)),
+      900,
+    );
     return () => window.clearTimeout(timer);
-  }, [sessionStarted, countdown, startCamera, start, targetSets, target, defaultExercise.mode]);
+  }, [
+    sessionStarted,
+    countdown,
+    startCamera,
+    start,
+    targetSets,
+    target,
+    defaultExercise.mode,
+  ]);
 
   // Send frames when connected + camera ready
   useEffect(() => {
-    if (connected && permission === 'granted') {
+    if (connected && permission === "granted") {
       startSendingFrames();
     } else {
       stopSendingFrames();
@@ -118,14 +155,14 @@ export function SessionPage() {
       setIsResting(true);
       setRestTimeLeft(restSeconds);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data?.session_complete, data?.exercise_complete, stopCamera]);
 
   // Rest countdown
   useEffect(() => {
     if (!isResting || restTimeLeft <= 0) return;
     const timer = setInterval(() => {
-      setRestTimeLeft(prev => {
+      setRestTimeLeft((prev) => {
         if (prev <= 1) {
           setIsResting(false);
           const nextSet = currentSet + 1;
@@ -133,7 +170,9 @@ export function SessionPage() {
           start({
             targetSets,
             setNumber: nextSet,
-            ...(defaultExercise.mode === 'reps' ? { targetReps: target } : { targetSeconds: target }),
+            ...(defaultExercise.mode === "reps"
+              ? { targetReps: target }
+              : { targetSeconds: target }),
           });
           return 0;
         }
@@ -141,7 +180,7 @@ export function SessionPage() {
       });
     }, 1000);
     return () => clearInterval(timer);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isResting]);
 
   const handleQuit = () => {
@@ -155,10 +194,10 @@ export function SessionPage() {
     stop();
     stopCamera();
     stopSendingFrames();
-    setLocation('/');
+    setLocation("/");
   };
 
-  const togglePause = () => setIsPaused(p => !p);
+  const togglePause = () => setIsPaused((p) => !p);
 
   const beginSession = () => {
     setSessionStarted(true);
@@ -166,33 +205,37 @@ export function SessionPage() {
   };
 
   if (!match || !exercise) {
-    return <div className="p-8 text-center text-red-400">Session not found.</div>;
+    return (
+      <div className="p-8 text-center text-red-400">Session not found.</div>
+    );
   }
 
   // ── Completion Screen ────────────────────────────────────────────────────────
   if (isSessionComplete) {
     return (
-    <div className="min-h-[100dvh] bg-[#071116] text-foreground flex items-center justify-center p-6">
+      <div className="min-h-dvh bg-[#071116] text-foreground flex items-center justify-center p-6">
         <motion.div
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
-           className="bg-[#0d1820] border border-primary/15 p-10 rounded-[2rem] text-center max-w-sm w-full shadow-2xl shadow-black/30"
+          className="bg-[#0d1820] border border-primary/15 p-10 rounded-4xl text-center max-w-sm w-full shadow-2xl shadow-black/30"
         >
           <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
             <CheckCircle2 className="w-10 h-10 text-primary" />
           </div>
-          <h1 className="text-3xl font-black uppercase tracking-tight mb-2 text-foreground">Workout Complete</h1>
+          <h1 className="text-3xl font-black uppercase tracking-tight mb-2 text-foreground">
+            Workout Complete
+          </h1>
           <p className="text-muted-foreground mb-2 text-sm">
             {targetSets} sets of {exercise.name} done.
           </p>
-          {data && 'rep_count' in data && (
+          {data && "rep_count" in data && (
             <p className="text-primary font-bold text-lg font-mono mb-6">
               {(data as any).good_reps} / {(data as any).rep_count} good reps
             </p>
           )}
-        <button
-          onClick={finishToHome}
-          data-testid="button-back-dashboard"
+          <button
+            onClick={finishToHome}
+            data-testid="button-back-dashboard"
             className="w-full bg-primary text-primary-foreground py-3.5 rounded-xl font-black uppercase tracking-wider hover:brightness-110 transition-all"
           >
             Back to Dashboard
@@ -203,12 +246,11 @@ export function SessionPage() {
   }
 
   // ── Live Session ─────────────────────────────────────────────────────────────
-  const repData = data && exercise.mode === 'reps' ? (data as any) : null;
-  const holdData = data && exercise.mode === 'hold' ? (data as any) : null;
+  const repData = data && exercise.mode === "reps" ? (data as any) : null;
+  const holdData = data && exercise.mode === "hold" ? (data as any) : null;
 
   return (
-    <div className="min-h-[100dvh] max-h-[100dvh] bg-[#071116] text-foreground flex flex-col overflow-hidden">
-
+    <div className="min-h-dvh max-h-dvh bg-[#071116] text-foreground flex flex-col overflow-hidden">
       {/* ── Top Bar ─────────────────────────────────────────────────── */}
       <header className="flex items-center gap-3 px-4 py-3 border-b border-white/10 shrink-0 bg-[#0b151d]/95 backdrop-blur-xl">
         <button
@@ -227,14 +269,20 @@ export function SessionPage() {
 
         {/* Set counter */}
         <div className="flex items-center gap-2 text-xs">
-           <span className="text-slate-500">Set</span>
-          <span className="font-black text-white font-mono">{Math.min(currentSet, targetSets)}/{targetSets}</span>
-           <span className="mx-1 text-white/20">·</span>
+          <span className="text-slate-500">Set</span>
+          <span className="font-black text-white font-mono">
+            {Math.min(currentSet, targetSets)}/{targetSets}
+          </span>
+          <span className="mx-1 text-white/20">·</span>
           {repData && (
-             <span className="font-mono text-slate-500">{repData.rep_count}/{target} reps</span>
+            <span className="font-mono text-slate-500">
+              {repData.rep_count}/{target} reps
+            </span>
           )}
           {holdData && (
-             <span className="font-mono text-slate-500">{formatTime(holdData.hold_seconds)}/{formatTime(target)}</span>
+            <span className="font-mono text-slate-500">
+              {formatTime(holdData.hold_seconds)}/{formatTime(target)}
+            </span>
           )}
         </div>
 
@@ -248,15 +296,17 @@ export function SessionPage() {
       </header>
 
       {/* ── Set Progress Bar ─────────────────────────────────────────── */}
-         <div className="flex gap-1 px-4 py-2 shrink-0 border-b border-white/10 bg-[#0b151d]">
-        {Array.from({ length: targetSets }, (_, i) => i + 1).map(s => (
+      <div className="flex gap-1 px-4 py-2 shrink-0 border-b border-white/10 bg-[#0b151d]">
+        {Array.from({ length: targetSets }, (_, i) => i + 1).map((s) => (
           <div
             key={s}
             className={cn(
               "flex-1 h-1 rounded-full transition-all duration-500",
-               s < currentSet ? "bg-primary" :
-               s === currentSet ? "bg-primary/45 animate-pulse" :
-               "bg-white/10"
+              s < currentSet
+                ? "bg-primary"
+                : s === currentSet
+                  ? "bg-primary/45 animate-pulse"
+                  : "bg-white/10",
             )}
           />
         ))}
@@ -264,7 +314,6 @@ export function SessionPage() {
 
       {/* ── Main Body ───────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden min-h-0">
-
         {/* LEFT: Camera */}
         <div className="w-full lg:w-[52%] flex flex-col h-[42dvh] lg:h-full min-h-0 relative">
           <CameraPreview
@@ -276,19 +325,45 @@ export function SessionPage() {
           >
             {/* Bottom overlay stats on camera */}
             <div className="flex gap-3 pointer-events-none">
-              <StatChip icon={<CheckCircle2 className="w-3 h-3 text-[#00ff87]" />} label="Good" value={
-                repData ? repData.good_reps : holdData ? `${formatTime(holdData.good_seconds)}` : "—"
-              } green />
-              <StatChip icon={<Zap className="w-3 h-3 text-amber-400" />} label={repData ? "Flawed" : "Breaks"} value={
-                repData ? repData.flawed_reps : holdData ? holdData.break_count : "—"
-              } />
-              <StatChip icon={<Timer className="w-3 h-3 text-[#94a3b8]" />} label="Elapsed" value={
-                data ? `${Math.round(data.elapsed_time)}s` : "0s"
-              } />
+              <StatChip
+                icon={<CheckCircle2 className="w-3 h-3 text-[#00ff87]" />}
+                label="Good"
+                value={
+                  repData
+                    ? repData.good_reps
+                    : holdData
+                      ? `${formatTime(holdData.good_seconds)}`
+                      : "—"
+                }
+                green
+              />
+              <StatChip
+                icon={<Zap className="w-3 h-3 text-amber-400" />}
+                label={repData ? "Flawed" : "Breaks"}
+                value={
+                  repData
+                    ? repData.flawed_reps
+                    : holdData
+                      ? holdData.break_count
+                      : "—"
+                }
+              />
+              <StatChip
+                icon={<Timer className="w-3 h-3 text-[#94a3b8]" />}
+                label="Elapsed"
+                value={data ? `${Math.round(data.elapsed_time)}s` : "0s"}
+              />
               {/* Connection dot */}
               <div className="ml-auto flex items-center gap-1.5">
-                <div className={cn("w-2 h-2 rounded-full", connected ? "bg-[#00ff87] animate-pulse" : "bg-red-500")} />
-                <span className="text-[10px] text-white/60 uppercase tracking-widest">{connected ? "Live" : "Offline"}</span>
+                <div
+                  className={cn(
+                    "w-2 h-2 rounded-full",
+                    connected ? "bg-[#00ff87] animate-pulse" : "bg-red-500",
+                  )}
+                />
+                <span className="text-[10px] text-white/60 uppercase tracking-widest">
+                  {connected ? "Live" : "Offline"}
+                </span>
               </div>
             </div>
           </CameraPreview>
@@ -299,21 +374,25 @@ export function SessionPage() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                 className="absolute inset-0 z-40 bg-[#08232b]/94 backdrop-blur-md flex flex-col items-center justify-center text-[#f2f5ed]"
+                className="absolute inset-0 z-40 bg-[#08232b]/94 backdrop-blur-md flex flex-col items-center justify-center text-[#f2f5ed]"
               >
                 <div className="pointer-events-none absolute h-72 w-72 rounded-full border border-primary/15 ambient-pulse" />
                 <div className="pointer-events-none absolute h-52 w-52 rounded-full border border-accent/20 signal-pulse" />
-                <p className="relative z-10 text-xs font-bold uppercase tracking-[.28em] text-accent mb-5">Get into position</p>
+                <p className="relative z-10 text-xs font-bold uppercase tracking-[.28em] text-accent mb-5">
+                  Get into position
+                </p>
                 <motion.div
                   key={countdown}
-                  initial={{ scale: .65, opacity: 0 }}
+                  initial={{ scale: 0.65, opacity: 0 }}
                   animate={{ scale: [0.94, 1.04, 1], opacity: 1 }}
-                  transition={{ duration: .75, ease: "easeOut" }}
+                  transition={{ duration: 0.75, ease: "easeOut" }}
                   className="relative z-10 font-display text-[10rem] md:text-[13rem] leading-none font-extrabold tabular-nums text-primary drop-shadow-[0_0_32px_hsl(var(--primary)/.35)]"
                 >
                   {countdown}
                 </motion.div>
-                <p className="relative z-10 text-sm text-slate-300 mt-3">Camera begins after the countdown</p>
+                <p className="relative z-10 text-sm text-slate-300 mt-3">
+                  Camera begins after the countdown
+                </p>
               </motion.div>
             )}
           </AnimatePresence>
@@ -325,11 +404,17 @@ export function SessionPage() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                 className="absolute inset-0 bg-[#071116]/94 backdrop-blur-sm flex flex-col items-center justify-center z-30"
+                className="absolute inset-0 bg-[#071116]/94 backdrop-blur-sm flex flex-col items-center justify-center z-30"
               >
-                 <p className="text-[10px] font-bold tracking-widest uppercase text-slate-500 mb-3">Rest</p>
-                 <div className="text-8xl font-black font-mono text-primary tabular-nums mb-2 drop-shadow-[0_0_26px_hsl(var(--primary)/.25)]">{formatTime(restTimeLeft)}</div>
-                 <p className="text-sm text-slate-500 uppercase tracking-widest">Next: Set {currentSet + 1}</p>
+                <p className="text-[10px] font-bold tracking-widest uppercase text-slate-500 mb-3">
+                  Rest
+                </p>
+                <div className="text-8xl font-black font-mono text-primary tabular-nums mb-2 drop-shadow-[0_0_26px_hsl(var(--primary)/.25)]">
+                  {formatTime(restTimeLeft)}
+                </div>
+                <p className="text-sm text-slate-500 uppercase tracking-widest">
+                  Next: Set {currentSet + 1}
+                </p>
               </motion.div>
             )}
           </AnimatePresence>
@@ -341,10 +426,12 @@ export function SessionPage() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                 className="absolute inset-0 bg-[#071116]/88 backdrop-blur-sm flex flex-col items-center justify-center z-30"
+                className="absolute inset-0 bg-[#071116]/88 backdrop-blur-sm flex flex-col items-center justify-center z-30"
               >
-                 <Pause className="w-16 h-16 text-slate-500 mb-4" />
-                <p className="text-2xl font-black uppercase tracking-widest text-white">Paused</p>
+                <Pause className="w-16 h-16 text-slate-500 mb-4" />
+                <p className="text-2xl font-black uppercase tracking-widest text-white">
+                  Paused
+                </p>
               </motion.div>
             )}
           </AnimatePresence>
@@ -352,60 +439,99 @@ export function SessionPage() {
 
         {/* RIGHT: Data Panel */}
         <div className="flex-1 flex flex-col overflow-hidden border-t lg:border-t-0 lg:border-l border-white/10 min-h-0 bg-[#0b151d]/90">
-
           {/* Scrollable data */}
-           <div className="flex-1 overflow-y-auto p-4 space-y-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'hsl(var(--primary) / .3) transparent' }}>
+          <div
+            className="flex-1 overflow-y-auto p-4 space-y-4"
+            style={{
+              scrollbarWidth: "thin",
+              scrollbarColor: "hsl(var(--primary) / .3) transparent",
+            }}
+          >
             {!sessionStarted ? (
-              <div className="flex flex-col items-center justify-center h-full min-h-[280px] text-center px-6">
-                 <div className="signal-pulse w-14 h-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mb-4">
+              <div className="flex flex-col items-center justify-center h-full min-h-70 text-center px-6">
+                <div className="signal-pulse w-14 h-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mb-4">
                   <Camera className="w-6 h-6 text-primary" />
                 </div>
-                <h2 className="font-display text-xl font-extrabold text-foreground">Ready when you are</h2>
-                <p className="text-sm text-muted-foreground mt-2 max-w-xs">Your camera and live form coach stay off until you start.</p>
-                <button onClick={beginSession} data-testid="button-begin-countdown" className="mt-6 inline-flex items-center gap-2 rounded-xl bg-primary text-primary-foreground px-5 py-3 text-sm font-bold uppercase tracking-wider shadow-lg shadow-primary/20 hover:brightness-105">
+                <h2 className="font-display text-xl font-extrabold text-foreground">
+                  Ready when you are
+                </h2>
+                <p className="text-sm text-muted-foreground mt-2 max-w-xs">
+                  Your camera and live form coach stay off until you start.
+                </p>
+                <button
+                  onClick={beginSession}
+                  data-testid="button-begin-countdown"
+                  className="mt-6 inline-flex items-center gap-2 rounded-xl bg-primary text-primary-foreground px-5 py-3 text-sm font-bold uppercase tracking-wider shadow-lg shadow-primary/20 hover:brightness-105"
+                >
                   <Play className="w-4 h-4 fill-current" /> Start session
                 </button>
-                <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground"><ShieldCheck className="w-4 h-4 text-primary" /> Camera access stays local to this session</div>
+                <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
+                  <ShieldCheck className="w-4 h-4 text-primary" /> Camera access
+                  stays local to this session
+                </div>
               </div>
             ) : data ? (
-              exercise.mode === 'reps' ? (
-                <RepPanel data={repData} lastRep={lastRep} exerciseName={exercise.name} />
+              exercise.mode === "reps" ? (
+                <RepPanel
+                  data={repData}
+                  lastRep={lastRep}
+                  exerciseName={exercise.name}
+                />
               ) : (
                 <HoldPanel data={holdData} exerciseName={exercise.name} />
               )
             ) : (
-               <div className="flex flex-col items-center justify-center h-48 text-center">
+              <div className="flex flex-col items-center justify-center h-48 text-center">
                 <div className="relative mb-5 flex h-16 w-16 items-center justify-center rounded-full border border-accent/25 bg-accent/5">
                   <Activity className="h-7 w-7 text-accent" />
                   <span className="absolute inset-0 rounded-full border border-accent/20 animate-ping" />
                 </div>
-                <p className="text-xs font-bold text-slate-300 uppercase tracking-[.2em]">Coach is connecting</p>
+                <p className="text-xs font-bold text-slate-300 uppercase tracking-[.2em]">
+                  Coach is connecting
+                </p>
                 <div className="mt-4 flex items-center gap-1.5">
-                  {[0, 1, 2].map((dot) => <span key={dot} className="h-1.5 w-1.5 rounded-full bg-primary/70 animate-pulse" style={{ animationDelay: `${dot * 180}ms` }} />)}
+                  {[0, 1, 2].map((dot) => (
+                    <span
+                      key={dot}
+                      className="h-1.5 w-1.5 rounded-full bg-primary/70 animate-pulse"
+                      style={{ animationDelay: `${dot * 180}ms` }}
+                    />
+                  ))}
                 </div>
                 {socketError && (
                   <p className="text-xs text-red-300/80 mt-3">{socketError}</p>
                 )}
                 {!connected && !socketError && (
-                  <p className="text-xs text-slate-500 mt-2">Your camera can still stay ready while tracking connects.</p>
+                  <p className="text-xs text-slate-500 mt-2">
+                    Your camera can still stay ready while tracking connects.
+                  </p>
                 )}
               </div>
             )}
           </div>
 
           {/* Bottom: Pause / Resume */}
-        <div className="px-4 py-3 border-t border-white/10 shrink-0 bg-[#0b151d]">
-            <button data-testid="button-pause-session"
+          <div className="px-4 py-3 border-t border-white/10 shrink-0 bg-[#0b151d]">
+            <button
+              data-testid="button-pause-session"
               onClick={togglePause}
               disabled={isResting}
               className={cn(
                 "w-full py-3.5 rounded-xl font-black uppercase tracking-widest text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-40",
                 isPaused
-                   ? "bg-primary text-primary-foreground hover:brightness-110"
-                   : "bg-white/10 text-white hover:bg-white/15"
+                  ? "bg-primary text-primary-foreground hover:brightness-110"
+                  : "bg-white/10 text-white hover:bg-white/15",
               )}
             >
-              {isPaused ? <><Play className="w-4 h-4" /> Resume</> : <><Pause className="w-4 h-4" /> Pause</>}
+              {isPaused ? (
+                <>
+                  <Play className="w-4 h-4" /> Resume
+                </>
+              ) : (
+                <>
+                  <Pause className="w-4 h-4" /> Pause
+                </>
+              )}
             </button>
           </div>
         </div>
@@ -414,13 +540,32 @@ export function SessionPage() {
   );
 }
 
-function StatChip({ icon, label, value, green }: { icon: React.ReactNode; label: string; value: React.ReactNode; green?: boolean }) {
+function StatChip({
+  icon,
+  label,
+  value,
+  green,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: React.ReactNode;
+  green?: boolean;
+}) {
   return (
     <div className="flex items-center gap-1.5 bg-black/60 rounded-lg px-2.5 py-1.5">
       {icon}
       <div className="flex flex-col leading-none">
-        <span className="text-[9px] text-white/40 uppercase tracking-widest">{label}</span>
-        <span className={cn("text-xs font-bold font-mono", green ? "text-[#00ff87]" : "text-white")}>{value}</span>
+        <span className="text-[9px] text-white/40 uppercase tracking-widest">
+          {label}
+        </span>
+        <span
+          className={cn(
+            "text-xs font-bold font-mono",
+            green ? "text-[#00ff87]" : "text-white",
+          )}
+        >
+          {value}
+        </span>
       </div>
     </div>
   );

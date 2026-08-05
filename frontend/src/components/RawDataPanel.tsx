@@ -26,7 +26,7 @@ export function RawDataPanel({ data }: RawDataPanelProps) {
         isOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
       )}>
         <div className="overflow-hidden">
-          <pre className="p-4 text-xs font-mono text-muted-foreground overflow-auto max-h-[300px] whitespace-pre-wrap break-all custom-scrollbar">
+          <pre className="p-4 text-xs font-mono text-muted-foreground overflow-auto max-h-75 whitespace-pre-wrap break-all custom-scrollbar">
             {JSON.stringify(data, null, 2)}
           </pre>
         </div>
