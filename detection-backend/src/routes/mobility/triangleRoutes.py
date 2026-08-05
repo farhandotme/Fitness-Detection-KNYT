@@ -7,7 +7,7 @@ import time
 import cv2
 import numpy as np
 
-from src.detectors.triangle_pose import TrianglePoseSession
+from src.detectors.mobility.triangle_pose import TrianglePoseSession
 
 router = APIRouter()
 

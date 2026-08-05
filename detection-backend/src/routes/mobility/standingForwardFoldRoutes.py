@@ -7,7 +7,7 @@ import time
 import cv2
 import numpy as np
 
-from src.detectors.standing_forward_fold import StandingForwardFoldSession
+from src.detectors.mobility.standing_forward_fold import StandingForwardFoldSession
 
 router = APIRouter()
 

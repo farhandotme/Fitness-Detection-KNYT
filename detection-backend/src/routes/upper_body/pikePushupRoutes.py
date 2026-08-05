@@ -7,7 +7,7 @@ import time
 import cv2
 import numpy as np
 
-from src.detectors.pike_pushup import PikePushupSession
+from src.detectors.upper_body.pike_pushup import PikePushupSession
 
 router = APIRouter()
 

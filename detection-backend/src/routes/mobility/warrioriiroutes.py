@@ -7,7 +7,7 @@ import time
 import cv2
 import numpy as np
 
-from src.detectors.warriorII import WarriorIISession
+from src.detectors.mobility.warriorII import WarriorIISession
 
 router = APIRouter()
 

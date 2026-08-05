@@ -7,8 +7,11 @@ from pydantic import BaseModel, Field
 
 from mediapipe.tasks.python import vision
 
-from src.detectors.body_analysis import BodyScanError, _compute_px_per_cm
-from src.detectors.body_analysis_multiview import ViewInput, analyze_body_multiview
+from src.detectors.body_detector.body_analysis import BodyScanError, _compute_px_per_cm
+from src.detectors.body_detector.body_analysis_multiview import (
+    ViewInput,
+    analyze_body_multiview,
+)
 from src.engines.face_analysis import FaceEngine, analyze_face
 from src.engines.poseEngine import PoseEngine
 from src.engines.segmentEngine import SegmentEngine
@@ -24,9 +27,15 @@ _face_engine = FaceEngine()  # gracefully no-ops if face_landmarker.task isn't i
 
 
 class BodyAnalysisRequest(BaseModel):
-    front: str = Field(..., description="Base64 data URL or raw base64 JPEG/PNG — required")
-    left: str | None = Field(None, description="Left-profile photo — optional but recommended")
-    right: str | None = Field(None, description="Right-profile photo — optional but recommended")
+    front: str = Field(
+        ..., description="Base64 data URL or raw base64 JPEG/PNG — required"
+    )
+    left: str | None = Field(
+        None, description="Left-profile photo — optional but recommended"
+    )
+    right: str | None = Field(
+        None, description="Right-profile photo — optional but recommended"
+    )
     back: str | None = Field(None, description="Back photo — optional")
     height_cm: float = Field(
         ...,

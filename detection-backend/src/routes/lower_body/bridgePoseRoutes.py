@@ -6,7 +6,7 @@ import time
 import cv2
 import numpy as np
 
-from src.detectors.bridge_pose import BridgeHoldSession
+from src.detectors.lower_body.bridge_pose import BridgeHoldSession
 
 router = APIRouter()
 

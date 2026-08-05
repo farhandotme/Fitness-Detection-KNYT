@@ -7,7 +7,7 @@ import time
 import cv2
 import numpy as np
 
-from src.detectors.chair_pose import ChairPoseSession
+from src.detectors.lower_body.chair_pose import ChairPoseSession
 
 router = APIRouter()
 

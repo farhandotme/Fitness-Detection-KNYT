@@ -7,7 +7,7 @@ import time
 import cv2
 import numpy as np
 
-from src.detectors.dead_bug import DeadBugSession
+from src.detectors.core.dead_bug import DeadBugSession
 
 router = APIRouter()
 

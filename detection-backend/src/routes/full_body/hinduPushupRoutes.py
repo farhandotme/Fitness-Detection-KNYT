@@ -7,7 +7,7 @@ import time
 import cv2
 import numpy as np
 
-from src.detectors.hindu_pushup import HinduPushupSession
+from src.detectors.full_body.hindu_pushup import HinduPushupSession
 
 router = APIRouter()
 

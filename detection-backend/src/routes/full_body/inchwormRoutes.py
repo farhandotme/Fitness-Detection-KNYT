@@ -7,7 +7,7 @@ import time
 import cv2
 import numpy as np
 
-from src.detectors.inchworm import InchwormSession
+from src.detectors.full_body.inchworm import InchwormSession
 
 router = APIRouter()
 

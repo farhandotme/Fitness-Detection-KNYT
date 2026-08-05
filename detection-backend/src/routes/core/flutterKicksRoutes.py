@@ -7,7 +7,7 @@ import time
 import cv2
 import numpy as np
 
-from src.detectors.flutter_kicks import FlutterKicksSession
+from src.detectors.core.flutter_kicks import FlutterKicksSession
 
 router = APIRouter()
 

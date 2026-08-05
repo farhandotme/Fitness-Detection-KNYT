@@ -7,7 +7,7 @@ import time
 import cv2
 import numpy as np
 
-from src.detectors.childs_pose import ChildsPoseSession
+from src.detectors.mobility.childs_pose import ChildsPoseSession
 
 router = APIRouter()
 

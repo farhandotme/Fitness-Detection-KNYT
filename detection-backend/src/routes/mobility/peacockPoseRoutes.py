@@ -7,7 +7,7 @@ import time
 import cv2
 import numpy as np
 
-from src.detectors.peacock_pose import PeacockPoseSession
+from src.detectors.mobility.peacock_pose import PeacockPoseSession
 
 router = APIRouter()
 

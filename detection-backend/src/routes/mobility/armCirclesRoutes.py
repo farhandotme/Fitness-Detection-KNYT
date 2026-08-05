@@ -7,7 +7,7 @@ import time
 import cv2
 import numpy as np
 
-from src.detectors.arm_circles import ArmCirclesSession
+from src.detectors.mobility.arm_circles import ArmCirclesSession
 
 router = APIRouter()
 

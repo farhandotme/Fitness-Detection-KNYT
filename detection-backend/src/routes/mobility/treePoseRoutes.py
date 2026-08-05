@@ -7,7 +7,7 @@ import time
 import cv2
 import numpy as np
 
-from src.detectors.tree_pose import TreePoseSession
+from src.detectors.mobility.tree_pose import TreePoseSession
 
 router = APIRouter()
 

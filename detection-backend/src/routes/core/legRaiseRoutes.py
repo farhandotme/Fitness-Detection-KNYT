@@ -7,7 +7,7 @@ import time
 import cv2
 import numpy as np
 
-from src.detectors.leg_raise import LegRaiseSession
+from src.detectors.core.leg_raise import LegRaiseSession
 
 router = APIRouter()
 

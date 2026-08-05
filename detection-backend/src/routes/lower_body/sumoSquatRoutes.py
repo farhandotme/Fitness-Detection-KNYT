@@ -7,7 +7,7 @@ import time
 import cv2
 import numpy as np
 
-from src.detectors.sumo_squat import SumoSquatSession
+from src.detectors.lower_body.sumo_squat import SumoSquatSession
 
 router = APIRouter()
 

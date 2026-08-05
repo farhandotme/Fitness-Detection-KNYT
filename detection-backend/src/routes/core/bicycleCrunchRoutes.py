@@ -8,7 +8,7 @@ import traceback
 import cv2
 import numpy as np
 
-from src.detectors.bicycle_crunch import BicycleCrunchSession
+from src.detectors.core.bicycle_crunch import BicycleCrunchSession
 
 router = APIRouter()
 

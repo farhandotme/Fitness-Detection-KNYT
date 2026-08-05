@@ -7,7 +7,7 @@ import time
 import cv2
 import numpy as np
 
-from src.detectors.side_plank import SidePlankSession
+from src.detectors.core.side_plank import SidePlankSession
 
 router = APIRouter()
 

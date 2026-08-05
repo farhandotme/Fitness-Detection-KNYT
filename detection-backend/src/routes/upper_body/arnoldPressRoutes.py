@@ -7,7 +7,7 @@ import time
 import cv2
 import numpy as np
 
-from src.detectors.arnold_press import ArnoldPressSession
+from src.detectors.upper_body.arnold_press import ArnoldPressSession
 
 router = APIRouter()
 

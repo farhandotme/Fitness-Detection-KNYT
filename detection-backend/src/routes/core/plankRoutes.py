@@ -7,7 +7,7 @@ import time
 import cv2
 import numpy as np
 
-from src.detectors.plank_hold import PlankHoldSession
+from src.detectors.core.plank_hold import PlankHoldSession
 
 router = APIRouter()
 

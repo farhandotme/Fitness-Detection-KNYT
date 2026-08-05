@@ -7,7 +7,7 @@ import time
 import cv2
 import numpy as np
 
-from src.detectors.skandha_chakra import SkandhaChakraSession, VALID_DIRECTIONS
+from src.detectors.full_body.skandha_chakra import SkandhaChakraSession, VALID_DIRECTIONS
 
 router = APIRouter()
 

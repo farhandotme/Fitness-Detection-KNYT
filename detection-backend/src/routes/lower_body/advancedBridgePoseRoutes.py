@@ -7,7 +7,7 @@ import time
 import cv2
 import numpy as np
 
-from src.detectors.advanced_bridge_pose import AdvancedBridgePoseSession
+from src.detectors.lower_body.advanced_bridge_pose import AdvancedBridgePoseSession
 
 router = APIRouter()
 

@@ -7,7 +7,7 @@ import time
 import cv2
 import numpy as np
 
-from src.detectors.muay_thai_jab import JabSession
+from src.detectors.upper_body.muay_thai_jab import JabSession
 
 router = APIRouter()
 

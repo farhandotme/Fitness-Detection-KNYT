@@ -7,7 +7,7 @@ import time
 import cv2
 import numpy as np
 
-from src.detectors.half_moon import HalfMoonSession, SUPPORT_MODES
+from src.detectors.mobility.half_moon import HalfMoonSession, SUPPORT_MODES
 
 router = APIRouter()
 

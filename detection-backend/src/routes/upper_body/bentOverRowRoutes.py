@@ -7,7 +7,7 @@ import time
 import cv2
 import numpy as np
 
-from src.detectors.bent_over_row import BentOverRowSession
+from src.detectors.upper_body.bent_over_row import BentOverRowSession
 
 router = APIRouter()
 

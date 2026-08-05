@@ -7,7 +7,7 @@ import time
 import cv2
 import numpy as np
 
-from src.detectors.side_leg_swing import SideLegSwingSession
+from src.detectors.mobility.side_leg_swing import SideLegSwingSession
 
 router = APIRouter()
 

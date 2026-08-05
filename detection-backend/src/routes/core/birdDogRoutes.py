@@ -7,7 +7,7 @@ import time
 import cv2
 import numpy as np
 
-from src.detectors.bird_dog import BirdDogSession
+from src.detectors.core.bird_dog import BirdDogSession
 
 router = APIRouter()
 

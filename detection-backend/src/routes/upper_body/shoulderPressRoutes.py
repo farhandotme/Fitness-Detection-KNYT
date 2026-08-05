@@ -7,7 +7,7 @@ import time
 import cv2
 import numpy as np
 
-from src.detectors.shoulder_press import ShoulderPressSession
+from src.detectors.upper_body.shoulder_press import ShoulderPressSession
 
 router = APIRouter()
 

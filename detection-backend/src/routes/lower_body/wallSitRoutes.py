@@ -7,7 +7,7 @@ import time
 import cv2
 import numpy as np
 
-from src.detectors.wall_sit import WallSitSession
+from src.detectors.lower_body.wall_sit import WallSitSession
 
 router = APIRouter()
 

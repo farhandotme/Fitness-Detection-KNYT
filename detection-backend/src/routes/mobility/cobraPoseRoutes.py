@@ -7,7 +7,7 @@ import time
 import cv2
 import numpy as np
 
-from src.detectors.cobra_pose import CobraPoseSession
+from src.detectors.mobility.cobra_pose import CobraPoseSession
 
 router = APIRouter()
 

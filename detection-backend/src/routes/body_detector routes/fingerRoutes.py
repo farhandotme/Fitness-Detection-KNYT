@@ -1,5 +1,5 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from src.detectors.finger_detector import HandDetector
+from src.detectors.body_detector.finger_detector import HandDetector
 import asyncio
 import base64
 import time

@@ -7,7 +7,7 @@ import time
 import cv2
 import numpy as np
 
-from src.detectors.pushup import PushupSession
+from src.detectors.upper_body.pushup import PushupSession
 
 router = APIRouter()
 

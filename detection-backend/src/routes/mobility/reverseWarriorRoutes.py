@@ -7,7 +7,7 @@ import time
 import cv2
 import numpy as np
 
-from src.detectors.reverse_warrior import ReverseWarriorSession
+from src.detectors.mobility.reverse_warrior import ReverseWarriorSession
 
 router = APIRouter()
 

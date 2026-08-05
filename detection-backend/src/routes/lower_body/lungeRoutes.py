@@ -7,7 +7,7 @@ import time
 import cv2
 import numpy as np
 
-from src.detectors.lunge import LungeSession
+from src.detectors.lower_body.lunge import LungeSession
 
 router = APIRouter()
 

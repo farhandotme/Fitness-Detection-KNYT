@@ -8,7 +8,7 @@ import traceback
 import cv2
 import numpy as np
 
-from src.detectors.lateral_raise import LateralRaiseSession
+from src.detectors.upper_body.lateral_raise import LateralRaiseSession
 
 router = APIRouter()
 

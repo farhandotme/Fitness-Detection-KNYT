@@ -7,7 +7,7 @@ import time
 import cv2
 import numpy as np
 
-from src.detectors.russian_twist import RussianTwistSession
+from src.detectors.core.russian_twist import RussianTwistSession
 
 router = APIRouter()
 

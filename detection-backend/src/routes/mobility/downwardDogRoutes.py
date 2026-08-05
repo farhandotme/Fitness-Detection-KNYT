@@ -7,7 +7,7 @@ import time
 import cv2
 import numpy as np
 
-from src.detectors.downward_dog import DownwardDogSession
+from src.detectors.mobility.downward_dog import DownwardDogSession
 
 router = APIRouter()
 

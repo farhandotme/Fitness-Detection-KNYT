@@ -7,7 +7,7 @@ import time
 import cv2
 import numpy as np
 
-from src.detectors.squat import SquatSession
+from src.detectors.lower_body.squat import SquatSession
 
 router = APIRouter()
 

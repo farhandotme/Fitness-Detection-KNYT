@@ -7,7 +7,7 @@ import time
 import cv2
 import numpy as np
 
-from src.detectors.shoulder_stand_pose import ShoulderStandSession
+from src.detectors.full_body.shoulder_stand_pose import ShoulderStandSession
 
 router = APIRouter()
 

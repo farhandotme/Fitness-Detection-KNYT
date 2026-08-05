@@ -7,7 +7,7 @@ import time
 import cv2
 import numpy as np
 
-from src.detectors.superman import SupermanSession
+from src.detectors.full_body.superman import SupermanSession
 
 router = APIRouter()
 

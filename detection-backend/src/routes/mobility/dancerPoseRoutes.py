@@ -7,7 +7,7 @@ import time
 import cv2
 import numpy as np
 
-from src.detectors.dancer_pose import DancerPoseSession, SUPPORT_MODES
+from src.detectors.mobility.dancer_pose import DancerPoseSession, SUPPORT_MODES
 
 router = APIRouter()
 

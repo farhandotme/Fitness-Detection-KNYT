@@ -7,7 +7,7 @@ import time
 import cv2
 import numpy as np
 
-from src.detectors.hollow_hold import HollowHoldSession
+from src.detectors.core.hollow_hold import HollowHoldSession
 
 router = APIRouter()
 

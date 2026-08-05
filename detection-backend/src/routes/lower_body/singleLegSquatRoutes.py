@@ -5,7 +5,7 @@ import base64
 import cv2
 import numpy as np
 
-from src.detectors.single_leg_squat import (
+from src.detectors.lower_body.single_leg_squat import (
     SingleLegSquatSession,
     VALID_MODES,
     VALID_SIDES,

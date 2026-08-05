@@ -7,7 +7,7 @@ import time
 import cv2
 import numpy as np
 
-from src.detectors.windmill_rotation_stretch import WindmillSession
+from src.detectors.mobility.windmill_rotation_stretch import WindmillSession
 
 router = APIRouter()
 

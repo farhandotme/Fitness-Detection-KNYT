@@ -7,7 +7,7 @@ import time
 import cv2
 import numpy as np
 
-from src.detectors.bicep_curl import (
+from src.detectors.upper_body.bicep_curl import (
     SingleArmCurlSession,
     BothArmCurlSession,
 )
