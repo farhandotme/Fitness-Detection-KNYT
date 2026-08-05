@@ -7,7 +7,7 @@ import time
 import cv2
 import numpy as np
 
-from src.detectors.butt_kicks import ButtKicksSession
+from src.detectors.cardio.butt_kicks import ButtKicksSession
 
 router = APIRouter()
 

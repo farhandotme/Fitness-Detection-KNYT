@@ -4,12 +4,12 @@ from src.routes.bicepRoutes import router as bicepRouter
 from src.routes.fingerRoutes import router as fingerRouter
 from src.routes.squatRoutes import router as squatRouter
 from src.routes.pushupRoutes import router as pushupRouter
-from src.routes.jumpingJackRoutes import router as jumpingJackRouter
+from src.routes.cardio.jumpingJackRoutes import router as jumpingJackRouter
 from src.routes.lungeRoutes import router as lungeRouter
-from src.routes.highKneesRoutes import router as highKneesRouter
+from src.routes.cardio.highKneesRoutes import router as highKneesRouter
 from src.routes.plankRoutes import router as plankRouter
 from src.routes.bodyAnalysisRoutes import router as bodyAnalysisRouter
-from src.routes.mountainClimberRoutes import router as mountainClimberRouter
+from src.routes.cardio.mountainClimberRoutes import router as mountainClimberRouter
 from src.routes.shoulderPressRoutes import router as shoulderPressRouter
 from src.routes.lateralRaiseRoutes import router as lateralRaiseRouter
 from src.routes.muayThaiJabRoutes import router as muayThaiJabRouter
@@ -24,16 +24,18 @@ from src.routes.cobraPoseRoutes import router as cobraPoseRouter
 from src.routes.chairPoseRoutes import router as chairPoseRouter
 from src.routes.downwardDogRoutes import router as downwardDogRouter
 from src.routes.pikePushupRoutes import router as pikePushupRouter
-from src.routes.tuckJumpRoutes import router as tuckJumpRouter
+from src.routes.cardio.tuckJumpRoutes import router as tuckJumpRouter
 from src.routes.sumoSquatRoutes import router as sumoSquatRouter
 from src.routes.triangleRoutes import router as trianglePoseRouter
 from src.routes.standingForwardFoldRoutes import router as standingForwardFoldRouter
 from src.routes.reverseWarriorRoutes import router as reverseWarriorRouter
 from src.routes.armCirclesRoutes import router as armCirclesRouter
-from src.routes.standingCrossCrunchRoutes import router as standingCrossCrunchRouter
+from src.routes.cardio.standingCrossCrunchRoutes import (
+    router as standingCrossCrunchRouter,
+)
 from src.routes.peacockPoseRoutes import router as peacockPoseRouter
 from src.routes.hollowHoldRoutes import router as hollowHoldRouter
-from src.routes.buttKicksRoutes import router as buttKicksRouter
+from src.routes.cardio.buttKicksRoutes import router as buttKicksRouter
 from src.routes.wallSitRoutes import router as wallSitRouter
 from src.routes.legRaiseRoutes import router as legRaiseRouter
 from src.routes.russianTwistRoutes import router as russianTwistRouter
@@ -46,6 +48,13 @@ from src.routes.arnoldPressRoutes import router as arnoldPressRouter
 from src.routes.dancerPoseRoutes import router as dancerPoseRouter
 from src.routes.supermanRoutes import router as supermenPoseRouter
 from src.routes.sideLegSwingRoutes import router as sideLegSwingRouter
+from src.routes.frontLegSwingRoutes import router as frontLegSwingRouter
+from src.routes.childsPoseRoutes import router as childsPoseRouter
+from src.routes.skandhaChakraRoutes import router as skandhaChakraRouter
+from src.routes.inchwormRoutes import router as inchwormRouter
+from src.routes.bentOverRowRoutes import router as bentOverRowRouter
+from src.routes.shoulderStandRoutes import router as shoulderStandRouter
+from src.routes.advancedBridgePoseRoutes import router as advancedBridgePoseRouter
 from src.routes.windmillRotationStretchRoutes import (
     router as windmillRotationStretchRouter,
 )
@@ -108,6 +117,15 @@ app.include_router(arnoldPressRouter, prefix="/ws", tags="arnold-press-router")
 app.include_router(dancerPoseRouter, prefix="/ws", tags="dancer-pose-router")
 app.include_router(supermenPoseRouter, prefix="/ws", tags="supermen-pose-router")
 app.include_router(sideLegSwingRouter, prefix="/ws", tags="side-leg-swing-router")
+app.include_router(childsPoseRouter, prefix="/ws", tags="childs-pose-router")
+app.include_router(frontLegSwingRouter, prefix="/ws", tags="front-leg-swing-router")
+app.include_router(inchwormRouter, prefix="/ws", tags="inchworm-router")
+app.include_router(skandhaChakraRouter, prefix="/ws", tags="skandha-chakra-router")
+app.include_router(bentOverRowRouter, prefix="/ws", tags="bent-over-row-router")
+app.include_router(shoulderStandRouter, prefix="/ws", tags="shoulder-stand-router")
+app.include_router(
+    advancedBridgePoseRouter, prefix="/ws", tags="advanced-bridge-pose-router"
+)
 app.include_router(
     windmillRotationStretchRouter, prefix="/ws", tags="windmill-rotation-stretch-router"
 )

@@ -7,7 +7,7 @@ import time
 import cv2
 import numpy as np
 
-from src.detectors.mountain_climber import MountainClimberSession
+from src.detectors.cardio.standing_cross_crunch import StandingCrossCrunchSession
 
 router = APIRouter()
 
@@ -25,11 +25,11 @@ def decode_frame(raw: str):
 def _query_int(websocket: WebSocket, name: str, default: int, lo: int, hi: int) -> int:
     """Read an integer query param off the websocket URL, clamped to [lo, hi].
 
-    Same convention as `jabRoutes.py` / `pushupRoutes.py` — the frontend
-    sends the coach-assigned plan (reps per set / sets / which set) as
-    query params when it opens the socket; the backend
-    `MountainClimberSession` is the only thing that decides whether that
-    plan has been met.
+    Same convention as `pushupRoutes.py` — the coach-assigned plan (reps
+    per set / number of sets / which set this connection is for) reaches
+    the backend this way. The frontend does not get to decide on its own
+    whether that plan is complete — `StandingCrossCrunchSession` is the
+    only thing that sets `session_complete` / `exercise_complete`.
     """
     raw = websocket.query_params.get(name)
     if raw is None:
@@ -42,18 +42,33 @@ def _query_int(websocket: WebSocket, name: str, default: int, lo: int, hi: int) 
 
 
 def _log_rep_progress(label: str, result: dict, exercise_already_logged: bool) -> bool:
-    """Print one line per completed knee drive, and one line when the
-    exercise finishes — never per-frame."""
-    if result.get("drive_completed"):
-        leg = result.get("drive_leg")
+    """Print exactly one line per completed rep, one line per rejected
+    (alternation-broken) attempt, and one line when the exercise finishes
+    — never per-frame.
+
+    Returns the (possibly updated) `exercise_already_logged` flag — pass
+    it back in on the next call so the "exercise complete" line only
+    prints once even though `exercise_complete` stays True on subsequent
+    frames until the socket closes.
+    """
+    if result.get("rep_completed"):
         rep_count = result.get("rep_count")
         target_reps = result.get("target_reps")
         set_number = result.get("set_number")
         target_sets = result.get("target_sets")
-        tempo = result.get("drive_classification") or "n/a"
+        side = result.get("rep_side")
+        quality = result.get("rep_form_quality") or "n/a"
+        tempo = result.get("rep_classification") or "n/a"
         print(
-            f"[{label}] {leg} knee drive {rep_count}/{target_reps} "
-            f"(set {set_number}/{target_sets}) — tempo={tempo}"
+            f"[{label}] Rep {rep_count}/{target_reps} "
+            f"(set {set_number}/{target_sets}) side={side} "
+            f"quality={quality} tempo={tempo}"
+        )
+    elif result.get("alternation_broken"):
+        print(
+            f"[{label}] Rep NOT counted — same side repeated "
+            f"(expected {result.get('expected_next_side')}). "
+            f"alternation_breaks={result.get('alternation_breaks')}"
         )
 
     if result.get("exercise_complete") and not exercise_already_logged:
@@ -66,17 +81,17 @@ def _log_rep_progress(label: str, result: dict, exercise_already_logged: bool) -
     return exercise_already_logged
 
 
-@router.websocket("/mountain_climber")
-async def mountain_climber(websocket: WebSocket):
+@router.websocket("/standing_cross_crunch")
+async def standing_cross_crunch(websocket: WebSocket):
     await websocket.accept()
 
-    print("Client connected: Mountain Climber")
+    print("Client connected: Standing Cross Crunch")
 
-    target_reps = _query_int(websocket, "target_reps", default=20, lo=1, hi=300)
+    target_reps = _query_int(websocket, "target_reps", default=10, lo=1, hi=100)
     target_sets = _query_int(websocket, "target_sets", default=1, lo=1, hi=20)
     set_number = _query_int(websocket, "set_number", default=1, lo=1, hi=target_sets)
 
-    counter = MountainClimberSession(
+    counter = StandingCrossCrunchSession(
         target_reps=target_reps,
         target_sets=target_sets,
         set_number=set_number,
@@ -93,14 +108,16 @@ async def mountain_climber(websocket: WebSocket):
 
             result = counter.detect(frame, timestamp)
 
-            exercise_logged = _log_rep_progress("MountainClimber", result, exercise_logged)
+            exercise_logged = _log_rep_progress(
+                "Standing Cross Crunch", result, exercise_logged
+            )
 
             await websocket.send_json(result)
 
             await asyncio.sleep(0.001)
 
     except WebSocketDisconnect:
-        print("Disconnected: Mountain Climber")
+        print("Disconnected: Standing Cross Crunch")
 
     finally:
         counter.close()

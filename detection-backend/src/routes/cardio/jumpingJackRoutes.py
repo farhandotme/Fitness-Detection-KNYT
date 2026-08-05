@@ -5,7 +5,7 @@ import time
 import cv2
 import numpy as np
 
-from src.detectors.jumping_jack import JumpingJackSession
+from src.detectors.cardio.jumping_jack import JumpingJackSession
 
 router = APIRouter()
 

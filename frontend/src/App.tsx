@@ -49,6 +49,13 @@ import ArnoldPressPage from "./pages/ArnoldPressPage";
 import DancerPosePage from "./pages/DancerPosePage";
 import SupermanPage from "./pages/SupermanPage";
 import SideLegSwingPage from "./pages/SideLegSwingPage";
+import ChildsPosePage from "./pages/ChildsPosePage";
+import FrontLegSwingPage from "./pages/FrontLegSwingPage";
+import InchwormPage from "./pages/InchwormPage";
+import SkandhaChakraPage from "./pages/SkandhaChakraPage";
+import BentOverRowPage from "./pages/BentOverRowPage";
+import ShoulderStandPage from "./pages/ShoulderStandPage";
+import AdvancedBridgePosePage from "./pages/AdvancedBridgePosePage";
 
 function App() {
   return (
@@ -107,6 +114,16 @@ function App() {
           <Route path="dancer_pose" element={<DancerPosePage />} />
           <Route path="supermen_pose" element={<SupermanPage />} />
           <Route path="side_leg_swing" element={<SideLegSwingPage />} />
+          <Route path="child_pose" element={<ChildsPosePage />} />
+          <Route path="front_leg_swing" element={<FrontLegSwingPage />} />
+          <Route path="inchworm_exercise" element={<InchwormPage />} />
+          <Route path="skandha_chakra" element={<SkandhaChakraPage />} />
+          <Route path="bent_over_row" element={<BentOverRowPage />} />
+          <Route path="shoulder_stand" element={<ShoulderStandPage />} />
+          <Route
+            path="advance_bridge_pose"
+            element={<AdvancedBridgePosePage />}
+          />
           <Route
             path="standing_cross_crunch"
             element={<StandingCrossCrunchPage />}

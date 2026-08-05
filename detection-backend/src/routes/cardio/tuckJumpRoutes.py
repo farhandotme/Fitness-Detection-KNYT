@@ -7,7 +7,7 @@ import time
 import cv2
 import numpy as np
 
-from src.detectors.tuck_jump import TuckJumpSession
+from src.detectors.cardio.tuck_jump import TuckJumpSession
 
 router = APIRouter()
 
