@@ -1,61 +1,67 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from src.routes.bicepRoutes import router as bicepRouter
-from src.routes.fingerRoutes import router as fingerRouter
-from src.routes.squatRoutes import router as squatRouter
-from src.routes.pushupRoutes import router as pushupRouter
+from src.routes.upper_body.bicepRoutes import router as bicepRouter
+from src.routes.body_detector_routes.fingerRoutes import router as fingerRouter
+from src.routes.lower_body.squatRoutes import router as squatRouter
+from src.routes.upper_body.pushupRoutes import router as pushupRouter
 from src.routes.cardio.jumpingJackRoutes import router as jumpingJackRouter
-from src.routes.lungeRoutes import router as lungeRouter
+from src.routes.lower_body.lungeRoutes import router as lungeRouter
 from src.routes.cardio.highKneesRoutes import router as highKneesRouter
-from src.routes.plankRoutes import router as plankRouter
-from src.routes.bodyAnalysisRoutes import router as bodyAnalysisRouter
+from src.routes.core.plankRoutes import router as plankRouter
+from src.routes.body_detector_routes.bodyAnalysisRoutes import (
+    router as bodyAnalysisRouter,
+)
 from src.routes.cardio.mountainClimberRoutes import router as mountainClimberRouter
-from src.routes.shoulderPressRoutes import router as shoulderPressRouter
-from src.routes.lateralRaiseRoutes import router as lateralRaiseRouter
-from src.routes.muayThaiJabRoutes import router as muayThaiJabRouter
-from src.routes.deadbugRoutes import router as deadbugRouter
-from src.routes.sidePlankRoutes import router as sidePlankRouter
-from src.routes.bridgePoseRoutes import router as bridgePoseRouter
-from src.routes.birdDogRoutes import router as birdDogRouter
-from src.routes.calfRaiseRoutes import router as calfRaiseRouter
-from src.routes.treePoseRoutes import router as treePoseRouter
-from src.routes.warrioriiroutes import router as warrioriiRouter
-from src.routes.cobraPoseRoutes import router as cobraPoseRouter
-from src.routes.chairPoseRoutes import router as chairPoseRouter
-from src.routes.downwardDogRoutes import router as downwardDogRouter
-from src.routes.pikePushupRoutes import router as pikePushupRouter
+from src.routes.upper_body.shoulderPressRoutes import router as shoulderPressRouter
+from src.routes.upper_body.lateralRaiseRoutes import router as lateralRaiseRouter
+from src.routes.upper_body.muayThaiJabRoutes import router as muayThaiJabRouter
+from src.routes.core.deadbugRoutes import router as deadbugRouter
+from src.routes.core.sidePlankRoutes import router as sidePlankRouter
+from src.routes.lower_body.bridgePoseRoutes import router as bridgePoseRouter
+from src.routes.core.birdDogRoutes import router as birdDogRouter
+from src.routes.lower_body.calfRaiseRoutes import router as calfRaiseRouter
+from src.routes.mobility.treePoseRoutes import router as treePoseRouter
+from src.routes.mobility.warrioriiroutes import router as warrioriiRouter
+from src.routes.mobility.cobraPoseRoutes import router as cobraPoseRouter
+from src.routes.lower_body.chairPoseRoutes import router as chairPoseRouter
+from src.routes.mobility.downwardDogRoutes import router as downwardDogRouter
+from src.routes.upper_body.pikePushupRoutes import router as pikePushupRouter
 from src.routes.cardio.tuckJumpRoutes import router as tuckJumpRouter
-from src.routes.sumoSquatRoutes import router as sumoSquatRouter
-from src.routes.triangleRoutes import router as trianglePoseRouter
-from src.routes.standingForwardFoldRoutes import router as standingForwardFoldRouter
-from src.routes.reverseWarriorRoutes import router as reverseWarriorRouter
-from src.routes.armCirclesRoutes import router as armCirclesRouter
+from src.routes.lower_body.sumoSquatRoutes import router as sumoSquatRouter
+from src.routes.mobility.triangleRoutes import router as trianglePoseRouter
+from src.routes.mobility.standingForwardFoldRoutes import (
+    router as standingForwardFoldRouter,
+)
+from src.routes.mobility.reverseWarriorRoutes import router as reverseWarriorRouter
+from src.routes.mobility.armCirclesRoutes import router as armCirclesRouter
 from src.routes.cardio.standingCrossCrunchRoutes import (
     router as standingCrossCrunchRouter,
 )
-from src.routes.peacockPoseRoutes import router as peacockPoseRouter
-from src.routes.hollowHoldRoutes import router as hollowHoldRouter
+from src.routes.mobility.peacockPoseRoutes import router as peacockPoseRouter
+from src.routes.core.hollowHoldRoutes import router as hollowHoldRouter
 from src.routes.cardio.buttKicksRoutes import router as buttKicksRouter
-from src.routes.wallSitRoutes import router as wallSitRouter
-from src.routes.legRaiseRoutes import router as legRaiseRouter
-from src.routes.russianTwistRoutes import router as russianTwistRouter
-from src.routes.flutterKicksRoutes import router as flutterKicksRouter
-from src.routes.singleLegSquatRoutes import router as singleLegSquatRouter
-from src.routes.halfMoonRoutes import router as halfMoonRouter
-from src.routes.bicycleCrunchRoutes import router as bicycleCrunchRouter
-from src.routes.hinduPushupRoutes import router as hinduPushupRouter
-from src.routes.arnoldPressRoutes import router as arnoldPressRouter
-from src.routes.dancerPoseRoutes import router as dancerPoseRouter
-from src.routes.supermanRoutes import router as supermenPoseRouter
-from src.routes.sideLegSwingRoutes import router as sideLegSwingRouter
-from src.routes.frontLegSwingRoutes import router as frontLegSwingRouter
-from src.routes.childsPoseRoutes import router as childsPoseRouter
-from src.routes.skandhaChakraRoutes import router as skandhaChakraRouter
-from src.routes.inchwormRoutes import router as inchwormRouter
-from src.routes.bentOverRowRoutes import router as bentOverRowRouter
-from src.routes.shoulderStandRoutes import router as shoulderStandRouter
-from src.routes.advancedBridgePoseRoutes import router as advancedBridgePoseRouter
-from src.routes.windmillRotationStretchRoutes import (
+from src.routes.lower_body.wallSitRoutes import router as wallSitRouter
+from src.routes.core.legRaiseRoutes import router as legRaiseRouter
+from src.routes.core.russianTwistRoutes import router as russianTwistRouter
+from src.routes.core.flutterKicksRoutes import router as flutterKicksRouter
+from src.routes.lower_body.singleLegSquatRoutes import router as singleLegSquatRouter
+from src.routes.mobility.halfMoonRoutes import router as halfMoonRouter
+from src.routes.core.bicycleCrunchRoutes import router as bicycleCrunchRouter
+from src.routes.full_body.hinduPushupRoutes import router as hinduPushupRouter
+from src.routes.upper_body.arnoldPressRoutes import router as arnoldPressRouter
+from src.routes.mobility.dancerPoseRoutes import router as dancerPoseRouter
+from src.routes.full_body.supermanRoutes import router as supermenPoseRouter
+from src.routes.mobility.sideLegSwingRoutes import router as sideLegSwingRouter
+from src.routes.mobility.frontLegSwingRoutes import router as frontLegSwingRouter
+from src.routes.mobility.childsPoseRoutes import router as childsPoseRouter
+from src.routes.full_body.skandhaChakraRoutes import router as skandhaChakraRouter
+from src.routes.full_body.inchwormRoutes import router as inchwormRouter
+from src.routes.upper_body.bentOverRowRoutes import router as bentOverRowRouter
+from src.routes.full_body.shoulderStandRoutes import router as shoulderStandRouter
+from src.routes.lower_body.advancedBridgePoseRoutes import (
+    router as advancedBridgePoseRouter,
+)
+from src.routes.mobility.windmillRotationStretchRoutes import (
     router as windmillRotationStretchRouter,
 )
 

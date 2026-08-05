@@ -3,7 +3,7 @@ from typing import Any, NamedTuple, Optional
 
 import numpy as np
 
-from src.detectors.body_analysis import (
+from src.detectors.body_detector.body_analysis import (
     HAIR_COLOR_PALETTE,
     SKIN_TONE_PALETTE,
     WAIST_FRACTION,
