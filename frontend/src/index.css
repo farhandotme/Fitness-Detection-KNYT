@@ -1,544 +1,187 @@
-/* ---------------------------------
-   KNYT.FIT — design tokens
---------------------------------- */
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&family=Space+Mono:wght@400;700&display=swap');
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@plugin "@tailwindcss/typography";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-card-border: hsl(var(--card-border));
+
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-popover-border: hsl(var(--popover-border));
+
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-primary-border: var(--primary-border);
+
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-secondary-border: var(--secondary-border);
+
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-muted-border: var(--muted-border);
+
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-accent-border: var(--accent-border);
+
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-destructive-border: var(--destructive-border);
+
+  --font-sans: var(--app-font-sans);
+  --font-mono: var(--app-font-mono);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
 
 :root {
-  --paper: #f2efe4;
-  --ink: #1c2417;
-  --muted: #7c8570;
-  --line: #dad4c2;
+  --background: 222 43% 6%;
+  --foreground: 210 25% 95%;
 
-  --forest: #4c6f39;
-  --sprout: #84c760;
-  --amber: #b8862e;
-  --alert: #a6483a;
+  --card: 222 35% 10%;
+  --card-foreground: 210 25% 95%;
+  --card-border: 218 28% 19%;
 
-  --panel: #1f281a;
-  --panel-line: #33402a;
+  --popover: 222 35% 10%;
+  --popover-foreground: 210 25% 95%;
+  --popover-border: 218 28% 19%;
 
-  --display: "Bebas Neue", sans-serif;
-  --sans: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
-  --mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+  --primary: 164 91% 70%;
+  --primary-foreground: 222 43% 6%;
 
-  color-scheme: light;
+  --secondary: 218 28% 16%;
+  --secondary-foreground: 210 25% 95%;
+
+  --muted: 220 24% 15%;
+  --muted-foreground: 216 16% 62%;
+
+  --accent: 34 100% 68%;
+  --accent-foreground: 33 54% 13%;
+
+  --destructive: 3 90% 68%;
+  --destructive-foreground: 222 43% 6%;
+
+  --border: 218 28% 20%;
+  --input: 218 28% 24%;
+  --ring: 164 91% 70%;
+
+  --app-font-sans: 'DM Sans', sans-serif;
+  --app-font-mono: 'Space Mono', monospace;
+  --font-display: 'Manrope', sans-serif;
+  --radius: 1rem;
+
+  --sidebar: var(--card);
+  --sidebar-foreground: var(--card-foreground);
+  --sidebar-border: var(--border);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--accent-foreground);
+  --sidebar-ring: var(--ring);
+
+  --chart-1: var(--primary);
+  --chart-2: var(--secondary);
+  --chart-3: var(--accent);
+  --chart-4: var(--muted);
+  --chart-5: var(--destructive);
+  
+  --button-outline: rgba(255, 255, 255, 0.1);
+  --badge-outline: rgba(255, 255, 255, 0.05);
+  --opaque-button-border-intensity: 9;
+  --elevate-1: rgba(255, 255, 255, 0.04);
+  --elevate-2: rgba(255, 255, 255, 0.09);
 }
 
-* {
-  box-sizing: border-box;
+.dark {
+  --background: 222 43% 6%;
+  --foreground: 210 25% 95%;
+  --card: 222 35% 10%;
+  --card-foreground: 210 25% 95%;
+  --card-border: 218 28% 19%;
+  --popover: 222 35% 10%;
+  --popover-foreground: 210 25% 95%;
+  --popover-border: 218 28% 19%;
+  --primary: 164 91% 70%;
+  --primary-foreground: 222 43% 6%;
+  --secondary: 218 28% 16%;
+  --secondary-foreground: 210 25% 95%;
+  --muted: 220 24% 15%;
+  --muted-foreground: 216 16% 62%;
+  --accent: 34 100% 68%;
+  --accent-foreground: 33 54% 13%;
+  --destructive: 3 90% 68%;
+  --destructive-foreground: 222 43% 6%;
+  --border: 218 28% 20%;
+  --input: 218 28% 24%;
+  --ring: 164 91% 70%;
 }
 
-html,
-body,
-#root {
-  margin: 0;
-  min-height: 100vh;
-}
+@layer base {
+  * {
+    @apply border-border;
+  }
 
-body {
-  background: var(--paper);
-  color: var(--ink);
-  font-family: var(--sans);
-  -webkit-font-smoothing: antialiased;
-}
-
-h1,
-h2,
-h3 {
-  margin: 0;
-}
-
-button,
-select {
-  font-family: var(--sans);
-}
-
-/* ---------------------------------
-   App shell / nav
---------------------------------- */
-
-.app-shell {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-}
-
-.topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 20px 32px;
-  border-bottom: 1px solid var(--line);
-}
-
-.wordmark {
-  font-family: var(--display);
-  font-size: 26px;
-  letter-spacing: 0.04em;
-  color: var(--forest);
-}
-
-.wordmark-accent {
-  color: var(--sprout);
-}
-
-.nav-pills {
-  display: flex;
-  gap: 8px;
-}
-
-.nav-pill {
-  font-family: var(--mono);
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  text-decoration: none;
-  color: var(--muted);
-  padding: 8px 16px;
-  border-radius: 999px;
-  border: 1px solid transparent;
-  transition: all 0.15s ease;
-}
-
-.nav-pill:hover {
-  color: var(--ink);
-}
-
-.nav-pill.active {
-  color: var(--paper);
-  background: var(--forest);
-}
-
-.app-main {
-  flex: 1;
-  padding: 32px;
-}
-
-/* ---------------------------------
-   Page layout
---------------------------------- */
-
-.page {
-  max-width: 1120px;
-  margin: 0 auto;
-}
-
-.page-grid {
-  display: grid;
-  grid-template-columns: 1.25fr 1fr;
-  gap: 28px;
-}
-
-@media (max-width: 820px) {
-  .page-grid {
-    grid-template-columns: 1fr;
+  body {
+    @apply font-sans antialiased bg-background text-foreground;
+    background-image:
+      radial-gradient(circle at 8% 0%, hsl(164 91% 70% / 0.09), transparent 28rem),
+      radial-gradient(circle at 94% 12%, hsl(34 100% 68% / 0.06), transparent 24rem);
   }
 }
 
-.camera-col {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
+h1, h2, h3, h4, button, .font-display { font-family: var(--font-display); }
+* { scrollbar-color: hsl(var(--primary) / .35) transparent; }
+
+@keyframes scan-line {
+  0%, 100% { transform: translateY(-42%); opacity: .15; }
+  50% { transform: translateY(42%); opacity: .8; }
 }
 
-.camera-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+@keyframes ambient-pulse {
+  0%, 100% { transform: scale(.96); opacity: .25; }
+  50% { transform: scale(1.08); opacity: .55; }
 }
 
-.camera-select {
-  flex: 1;
-  background: transparent;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 8px 10px;
-  font-size: 13px;
-  color: var(--ink);
+@keyframes signal-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 hsl(var(--primary) / .25); }
+  50% { box-shadow: 0 0 0 9px hsl(var(--primary) / 0); }
 }
 
-.status-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--alert);
-  flex-shrink: 0;
+.camera-grid {
+  background-image:
+    linear-gradient(hsl(var(--primary) / .08) 1px, transparent 1px),
+    linear-gradient(90deg, hsl(var(--primary) / .08) 1px, transparent 1px);
+  background-size: 42px 42px;
 }
 
-.status-dot.live {
-  background: var(--sprout);
-  box-shadow: 0 0 0 0 rgba(132, 199, 96, 0.6);
-  animation: pulse-dot 1.8s infinite;
+.camera-scan-line {
+  animation: scan-line 3.8s ease-in-out infinite;
 }
 
-@keyframes pulse-dot {
-  0% {
-    box-shadow: 0 0 0 0 rgba(132, 199, 96, 0.5);
-  }
-  70% {
-    box-shadow: 0 0 0 7px rgba(132, 199, 96, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(132, 199, 96, 0);
-  }
+.ambient-pulse {
+  animation: ambient-pulse 4s ease-in-out infinite;
 }
 
-/* ---------------------------------
-   Viewfinder (camera panel)
---------------------------------- */
-
-.viewfinder {
-  position: relative;
-  aspect-ratio: 4 / 3;
-  background: var(--panel);
-  border-radius: 16px;
-  overflow: hidden;
-  border: 1px solid var(--panel-line);
+.signal-pulse {
+  animation: signal-pulse 2.4s ease-out infinite;
 }
 
-.viewfinder-video {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  transform: scaleX(-1);
-}
-
-.viewfinder-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  transform: scaleX(-1);
-}
-
-/* ---------------------------------
-   Exercise picker
---------------------------------- */
-
-.exercise-picker {
-  display: flex;
-  gap: 8px;
-}
-
-.pill {
-  flex: 1;
-  background: transparent;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 10px 14px;
-  font-family: var(--mono);
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.pill:hover {
-  border-color: var(--forest);
-  color: var(--ink);
-}
-
-.pill.active {
-  background: var(--forest);
-  border-color: var(--forest);
-  color: var(--paper);
-}
-
-/* ---------------------------------
-   Stats column
---------------------------------- */
-
-.stats-col {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.stat-block {
-  display: flex;
-  flex-direction: column;
-  border-bottom: 1px solid var(--line);
-  padding-bottom: 16px;
-}
-
-.stat-label {
-  font-family: var(--mono);
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--muted);
-}
-
-.stat-number {
-  font-family: var(--mono);
-  font-size: 76px;
-  font-weight: 700;
-  line-height: 1;
-  color: var(--forest);
-}
-
-.meta-row {
-  display: flex;
-  justify-content: space-between;
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--muted);
-  padding: 6px 0;
-  border-bottom: 1px solid var(--line);
-}
-
-.meta-row:last-child {
-  border-bottom: none;
-}
-
-.empty-hint {
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--muted);
-}
-
-/* ---------------------------------
-   Angle gauge (rep threshold visualizer)
---------------------------------- */
-
-.angle-gauge {
-  width: 100%;
-}
-
-.angle-gauge-track {
-  position: relative;
-  height: 10px;
-  background: var(--line);
-  border-radius: 6px;
-  margin: 10px 0 8px;
-}
-
-.angle-gauge-zone {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  border-radius: 6px;
-}
-
-.angle-gauge-zone.up-zone {
-  left: 0;
-  background: rgba(132, 199, 96, 0.35);
-}
-
-.angle-gauge-zone.down-zone {
-  background: rgba(76, 111, 57, 0.35);
-}
-
-.angle-gauge-marker {
-  position: absolute;
-  top: 50%;
-  width: 15px;
-  height: 15px;
-  margin-left: -7.5px;
-  margin-top: -7.5px;
-  background: var(--forest);
-  border: 2px solid var(--paper);
-  border-radius: 50%;
-  box-shadow: 0 0 0 2px var(--forest);
-  transition: left 0.1s linear;
-}
-
-.angle-gauge-labels {
-  display: flex;
-  justify-content: space-between;
-  font-family: var(--mono);
-  font-size: 10.5px;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.angle-gauge-stage {
-  font-weight: 700;
-}
-
-.angle-gauge-stage.up {
-  color: var(--sprout);
-}
-.angle-gauge-stage.down {
-  color: var(--forest);
-}
-.angle-gauge-stage.open {
-  color: var(--sprout);
-}
-.angle-gauge-stage.closed {
-  color: var(--forest);
-}
-
-/* ---------------------------------
-   Finger bars (hand breakdown)
---------------------------------- */
-
-.hand-list {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.hand-card {
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 14px 16px;
-}
-
-.hand-card-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  margin-bottom: 12px;
-}
-
-.hand-label {
-  font-family: var(--mono);
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-}
-
-.hand-count {
-  font-family: var(--mono);
-  font-size: 22px;
-  font-weight: 700;
-  color: var(--forest);
-}
-
-.finger-bars {
-  display: flex;
-  gap: 10px;
-}
-
-.finger-bar {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-}
-
-.finger-bar-track {
-  width: 24px;
-  height: 56px;
-  background: var(--line);
-  border-radius: 6px;
-  position: relative;
-  overflow: hidden;
-}
-
-.finger-bar-fill {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  width: 100%;
-  height: 14%;
-  background: var(--muted);
-  transition:
-    height 0.2s ease,
-    background 0.2s ease;
-}
-
-.finger-bar.up .finger-bar-fill {
-  height: 100%;
-  background: var(--sprout);
-}
-
-.finger-bar-label {
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--muted);
-  text-transform: uppercase;
-}
-
-/* ---------------------------------
-   Tempo / coach feedback (rep quality)
---------------------------------- */
-
-.section-label {
-  font-family: var(--mono);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--muted);
-  margin-top: 6px;
-  padding-top: 14px;
-  border-top: 1px solid var(--line);
-}
-
-.quality-badge {
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  padding: 3px 10px;
-  border-radius: 999px;
-  background: var(--line);
-  color: var(--muted);
-}
-
-.quality-badge.good,
-.quality-badge.fast {
-  background: rgba(132, 199, 96, 0.25);
-  color: var(--forest);
-}
-
-.quality-badge.slow,
-.quality-badge.too_slow {
-  background: rgba(184, 134, 46, 0.2);
-  color: var(--amber);
-}
-
-.quality-badge.too_fast {
-  background: rgba(166, 72, 58, 0.18);
-  color: var(--alert);
-}
-
-.feedback-box {
-  margin-top: 8px;
-  padding: 14px 16px;
-  border-radius: 12px;
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--muted);
-  background: rgba(0, 0, 0, 0.015);
-}
-
-.feedback-box.good,
-.feedback-box.fast {
-  border-left-color: var(--sprout);
-}
-
-.feedback-box.slow,
-.feedback-box.too_slow {
-  border-left-color: var(--amber);
-}
-
-.feedback-box.too_fast {
-  border-left-color: var(--alert);
-}
-
-.feedback-box strong {
-  display: block;
-  font-family: var(--mono);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--muted);
-  margin-bottom: 6px;
-}
-
-.feedback-box p {
-  margin: 0;
-  font-size: 14px;
-  line-height: 1.5;
-  color: var(--ink);
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
+  opacity: 1;
 }
