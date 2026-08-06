@@ -890,6 +890,22 @@ export const exercises: ExerciseConfig[] = [
     cameraMirror: true,
     imageUrl: "",
   },
+  {
+    id: "standing_trunk_rotation",
+    name: "Standing Trunk Rotation",
+    wsRoute: "/ws/standing_trunk_rotation",
+    mode: "reps",
+    defaultTarget: 10,
+    defaultSets: 2,
+    defaultRestSeconds: 20,
+    difficulty: "beginner",
+    tagline: "Controlled thoracic rotation",
+    category: "upper_body",
+    setupTip:
+      "Feet hip-width, arms bent 90° or straight in front, rotate upper body left and right while keeping hips stable.",
+    cameraMirror: true,
+    imageUrl: "",
+  },
 ];
 
 export function getExerciseById(id: string): ExerciseConfig | undefined {
