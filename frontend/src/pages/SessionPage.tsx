@@ -12,14 +12,46 @@ import {
   Play,
   Pause,
   CheckCircle2,
-  Timer,
-  Zap,
   Activity,
   Camera,
   ShieldCheck,
+  Eye,
+  EyeOff,
+  Gauge,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
+import type { PoseLandmark } from "@/hooks/useExerciseSocket";
+
+function hasPlausiblePose(landmarks: PoseLandmark[] = []) {
+  const visible = landmarks.filter(
+    (point) =>
+      Number.isFinite(point.x) &&
+      Number.isFinite(point.y) &&
+      (point.visibility ?? 1) >= 0.45 &&
+      point.x >= 0 &&
+      point.x <= 1 &&
+      point.y >= 0 &&
+      point.y <= 1,
+  );
+
+  if (visible.length < 8) return false;
+
+  // Require a recognizable shoulder/hip structure. This prevents isolated
+  // background features from being promoted to a full-body detection.
+  const corePoints = [11, 12, 23, 24].filter((index) => {
+    const point = landmarks[index];
+    return point && (point.visibility ?? 1) >= 0.45;
+  }).length;
+  if (corePoints < 2) return false;
+
+  const xs = visible.map((point) => point.x);
+  const ys = visible.map((point) => point.y);
+  const width = Math.max(...xs) - Math.min(...xs);
+  const height = Math.max(...ys) - Math.min(...ys);
+
+  return width >= 0.08 && height >= 0.1;
+}
 
 export function SessionPage() {
   const [match, params] = useRoute("/exercise/:id/session");
@@ -50,6 +82,7 @@ export function SessionPage() {
   const [isPaused, setIsPaused] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(3);
   const [sessionStarted, setSessionStarted] = useState(false);
+  const [landmarksVisible, setLandmarksVisible] = useState(false);
 
   const {
     videoRef,
@@ -213,7 +246,7 @@ export function SessionPage() {
   // ── Completion Screen ────────────────────────────────────────────────────────
   if (isSessionComplete) {
     return (
-      <div className="min-h-dvh bg-[#071116] text-foreground flex items-center justify-center p-6">
+      <div className="min-h-dvh bg-[#11110f] text-foreground flex items-center justify-center p-6">
         <motion.div
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
@@ -248,11 +281,46 @@ export function SessionPage() {
   // ── Live Session ─────────────────────────────────────────────────────────────
   const repData = data && exercise.mode === "reps" ? (data as any) : null;
   const holdData = data && exercise.mode === "hold" ? (data as any) : null;
+  const poseDetected = Boolean(
+    data?.pose_detected && hasPlausiblePose(data?.landmarks),
+  );
+  const poseLandmarks = poseDetected ? (data?.landmarks ?? []) : [];
+  const panelData =
+    data && !poseDetected
+      ? { ...data, pose_detected: false, landmarks: [] }
+      : data;
+  const visibleLandmarkCount = landmarksVisible
+    ? poseLandmarks.filter((point) => (point.visibility ?? 1) >= 0.45).length
+    : 0;
+  const averageVisibility =
+    poseLandmarks.length > 0
+      ? Math.round(
+          (poseLandmarks.reduce(
+            (sum, point) => sum + (point.visibility ?? 1),
+            0,
+          ) /
+            poseLandmarks.length) *
+            100,
+        )
+      : null;
+  const poseStatus = !data
+    ? "Waiting"
+    : poseDetected
+      ? "Detected"
+      : "Not found";
+  const frameStatus = !data
+    ? "Waiting"
+    : data.framing_ok
+      ? "Good"
+      : "Adjust view";
+  const movementStage = poseDetected
+    ? repData?.stage || holdData?.hold_state?.replace(/_/g, " ") || "Waiting"
+    : "Waiting";
 
   return (
-    <div className="min-h-dvh max-h-dvh bg-[#071116] text-foreground flex flex-col overflow-hidden">
+    <div className="min-h-dvh max-h-dvh bg-[#11110f] text-foreground flex flex-col overflow-hidden">
       {/* ── Top Bar ─────────────────────────────────────────────────── */}
-      <header className="flex items-center gap-3 px-4 py-3 border-b border-white/10 shrink-0 bg-[#0b151d]/95 backdrop-blur-xl">
+      <header className="flex items-center gap-3 px-4 py-3 border-b border-white/10 shrink-0 bg-[#171714]/95 backdrop-blur-xl">
         <button
           onClick={handleQuit}
           className="flex items-center gap-1.5 text-slate-400 hover:text-white text-xs font-bold tracking-widest uppercase transition-colors"
@@ -296,7 +364,7 @@ export function SessionPage() {
       </header>
 
       {/* ── Set Progress Bar ─────────────────────────────────────────── */}
-      <div className="flex gap-1 px-4 py-2 shrink-0 border-b border-white/10 bg-[#0b151d]">
+      <div className="flex gap-1 px-4 py-2 shrink-0 border-b border-white/10 bg-[#171714]">
         {Array.from({ length: targetSets }, (_, i) => i + 1).map((s) => (
           <div
             key={s}
@@ -315,130 +383,170 @@ export function SessionPage() {
       {/* ── Main Body ───────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden min-h-0">
         {/* LEFT: Camera */}
-        <div className="w-full lg:w-[52%] flex flex-col h-[42dvh] lg:h-full min-h-0 relative">
-          <CameraPreview
-            videoRef={videoRef}
-            canvasRef={canvasRef}
-            permission={permission}
-            mirror={exercise.cameraMirror}
-            className="flex-1 rounded-none"
-          >
-            {/* Bottom overlay stats on camera */}
-            <div className="flex gap-3 pointer-events-none">
-              <StatChip
-                icon={<CheckCircle2 className="w-3 h-3 text-[#00ff87]" />}
-                label="Good"
-                value={
-                  repData
-                    ? repData.good_reps
-                    : holdData
-                      ? `${formatTime(holdData.good_seconds)}`
-                      : "—"
-                }
-                green
+        <div className="w-full lg:w-[56%] flex flex-col min-h-0 overflow-y-auto bg-[#11110f] p-3 gap-3">
+          <div className="relative w-full aspect-video shrink-0 overflow-hidden rounded-[1.35rem] border border-white/10 bg-[#11110f] shadow-2xl shadow-black/30">
+            <CameraPreview
+              videoRef={videoRef}
+              canvasRef={canvasRef}
+              permission={permission}
+              mirror={exercise.cameraMirror}
+              landmarks={poseLandmarks}
+              landmarksVisible={landmarksVisible}
+              poseDetected={poseDetected}
+              className="rounded-[1.35rem]"
+            />
+
+            <AnimatePresence>
+              {countdown !== null && sessionStarted && countdown > 0 && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-[#171714]/96 text-[#f2f5ed]"
+                >
+                  <p className="relative z-10 text-xs font-bold uppercase tracking-[.28em] text-accent mb-5">
+                    Get into position
+                  </p>
+                  <motion.div
+                    key={countdown}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    transition={{ duration: 0.25, ease: "easeOut" }}
+                    className="relative z-10 h-[clamp(8rem,18vw,12rem)] w-[clamp(8rem,18vw,12rem)] text-center font-display text-[clamp(8rem,18vw,12rem)] leading-[.9] font-extrabold tabular-nums text-primary drop-shadow-[0_0_32px_hsl(var(--primary)/.35)]"
+                  >
+                    {countdown}
+                  </motion.div>
+                  <p className="relative z-10 text-sm text-slate-300 mt-3">
+                    Camera begins after the countdown
+                  </p>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Rest Overlay */}
+            <AnimatePresence>
+              {isResting && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="absolute inset-0 bg-[#11110f]/95 backdrop-blur-sm flex flex-col items-center justify-center z-30"
+                >
+                  <p className="text-[10px] font-bold tracking-widest uppercase text-slate-500 mb-3">
+                    Rest
+                  </p>
+                  <div className="text-8xl font-black font-mono text-primary tabular-nums mb-2 drop-shadow-[0_0_26px_hsl(var(--primary)/.25)]">
+                    {formatTime(restTimeLeft)}
+                  </div>
+                  <p className="text-sm text-slate-500 uppercase tracking-widest">
+                    Next: Set {currentSet + 1}
+                  </p>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Pause Overlay */}
+            <AnimatePresence>
+              {isPaused && !isResting && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="absolute inset-0 bg-[#11110f]/92 backdrop-blur-sm flex flex-col items-center justify-center z-30"
+                >
+                  <Pause className="w-16 h-16 text-slate-500 mb-4" />
+                  <p className="text-2xl font-black uppercase tracking-widest text-white">
+                    Paused
+                  </p>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Development rail: useful telemetry stays below the clean camera frame. */}
+          <div className="min-h-37.5 flex-1 rounded-[1.35rem] border border-white/10 bg-[#171714] p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[.22em] text-primary">
+                  Live exercise data
+                </p>
+                <p className="mt-1 text-sm font-semibold text-white">
+                  {data
+                    ? repData?.feedback ||
+                      holdData?.feedback ||
+                      "Tracking your movement."
+                    : "Telemetry will appear when the coach connects."}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLandmarksVisible((visible) => !visible)}
+                aria-pressed={landmarksVisible}
+                className={cn(
+                  "flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest transition-all",
+                  landmarksVisible
+                    ? "border-primary/35 bg-primary/10 text-primary"
+                    : "border-white/15 bg-white/5 text-slate-400 hover:border-primary/30 hover:text-primary",
+                )}
+              >
+                {landmarksVisible ? (
+                  <Eye className="h-3.5 w-3.5" />
+                ) : (
+                  <EyeOff className="h-3.5 w-3.5" />
+                )}
+                Landmarks {landmarksVisible ? "on" : "off"}
+              </button>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-4">
+              <SessionMetric
+                label="Pose"
+                value={poseStatus}
+                tone={poseDetected ? "good" : "neutral"}
               />
-              <StatChip
-                icon={<Zap className="w-3 h-3 text-amber-400" />}
-                label={repData ? "Flawed" : "Breaks"}
-                value={
-                  repData
-                    ? repData.flawed_reps
-                    : holdData
-                      ? holdData.break_count
-                      : "—"
-                }
+              <SessionMetric
+                label="Frame"
+                value={frameStatus}
+                tone={data?.framing_ok ? "good" : "warn"}
               />
-              <StatChip
-                icon={<Timer className="w-3 h-3 text-[#94a3b8]" />}
-                label="Elapsed"
-                value={data ? `${Math.round(data.elapsed_time)}s` : "0s"}
+              <SessionMetric
+                label={exercise.mode === "reps" ? "Stage" : "Hold state"}
+                value={movementStage}
+                tone="accent"
               />
-              {/* Connection dot */}
-              <div className="ml-auto flex items-center gap-1.5">
-                <div
+              <SessionMetric
+                label="Landmarks"
+                value={`${visibleLandmarkCount}/33`}
+                tone={landmarksVisible ? "good" : "neutral"}
+              />
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-[10px] font-bold uppercase tracking-[.14em] text-slate-500">
+              <span className="inline-flex items-center gap-1.5">
+                <Gauge className="h-3.5 w-3.5 text-accent" /> Visibility{" "}
+                {averageVisibility !== null ? `${averageVisibility}%` : "—"}
+              </span>
+              {repData?.angle !== null && repData?.angle !== undefined && (
+                <span>Angle {Math.round(repData.angle)}°</span>
+              )}
+              {holdData?.form_score !== null &&
+                holdData?.form_score !== undefined && (
+                  <span>Form score {Math.round(holdData.form_score)}/100</span>
+                )}
+              <span className="ml-auto inline-flex items-center gap-1.5">
+                <span
                   className={cn(
-                    "w-2 h-2 rounded-full",
-                    connected ? "bg-[#00ff87] animate-pulse" : "bg-red-500",
+                    "h-1.5 w-1.5 rounded-full animate-pulse",
+                    connected ? "bg-primary" : "bg-accent",
                   )}
                 />
-                <span className="text-[10px] text-white/60 uppercase tracking-widest">
-                  {connected ? "Live" : "Offline"}
-                </span>
-              </div>
+                {connected ? "Telemetry live" : "Camera ready"}
+              </span>
             </div>
-          </CameraPreview>
-
-          <AnimatePresence>
-            {countdown !== null && sessionStarted && countdown > 0 && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="absolute inset-0 z-40 bg-[#08232b]/94 backdrop-blur-md flex flex-col items-center justify-center text-[#f2f5ed]"
-              >
-                <div className="pointer-events-none absolute h-72 w-72 rounded-full border border-primary/15 ambient-pulse" />
-                <div className="pointer-events-none absolute h-52 w-52 rounded-full border border-accent/20 signal-pulse" />
-                <p className="relative z-10 text-xs font-bold uppercase tracking-[.28em] text-accent mb-5">
-                  Get into position
-                </p>
-                <motion.div
-                  key={countdown}
-                  initial={{ scale: 0.65, opacity: 0 }}
-                  animate={{ scale: [0.94, 1.04, 1], opacity: 1 }}
-                  transition={{ duration: 0.75, ease: "easeOut" }}
-                  className="relative z-10 font-display text-[10rem] md:text-[13rem] leading-none font-extrabold tabular-nums text-primary drop-shadow-[0_0_32px_hsl(var(--primary)/.35)]"
-                >
-                  {countdown}
-                </motion.div>
-                <p className="relative z-10 text-sm text-slate-300 mt-3">
-                  Camera begins after the countdown
-                </p>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Rest Overlay */}
-          <AnimatePresence>
-            {isResting && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="absolute inset-0 bg-[#071116]/94 backdrop-blur-sm flex flex-col items-center justify-center z-30"
-              >
-                <p className="text-[10px] font-bold tracking-widest uppercase text-slate-500 mb-3">
-                  Rest
-                </p>
-                <div className="text-8xl font-black font-mono text-primary tabular-nums mb-2 drop-shadow-[0_0_26px_hsl(var(--primary)/.25)]">
-                  {formatTime(restTimeLeft)}
-                </div>
-                <p className="text-sm text-slate-500 uppercase tracking-widest">
-                  Next: Set {currentSet + 1}
-                </p>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Pause Overlay */}
-          <AnimatePresence>
-            {isPaused && !isResting && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="absolute inset-0 bg-[#071116]/88 backdrop-blur-sm flex flex-col items-center justify-center z-30"
-              >
-                <Pause className="w-16 h-16 text-slate-500 mb-4" />
-                <p className="text-2xl font-black uppercase tracking-widest text-white">
-                  Paused
-                </p>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          </div>
         </div>
 
         {/* RIGHT: Data Panel */}
-        <div className="flex-1 flex flex-col overflow-hidden border-t lg:border-t-0 lg:border-l border-white/10 min-h-0 bg-[#0b151d]/90">
+        <div className="flex-1 flex flex-col overflow-hidden border-t lg:border-t-0 lg:border-l border-white/10 min-h-0 bg-[#171714]/90 lg:rounded-tl-[1.35rem]">
           {/* Scrollable data */}
           <div
             className="flex-1 overflow-y-auto p-4 space-y-4"
@@ -470,15 +578,18 @@ export function SessionPage() {
                   stays local to this session
                 </div>
               </div>
-            ) : data ? (
+            ) : panelData ? (
               exercise.mode === "reps" ? (
                 <RepPanel
-                  data={repData}
+                  data={panelData as typeof repData}
                   lastRep={lastRep}
                   exerciseName={exercise.name}
                 />
               ) : (
-                <HoldPanel data={holdData} exerciseName={exercise.name} />
+                <HoldPanel
+                  data={panelData as typeof holdData}
+                  exerciseName={exercise.name}
+                />
               )
             ) : (
               <div className="flex flex-col items-center justify-center h-48 text-center">
@@ -511,7 +622,7 @@ export function SessionPage() {
           </div>
 
           {/* Bottom: Pause / Resume */}
-          <div className="px-4 py-3 border-t border-white/10 shrink-0 bg-[#0b151d]">
+          <div className="px-4 py-3 border-t border-white/10 shrink-0 bg-[#171714]">
             <button
               data-testid="button-pause-session"
               onClick={togglePause}
@@ -540,33 +651,31 @@ export function SessionPage() {
   );
 }
 
-function StatChip({
-  icon,
+function SessionMetric({
   label,
   value,
-  green,
+  tone = "neutral",
 }: {
-  icon: React.ReactNode;
   label: string;
   value: React.ReactNode;
-  green?: boolean;
+  tone?: "good" | "warn" | "accent" | "neutral";
 }) {
   return (
-    <div className="flex items-center gap-1.5 bg-black/60 rounded-lg px-2.5 py-1.5">
-      {icon}
-      <div className="flex flex-col leading-none">
-        <span className="text-[9px] text-white/40 uppercase tracking-widest">
-          {label}
-        </span>
-        <span
-          className={cn(
-            "text-xs font-bold font-mono",
-            green ? "text-[#00ff87]" : "text-white",
-          )}
-        >
-          {value}
-        </span>
-      </div>
+    <div className="rounded-xl border border-white/10 bg-black/15 px-3 py-2.5">
+      <p className="text-[9px] font-bold uppercase tracking-[.16em] text-slate-500">
+        {label}
+      </p>
+      <p
+        className={cn(
+          "mt-1 truncate text-xs font-bold capitalize",
+          tone === "good" && "text-primary",
+          tone === "warn" && "text-accent",
+          tone === "accent" && "text-accent",
+          tone === "neutral" && "text-slate-300",
+        )}
+      >
+        {value}
+      </p>
     </div>
   );
 }

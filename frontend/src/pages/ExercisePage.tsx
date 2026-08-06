@@ -135,7 +135,7 @@ export function ExercisePage() {
       <main className="max-w-4xl mx-auto p-4 mt-6">
         {/* Header Hero */}
         <div className="bg-card border border-card-border rounded-4xl p-6 md:p-10 mb-6 flex flex-col md:flex-row gap-8 items-center md:items-stretch overflow-hidden relative">
-          <div className="w-full md:w-1/2 min-h-52.5 rounded-2xl overflow-hidden relative bg-[#173b42]">
+          <div className="w-full md:w-1/2 min-h-52.5 rounded-2xl overflow-hidden relative bg-[#1b2014]">
             {exercise.imageUrl ? (
               <img
                 src={exercise.imageUrl}
@@ -145,7 +145,7 @@ export function ExercisePage() {
             ) : (
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_20%,hsl(var(--accent)/.7),transparent_30%),linear-gradient(135deg,#173b42,#2d6e6b)]" />
             )}
-            <div className="absolute inset-0 bg-linear-to-t from-[#173b42]/80 to-transparent" />
+            <div className="absolute inset-0 bg-linear-to-t from-[#1b2014]/90 to-transparent" />
             <div className="absolute left-5 bottom-5 text-[#f2f5ed]">
               <div className="text-[10px] uppercase tracking-[.24em] text-[#f2b35b] font-bold">
                 Today's focus

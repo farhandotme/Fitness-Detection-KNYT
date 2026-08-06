@@ -130,7 +130,7 @@ export function HomePage() {
       )}
 
       <main className="max-w-6xl mx-auto p-4 mt-6 flex flex-col gap-7">
-        <section className="relative overflow-hidden rounded-4xl bg-[#0d2028] p-7 md:p-10 text-[#f4f7f2] shadow-2xl shadow-black/25 border border-primary/15">
+        <section className="relative overflow-hidden rounded-4xl bg-[#1b2014] p-7 md:p-10 text-[#f4f7f2] shadow-2xl shadow-black/25 border border-primary/15">
           <div className="absolute -right-16 -top-24 h-72 w-72 rounded-full border-42 border-primary/15 ambient-pulse" />
           <div className="absolute right-10 -bottom-20 h-48 w-48 rounded-full border-26 border-accent/20 ambient-pulse" />
           <div className="relative max-w-xl">
