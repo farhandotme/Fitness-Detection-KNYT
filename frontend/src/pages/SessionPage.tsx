@@ -21,38 +21,6 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
-import type { PoseLandmark } from "@/hooks/useExerciseSocket";
-
-function hasPlausiblePose(landmarks: PoseLandmark[] = []) {
-  const visible = landmarks.filter(
-    (point) =>
-      Number.isFinite(point.x) &&
-      Number.isFinite(point.y) &&
-      (point.visibility ?? 1) >= 0.45 &&
-      point.x >= 0 &&
-      point.x <= 1 &&
-      point.y >= 0 &&
-      point.y <= 1,
-  );
-
-  if (visible.length < 8) return false;
-
-  // Require a recognizable shoulder/hip structure. This prevents isolated
-  // background features from being promoted to a full-body detection.
-  const corePoints = [11, 12, 23, 24].filter((index) => {
-    const point = landmarks[index];
-    return point && (point.visibility ?? 1) >= 0.45;
-  }).length;
-  if (corePoints < 2) return false;
-
-  const xs = visible.map((point) => point.x);
-  const ys = visible.map((point) => point.y);
-  const width = Math.max(...xs) - Math.min(...xs);
-  const height = Math.max(...ys) - Math.min(...ys);
-
-  return width >= 0.08 && height >= 0.1;
-}
-
 export function SessionPage() {
   const [match, params] = useRoute("/exercise/:id/session");
   const [, setLocation] = useLocation();
@@ -281,16 +249,18 @@ export function SessionPage() {
   // ── Live Session ─────────────────────────────────────────────────────────────
   const repData = data && exercise.mode === "reps" ? (data as any) : null;
   const holdData = data && exercise.mode === "hold" ? (data as any) : null;
-  const poseDetected = Boolean(
-    data?.pose_detected && hasPlausiblePose(data?.landmarks),
-  );
+  // The uploaded backend owns detection and visibility decisions. The
+  // frontend only guards against malformed coordinates before drawing.
+  // The uploaded backend owns pose detection and framing decisions. The
+  // frontend only renders the landmarks it returns.
+  const poseDetected = Boolean(data?.pose_detected);
   const poseLandmarks = poseDetected ? (data?.landmarks ?? []) : [];
   const panelData =
     data && !poseDetected
       ? { ...data, pose_detected: false, landmarks: [] }
       : data;
   const visibleLandmarkCount = landmarksVisible
-    ? poseLandmarks.filter((point) => (point.visibility ?? 1) >= 0.45).length
+    ? poseLandmarks.filter((point) => (point.visibility ?? 1) >= 0.3).length
     : 0;
   const averageVisibility =
     poseLandmarks.length > 0

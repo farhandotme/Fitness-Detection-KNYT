@@ -47,7 +47,9 @@ export function HomePage() {
   >("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [wsOverride, setWsOverride] = useState(
-    localStorage.getItem("WS_BASE_OVERRIDE") || "",
+    localStorage.getItem("WS_BASE_OVERRIDE") ||
+      import.meta.env.VITE_WEBSOCKET_FASTAPI_URL ||
+      "",
   );
   const [showSettings, setShowSettings] = useState(false);
 
@@ -112,7 +114,7 @@ export function HomePage() {
                 type="text"
                 value={wsOverride}
                 onChange={(e) => setWsOverride(e.target.value)}
-                placeholder="ws://localhost:8000"
+                placeholder="ws://your-backend-host:8000"
                 className="flex-1 bg-background border border-input rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary font-mono"
               />
               <button
@@ -123,7 +125,9 @@ export function HomePage() {
               </button>
             </div>
             <p className="text-xs text-muted-foreground">
-              Override the WebSocket server URL. Leave blank to use default.
+              Use the FastAPI WebSocket base URL. Exercise routes such as{" "}
+              <span className="font-mono text-primary/80">/ws/pushup</span> are
+              added automatically.
             </p>
           </div>
         </div>
