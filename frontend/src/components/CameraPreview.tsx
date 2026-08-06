@@ -61,7 +61,7 @@ function pointFor(
     !point ||
     !Number.isFinite(point.x) ||
     !Number.isFinite(point.y) ||
-    (point.visibility ?? 1) < 0.45
+    (point.visibility ?? 1) < 0.3
   )
     return null;
   return {
