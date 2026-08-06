@@ -922,6 +922,22 @@ export const exercises: ExerciseConfig[] = [
     cameraMirror: true,
     imageUrl: "",
   },
+  {
+    id: "cable_upright_row",
+    name: "Cable Upright Row",
+    wsRoute: "/ws/cable_upright_row",
+    mode: "reps",
+    defaultTarget: 12,
+    defaultSets: 3,
+    defaultRestSeconds: 60,
+    difficulty: "beginner",
+    tagline: "Lateral delts and upper traps with constant tension",
+    category: "upper_body",
+    setupTip:
+      "Attach a straight bar or rope to a low pulley. Stand tall, grip with hands shoulder-width or slightly narrower, pull the bar up along your body by leading with elbows until they reach ~shoulder height, then lower under control.",
+    cameraMirror: true,
+    imageUrl: "",
+  },
 ];
 
 export function getExerciseById(id: string): ExerciseConfig | undefined {
