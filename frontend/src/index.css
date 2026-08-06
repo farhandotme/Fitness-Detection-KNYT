@@ -1,6 +1,6 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&family=Space+Mono:wght@400;700&display=swap');
-@import 'tailwindcss';
-@import 'tw-animate-css';
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&family=Space+Mono:wght@400;700&display=swap");
+@import "tailwindcss";
+@import "tw-animate-css";
 @plugin "@tailwindcss/typography";
 
 @custom-variant dark (&:is(.dark *));
@@ -50,39 +50,39 @@
 }
 
 :root {
-  --background: 222 43% 6%;
-  --foreground: 210 25% 95%;
+  --background: 240 13% 6%;
+  --foreground: 72 30% 96%;
 
-  --card: 222 35% 10%;
-  --card-foreground: 210 25% 95%;
-  --card-border: 218 28% 19%;
+  --card: 240 12% 10%;
+  --card-foreground: 72 30% 96%;
+  --card-border: 60 8% 20%;
 
-  --popover: 222 35% 10%;
-  --popover-foreground: 210 25% 95%;
-  --popover-border: 218 28% 19%;
+  --popover: 240 12% 10%;
+  --popover-foreground: 72 30% 96%;
+  --popover-border: 60 8% 20%;
 
-  --primary: 164 91% 70%;
-  --primary-foreground: 222 43% 6%;
+  --primary: 71 100% 62%;
+  --primary-foreground: 70 30% 7%;
 
-  --secondary: 218 28% 16%;
-  --secondary-foreground: 210 25% 95%;
+  --secondary: 60 8% 16%;
+  --secondary-foreground: 72 30% 96%;
 
-  --muted: 220 24% 15%;
-  --muted-foreground: 216 16% 62%;
+  --muted: 60 8% 15%;
+  --muted-foreground: 60 8% 62%;
 
-  --accent: 34 100% 68%;
-  --accent-foreground: 33 54% 13%;
+  --accent: 12 100% 66%;
+  --accent-foreground: 12 45% 12%;
 
   --destructive: 3 90% 68%;
-  --destructive-foreground: 222 43% 6%;
+  --destructive-foreground: 240 13% 6%;
 
-  --border: 218 28% 20%;
-  --input: 218 28% 24%;
-  --ring: 164 91% 70%;
+  --border: 60 8% 21%;
+  --input: 60 8% 25%;
+  --ring: 71 100% 62%;
 
-  --app-font-sans: 'DM Sans', sans-serif;
-  --app-font-mono: 'Space Mono', monospace;
-  --font-display: 'Manrope', sans-serif;
+  --app-font-sans: "DM Sans", sans-serif;
+  --app-font-mono: "Space Mono", monospace;
+  --font-display: "Manrope", sans-serif;
   --radius: 1rem;
 
   --sidebar: var(--card);
@@ -99,7 +99,7 @@
   --chart-3: var(--accent);
   --chart-4: var(--muted);
   --chart-5: var(--destructive);
-  
+
   --button-outline: rgba(255, 255, 255, 0.1);
   --badge-outline: rgba(255, 255, 255, 0.05);
   --opaque-button-border-intensity: 9;
@@ -108,27 +108,27 @@
 }
 
 .dark {
-  --background: 222 43% 6%;
-  --foreground: 210 25% 95%;
-  --card: 222 35% 10%;
-  --card-foreground: 210 25% 95%;
-  --card-border: 218 28% 19%;
-  --popover: 222 35% 10%;
-  --popover-foreground: 210 25% 95%;
-  --popover-border: 218 28% 19%;
-  --primary: 164 91% 70%;
-  --primary-foreground: 222 43% 6%;
-  --secondary: 218 28% 16%;
-  --secondary-foreground: 210 25% 95%;
-  --muted: 220 24% 15%;
-  --muted-foreground: 216 16% 62%;
-  --accent: 34 100% 68%;
-  --accent-foreground: 33 54% 13%;
+  --background: 240 13% 6%;
+  --foreground: 72 30% 96%;
+  --card: 240 12% 10%;
+  --card-foreground: 72 30% 96%;
+  --card-border: 60 8% 20%;
+  --popover: 240 12% 10%;
+  --popover-foreground: 72 30% 96%;
+  --popover-border: 60 8% 20%;
+  --primary: 71 100% 62%;
+  --primary-foreground: 70 30% 7%;
+  --secondary: 60 8% 16%;
+  --secondary-foreground: 72 30% 96%;
+  --muted: 60 8% 15%;
+  --muted-foreground: 60 8% 62%;
+  --accent: 12 100% 66%;
+  --accent-foreground: 12 45% 12%;
   --destructive: 3 90% 68%;
-  --destructive-foreground: 222 43% 6%;
-  --border: 218 28% 20%;
-  --input: 218 28% 24%;
-  --ring: 164 91% 70%;
+  --destructive-foreground: 240 13% 6%;
+  --border: 60 8% 21%;
+  --input: 60 8% 25%;
+  --ring: 71 100% 62%;
 }
 
 @layer base {
@@ -139,38 +139,51 @@
   body {
     @apply font-sans antialiased bg-background text-foreground;
     background-image:
-      radial-gradient(circle at 8% 0%, hsl(164 91% 70% / 0.09), transparent 28rem),
-      radial-gradient(circle at 94% 12%, hsl(34 100% 68% / 0.06), transparent 24rem);
+      radial-gradient(
+        circle at 8% 0%,
+        hsl(71 100% 62% / 0.09),
+        transparent 28rem
+      ),
+      radial-gradient(
+        circle at 94% 12%,
+        hsl(12 100% 66% / 0.08),
+        transparent 24rem
+      );
   }
 }
 
-h1, h2, h3, h4, button, .font-display { font-family: var(--font-display); }
-* { scrollbar-color: hsl(var(--primary) / .35) transparent; }
-
-@keyframes scan-line {
-  0%, 100% { transform: translateY(-42%); opacity: .15; }
-  50% { transform: translateY(42%); opacity: .8; }
+h1,
+h2,
+h3,
+h4,
+button,
+.font-display {
+  font-family: var(--font-display);
+}
+* {
+  scrollbar-color: hsl(var(--primary) / 0.35) transparent;
 }
 
 @keyframes ambient-pulse {
-  0%, 100% { transform: scale(.96); opacity: .25; }
-  50% { transform: scale(1.08); opacity: .55; }
+  0%,
+  100% {
+    transform: scale(0.96);
+    opacity: 0.25;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 0.55;
+  }
 }
 
 @keyframes signal-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 hsl(var(--primary) / .25); }
-  50% { box-shadow: 0 0 0 9px hsl(var(--primary) / 0); }
-}
-
-.camera-grid {
-  background-image:
-    linear-gradient(hsl(var(--primary) / .08) 1px, transparent 1px),
-    linear-gradient(90deg, hsl(var(--primary) / .08) 1px, transparent 1px);
-  background-size: 42px 42px;
-}
-
-.camera-scan-line {
-  animation: scan-line 3.8s ease-in-out infinite;
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 hsl(var(--primary) / 0.25);
+  }
+  50% {
+    box-shadow: 0 0 0 9px hsl(var(--primary) / 0);
+  }
 }
 
 .ambient-pulse {
@@ -181,7 +194,7 @@ h1, h2, h3, h4, button, .font-display { font-family: var(--font-display); }
   animation: signal-pulse 2.4s ease-out infinite;
 }
 
-input[type='number']::-webkit-inner-spin-button,
-input[type='number']::-webkit-outer-spin-button {
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
   opacity: 1;
 }

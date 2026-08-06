@@ -1,6 +1,13 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { ExerciseConfig } from "@/config/exercises";
 
+export interface PoseLandmark {
+  x: number;
+  y: number;
+  z: number;
+  visibility?: number;
+}
+
 export interface RepData {
   pose_detected: boolean;
   view_mode: "side" | "front" | "angled" | null;
@@ -30,7 +37,7 @@ export interface RepData {
   feedback: string | null;
   low_visibility: boolean;
   elapsed_time: number;
-  landmarks: Array<{ x: number; y: number; z: number; visibility?: number }>;
+  landmarks: PoseLandmark[];
   set_number?: number;
   target_sets?: number;
   exercise_complete?: boolean;
@@ -64,7 +71,7 @@ export interface HoldData {
   feedback: string | null;
   low_visibility: boolean;
   elapsed_time: number;
-  landmarks: Array<{ x: number; y: number; z: number; visibility?: number }>;
+  landmarks: PoseLandmark[];
   set_number?: number;
   target_sets?: number;
   exercise_complete?: boolean;
@@ -82,6 +89,9 @@ export function useExerciseSocket(exercise: ExerciseConfig) {
   } | null>(null);
 
   const socketRef = useRef<WebSocket | null>(null);
+  const frameInFlightRef = useRef(false);
+  const frameWatchdogRef = useRef<number | null>(null);
+  const dataExpiryRef = useRef<number | null>(null);
 
   const start = useCallback(
     (params: {
@@ -130,9 +140,21 @@ export function useExerciseSocket(exercise: ExerciseConfig) {
         };
 
         ws.onmessage = (event) => {
+          frameInFlightRef.current = false;
+          if (frameWatchdogRef.current !== null) {
+            window.clearTimeout(frameWatchdogRef.current);
+            frameWatchdogRef.current = null;
+          }
           try {
             const parsed = JSON.parse(event.data);
             setData(parsed);
+            if (dataExpiryRef.current !== null) {
+              window.clearTimeout(dataExpiryRef.current);
+            }
+            dataExpiryRef.current = window.setTimeout(() => {
+              setData(null);
+              dataExpiryRef.current = null;
+            }, 1500);
 
             if (exercise.mode === "reps" && parsed.rep_completed) {
               setLastRep({
@@ -155,6 +177,16 @@ export function useExerciseSocket(exercise: ExerciseConfig) {
         ws.onclose = () => {
           console.log("WebSocket closed.");
           setConnected(false);
+          frameInFlightRef.current = false;
+          if (frameWatchdogRef.current !== null) {
+            window.clearTimeout(frameWatchdogRef.current);
+            frameWatchdogRef.current = null;
+          }
+          if (dataExpiryRef.current !== null) {
+            window.clearTimeout(dataExpiryRef.current);
+            dataExpiryRef.current = null;
+          }
+          setData(null);
         };
       } catch (e: any) {
         setSocketError(e.message || "Failed to establish connection.");
@@ -169,11 +201,34 @@ export function useExerciseSocket(exercise: ExerciseConfig) {
       socketRef.current = null;
     }
     setConnected(false);
+    frameInFlightRef.current = false;
+    if (frameWatchdogRef.current !== null) {
+      window.clearTimeout(frameWatchdogRef.current);
+      frameWatchdogRef.current = null;
+    }
+    if (dataExpiryRef.current !== null) {
+      window.clearTimeout(dataExpiryRef.current);
+      dataExpiryRef.current = null;
+    }
+    setData(null);
   }, []);
 
   const sendFrame = useCallback((base64: string) => {
-    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-      socketRef.current.send(base64);
+    const socket = socketRef.current;
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      // Never queue a second image behind an image still being processed.
+      // Dropping a stale frame keeps the landmark response current instead
+      // of creating a progressively delayed pose stream.
+      if (socket.bufferedAmount > 0 || frameInFlightRef.current) return;
+      frameInFlightRef.current = true;
+      socket.send(base64);
+      // Recover if a backend implementation does not emit a telemetry
+      // response for a frame. This still allows at most one stale frame
+      // through, rather than freezing the camera forever.
+      frameWatchdogRef.current = window.setTimeout(() => {
+        frameInFlightRef.current = false;
+        frameWatchdogRef.current = null;
+      }, 700);
     }
   }, []);
 
