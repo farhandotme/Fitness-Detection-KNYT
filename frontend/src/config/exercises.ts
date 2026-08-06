@@ -906,6 +906,22 @@ export const exercises: ExerciseConfig[] = [
     cameraMirror: true,
     imageUrl: "",
   },
+  {
+    id: "single_arm_cable_lateral_raise_crossbody",
+    name: "Single Arm Cable Lateral Raise (Crossbody)",
+    wsRoute: "/ws/single_arm_cable_lateral_raise_crossbody",
+    mode: "reps",
+    defaultTarget: 12,
+    defaultSets: 3,
+    defaultRestSeconds: 45,
+    difficulty: "beginner",
+    tagline: "Lateral deltoid isolation with constant tension",
+    category: "upper_body",
+    setupTip:
+      "Set cable to lowest position, stand sideways, reach across body with far hand, slight elbow bend, raise arm out to side until ~shoulder height, then lower under control.",
+    cameraMirror: true,
+    imageUrl: "",
+  },
 ];
 
 export function getExerciseById(id: string): ExerciseConfig | undefined {
