@@ -60,6 +60,9 @@ from src.routes.upper_body.bentOverRowRoutes import router as bentOverRowRouter
 from src.routes.full_body.shoulderStandRoutes import router as shoulderStandRouter
 from src.routes.upper_body.tricepDipRoutes import router as tricepDipRouter
 from src.routes.upper_body.cableUprightRowRoutes import router as cableUprightRowRouter
+from src.routes.upper_body.dumbbellPulloverRoutes import (
+    router as dumbbellPulloverRouter,
+)
 from src.routes.upper_body.singleArmCableLateralRaiseCrossbodyRoutes import (
     router as singleArmCableLateralRaiseCrossbodyRouter,
 )
@@ -144,6 +147,9 @@ app.include_router(shoulderStandRouter, prefix="/ws", tags="shoulder-stand-route
 app.include_router(frontRaiseRouter, prefix="/ws", tags="front-raise-router")
 app.include_router(tricepDipRouter, prefix="/ws", tags="tricep-dip-router")
 app.include_router(cableUprightRowRouter, prefix="/ws", tags="cable-upright-row-router")
+app.include_router(
+    dumbbellPulloverRouter, prefix="/ws", tags="dumbbell-pull-over-router"
+)
 app.include_router(
     singleArmCableLateralRaiseCrossbodyRouter,
     prefix="/ws",
