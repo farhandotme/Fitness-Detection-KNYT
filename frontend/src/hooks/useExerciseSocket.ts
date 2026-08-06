@@ -90,7 +90,6 @@ export function useExerciseSocket(exercise: ExerciseConfig) {
 
   const socketRef = useRef<WebSocket | null>(null);
   const frameInFlightRef = useRef(false);
-  const frameWatchdogRef = useRef<number | null>(null);
   const dataExpiryRef = useRef<number | null>(null);
 
   const start = useCallback(
@@ -100,18 +99,19 @@ export function useExerciseSocket(exercise: ExerciseConfig) {
       targetSets?: number;
       setNumber?: number;
     }) => {
-      // Determine base WS URL
-      let wsBase = import.meta.env.VITE_WS_BASE;
-      if (!wsBase) {
-        const saved = localStorage.getItem("WS_BASE_OVERRIDE");
-        if (saved) {
-          wsBase = saved;
-        } else {
-          const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-          // if running in a container, often localhost doesn't work from the host, but we will default to it
-          wsBase = `${protocol}://localhost:8000`;
-        }
-      }
+      // The uploaded FastAPI backend exposes the exercise sockets directly at
+      // /ws/<exercise>. Prefer its original env var, then the user override,
+      // then same-origin /ws routing for deployments that proxy the backend.
+      const configuredBase =
+        import.meta.env.VITE_WEBSOCKET_FASTAPI_URL ||
+        import.meta.env.VITE_WS_BASE ||
+        localStorage.getItem("WS_BASE_OVERRIDE") ||
+        `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}`;
+      // The uploaded FastAPI project mounts exercise routes at /ws directly.
+      // Strip an older artifact-only /api suffix if it was saved previously.
+      const wsBase = configuredBase
+        .replace(/\/api\/?$/, "")
+        .replace(/\/+$/, "");
 
       // Build URL
       const searchParams = new URLSearchParams();
@@ -126,7 +126,7 @@ export function useExerciseSocket(exercise: ExerciseConfig) {
         searchParams.set("target_seconds", params.targetSeconds.toString());
       }
 
-      const wsUrl = `${wsBase}${exercise.wsRoute}?${searchParams.toString()}`;
+      const wsUrl = `${wsBase}${exercise.wsRoute}${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
       console.log("Connecting to WS:", wsUrl);
 
       try {
@@ -139,14 +139,16 @@ export function useExerciseSocket(exercise: ExerciseConfig) {
           setSocketError(null);
         };
 
-        ws.onmessage = (event) => {
+        ws.onmessage = async (event) => {
           frameInFlightRef.current = false;
-          if (frameWatchdogRef.current !== null) {
-            window.clearTimeout(frameWatchdogRef.current);
-            frameWatchdogRef.current = null;
-          }
           try {
-            const parsed = JSON.parse(event.data);
+            const payload =
+              typeof event.data === "string"
+                ? event.data
+                : event.data instanceof Blob
+                  ? await event.data.text()
+                  : new TextDecoder().decode(event.data);
+            const parsed = JSON.parse(payload);
             setData(parsed);
             if (dataExpiryRef.current !== null) {
               window.clearTimeout(dataExpiryRef.current);
@@ -154,7 +156,7 @@ export function useExerciseSocket(exercise: ExerciseConfig) {
             dataExpiryRef.current = window.setTimeout(() => {
               setData(null);
               dataExpiryRef.current = null;
-            }, 1500);
+            }, 2500);
 
             if (exercise.mode === "reps" && parsed.rep_completed) {
               setLastRep({
@@ -178,10 +180,6 @@ export function useExerciseSocket(exercise: ExerciseConfig) {
           console.log("WebSocket closed.");
           setConnected(false);
           frameInFlightRef.current = false;
-          if (frameWatchdogRef.current !== null) {
-            window.clearTimeout(frameWatchdogRef.current);
-            frameWatchdogRef.current = null;
-          }
           if (dataExpiryRef.current !== null) {
             window.clearTimeout(dataExpiryRef.current);
             dataExpiryRef.current = null;
@@ -202,10 +200,6 @@ export function useExerciseSocket(exercise: ExerciseConfig) {
     }
     setConnected(false);
     frameInFlightRef.current = false;
-    if (frameWatchdogRef.current !== null) {
-      window.clearTimeout(frameWatchdogRef.current);
-      frameWatchdogRef.current = null;
-    }
     if (dataExpiryRef.current !== null) {
       window.clearTimeout(dataExpiryRef.current);
       dataExpiryRef.current = null;
@@ -222,13 +216,6 @@ export function useExerciseSocket(exercise: ExerciseConfig) {
       if (socket.bufferedAmount > 0 || frameInFlightRef.current) return;
       frameInFlightRef.current = true;
       socket.send(base64);
-      // Recover if a backend implementation does not emit a telemetry
-      // response for a frame. This still allows at most one stale frame
-      // through, rather than freezing the camera forever.
-      frameWatchdogRef.current = window.setTimeout(() => {
-        frameInFlightRef.current = false;
-        frameWatchdogRef.current = null;
-      }, 700);
     }
   }, []);
 
