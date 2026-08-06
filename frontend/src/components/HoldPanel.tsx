@@ -3,6 +3,8 @@ import { HoldData } from "@/hooks/useExerciseSocket";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { formatTime } from "@/utils/formatTime";
+import { AngleProgress } from "@/components/AngleProgress";
+import { getPrimaryAngle } from "@/utils/angleTelemetry";
 
 interface HoldPanelProps {
   data: HoldData;
@@ -46,6 +48,7 @@ export function HoldPanel({ data, exerciseName }: HoldPanelProps) {
   const target = data.target_seconds || 1;
   const progress = Math.min((data.hold_seconds / target) * 100, 100);
   const isHolding = data.hold_state === "holding";
+  const angleTelemetry = getPrimaryAngle(data);
 
   return (
     <div className="flex flex-col gap-3">
@@ -122,6 +125,12 @@ export function HoldPanel({ data, exerciseName }: HoldPanelProps) {
             />
           </div>
         </div>
+        {angleTelemetry && (
+          <AngleProgress
+            value={angleTelemetry.value}
+            label={angleTelemetry.label}
+          />
+        )}
       </div>
 
       {/* Data Grid */}

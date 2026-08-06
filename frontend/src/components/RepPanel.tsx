@@ -2,6 +2,8 @@ import React from "react";
 import { RepData } from "@/hooks/useExerciseSocket";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { AngleProgress } from "@/components/AngleProgress";
+import { getPrimaryAngle } from "@/utils/angleTelemetry";
 
 interface RepPanelProps {
   data: RepData;
@@ -71,6 +73,7 @@ export function RepPanel({ data, lastRep, exerciseName }: RepPanelProps) {
     data.rep_count > 0
       ? Math.round((data.good_reps / data.rep_count) * 100)
       : 0;
+  const angleTelemetry = getPrimaryAngle(data);
 
   return (
     <div className="flex flex-col gap-3">
@@ -132,25 +135,12 @@ export function RepPanel({ data, lastRep, exerciseName }: RepPanelProps) {
             </div>
           )}
         </div>
-        {/* Angle progress bar */}
-        {data.angle !== null && (
-          <div className="mt-3">
-            <div className="flex justify-between text-[10px] text-slate-500 mb-1">
-              <span>0° contracted</span>
-              <span className="text-primary font-mono">
-                {Math.round(data.angle ?? 0)}°
-              </span>
-              <span>180° extended</span>
-            </div>
-            <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-primary rounded-full transition-all duration-150"
-                style={{
-                  width: `${Math.min(((data.smoothed_angle ?? data.angle ?? 0) / 180) * 100, 100)}%`,
-                }}
-              />
-            </div>
-          </div>
+        {/* Every uploaded detector uses its own authoritative angle key. */}
+        {angleTelemetry && (
+          <AngleProgress
+            value={angleTelemetry.value}
+            label={angleTelemetry.label}
+          />
         )}
       </div>
 
