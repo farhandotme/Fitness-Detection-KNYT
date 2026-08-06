@@ -1,12 +1,7 @@
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
-import {
-  Camera,
-  AlertCircle,
-  Loader2,
-  ScanLine,
-  ShieldCheck,
-} from "lucide-react";
+import { Camera, AlertCircle, Loader2, ShieldCheck } from "lucide-react";
+import type { PoseLandmark } from "@/hooks/useExerciseSocket";
 
 interface CameraPreviewProps {
   videoRef: React.RefObject<HTMLVideoElement | null>;
@@ -14,8 +9,69 @@ interface CameraPreviewProps {
   permission: "idle" | "pending" | "granted" | "denied" | "error";
   mirror?: boolean;
   className?: string;
+  landmarks?: PoseLandmark[];
+  landmarksVisible?: boolean;
+  poseDetected?: boolean;
   /** Bottom overlay stats */
   children?: React.ReactNode;
+}
+
+const POSE_CONNECTIONS: Array<[number, number]> = [
+  [0, 1],
+  [1, 2],
+  [2, 3],
+  [3, 4],
+  [0, 5],
+  [5, 6],
+  [6, 7],
+  [7, 8],
+  [9, 10],
+  [5, 11],
+  [6, 12],
+  [11, 12],
+  [11, 13],
+  [13, 15],
+  [15, 17],
+  [15, 19],
+  [15, 21],
+  [12, 14],
+  [14, 16],
+  [16, 18],
+  [16, 20],
+  [11, 23],
+  [12, 24],
+  [23, 24],
+  [23, 25],
+  [25, 27],
+  [27, 29],
+  [27, 31],
+  [24, 26],
+  [26, 28],
+  [28, 30],
+  [28, 32],
+];
+
+function pointFor(
+  landmarks: PoseLandmark[] | undefined,
+  index: number,
+  content: { left: number; top: number; width: number; height: number },
+) {
+  const point = landmarks?.[index];
+  if (
+    !point ||
+    !Number.isFinite(point.x) ||
+    !Number.isFinite(point.y) ||
+    (point.visibility ?? 1) < 0.45
+  )
+    return null;
+  return {
+    // The tracking frame is mirrored in useCamera before it is sent to the
+    // backend, and the preview is mirrored with CSS. These coordinates already
+    // match the displayed preview; mirroring them again makes the skeleton
+    // appear on the opposite side of the body.
+    x: content.left + Math.min(1, Math.max(0, point.x)) * content.width,
+    y: content.top + Math.min(1, Math.max(0, point.y)) * content.height,
+  };
 }
 
 export function CameraPreview({
@@ -24,19 +80,102 @@ export function CameraPreview({
   permission,
   mirror = true,
   className,
-  children,
+  landmarks = [],
+  landmarksVisible = false,
+  poseDetected = false,
 }: CameraPreviewProps) {
+  const landmarkCanvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    const canvas = landmarkCanvasRef.current;
+    if (!canvas) return;
+
+    const context = canvas.getContext("2d", { alpha: true });
+    if (!context) return;
+
+    const bounds = canvas.getBoundingClientRect();
+    const width = Math.max(1, Math.round(bounds.width));
+    const height = Math.max(1, Math.round(bounds.height));
+    // A capped pixel ratio keeps the overlay cheap on high-density displays.
+    const pixelRatio = Math.min(window.devicePixelRatio || 1, 1.5);
+    canvas.width = Math.round(width * pixelRatio);
+    canvas.height = Math.round(height * pixelRatio);
+    context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    context.clearRect(0, 0, width, height);
+
+    if (
+      !landmarksVisible ||
+      permission !== "granted" ||
+      !poseDetected ||
+      landmarks.length === 0
+    )
+      return;
+
+    const video = videoRef.current;
+    const videoAspect =
+      video?.videoWidth && video?.videoHeight
+        ? video.videoWidth / video.videoHeight
+        : 16 / 9;
+    const containerAspect = width / height;
+    const contentWidth =
+      containerAspect > videoAspect ? height * videoAspect : width;
+    const contentHeight =
+      containerAspect > videoAspect ? height : width / videoAspect;
+    const content = {
+      left: (width - contentWidth) / 2,
+      top: (height - contentHeight) / 2,
+      width: contentWidth,
+      height: contentHeight,
+    };
+
+    context.lineCap = "round";
+    context.lineJoin = "round";
+
+    for (const [fromIndex, toIndex] of POSE_CONNECTIONS) {
+      const from = pointFor(landmarks, fromIndex, content);
+      const to = pointFor(landmarks, toIndex, content);
+      if (!from || !to) continue;
+      // A dark under-stroke keeps the skeleton readable over bright or busy
+      // rooms without making the visible lime line thick.
+      context.lineWidth = 3.5;
+      context.strokeStyle = "rgba(7, 12, 12, 0.8)";
+      context.beginPath();
+      context.moveTo(from.x, from.y);
+      context.lineTo(to.x, to.y);
+      context.stroke();
+      context.lineWidth = 1.35;
+      context.strokeStyle = "rgba(214, 255, 52, 0.98)";
+      context.stroke();
+    }
+
+    for (let index = 0; index < landmarks.length; index += 1) {
+      const point = pointFor(landmarks, index, content);
+      if (!point) continue;
+      context.fillStyle = "rgba(7, 12, 12, 0.9)";
+      context.beginPath();
+      context.arc(point.x, point.y, 4.4, 0, Math.PI * 2);
+      context.fill();
+      context.fillStyle = "rgba(255, 126, 91, 1)";
+      context.beginPath();
+      context.arc(point.x, point.y, 2.7, 0, Math.PI * 2);
+      context.fill();
+    }
+  }, [
+    canvasRef,
+    landmarks,
+    landmarksVisible,
+    permission,
+    poseDetected,
+    videoRef,
+  ]);
+
   return (
     <div
       className={cn(
-        "relative w-full h-full bg-[#071116] overflow-hidden flex items-center justify-center",
+        "relative w-full h-full bg-[#11110f] overflow-hidden flex items-center justify-center",
         className,
       )}
     >
-      <div className="pointer-events-none absolute inset-0 camera-grid opacity-70" />
-      <div className="pointer-events-none absolute -left-24 -top-20 h-72 w-72 rounded-full bg-primary/10 blur-3xl ambient-pulse" />
-      <div className="pointer-events-none absolute -bottom-24 -right-16 h-80 w-80 rounded-full bg-accent/10 blur-3xl ambient-pulse" />
-
       {/* Single video element — always in DOM so the ref stays stable and the stream is always attached */}
       <video
         ref={videoRef}
@@ -50,12 +189,18 @@ export function CameraPreview({
         autoPlay
       />
 
+      <canvas
+        ref={landmarkCanvasRef}
+        className="pointer-events-none absolute inset-0 z-20 h-full w-full"
+        aria-label="Live body landmarks"
+      />
+
       {/* Hidden canvas for capturing frames */}
       <canvas ref={canvasRef} className="hidden absolute" />
 
       {/* Overlay states */}
       {permission === "idle" && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-[linear-gradient(145deg,hsl(var(--primary)/.13),hsl(222_43%_6%/.93))] text-center px-8">
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-[linear-gradient(145deg,hsl(var(--primary)/.12),hsl(222_43%_6%/.93))] text-center px-8">
           <div className="signal-pulse flex h-16 w-16 items-center justify-center rounded-2xl border border-primary/30 bg-primary/10">
             <Camera className="w-7 h-7 text-primary" />
           </div>
@@ -106,31 +251,7 @@ export function CameraPreview({
         </div>
       )}
 
-      {/* HUD corner brackets */}
-      {permission === "granted" && (
-        <>
-          <div className="pointer-events-none absolute inset-x-0 top-[18%] h-px bg-linear-to-r from-transparent via-primary/70 to-transparent camera-scan-line" />
-          <div className="pointer-events-none absolute left-1/2 top-1/2 h-44 w-44 -translate-x-1/2 -translate-y-1/2 rounded-full border border-primary/20 signal-pulse" />
-          <div className="absolute left-4 top-4 flex items-center gap-2 rounded-full border border-primary/25 bg-[#071116]/75 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[.18em] text-primary backdrop-blur-md">
-            <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-            Form lock active
-          </div>
-          <div className="absolute right-4 top-4 flex items-center gap-1.5 rounded-full border border-white/10 bg-black/35 px-2.5 py-1.5 text-[10px] font-mono text-white/60 backdrop-blur-md">
-            <ScanLine className="h-3 w-3 text-accent" /> 8 FPS
-          </div>
-          <div className="absolute top-3 left-3 w-7 h-7 border-t-2 border-l-2 border-primary/60 pointer-events-none" />
-          <div className="absolute top-3 right-3 w-7 h-7 border-t-2 border-r-2 border-primary/60 pointer-events-none" />
-          <div className="absolute bottom-3 left-3 w-7 h-7 border-b-2 border-l-2 border-primary/60 pointer-events-none" />
-          <div className="absolute bottom-3 right-3 w-7 h-7 border-b-2 border-r-2 border-primary/60 pointer-events-none" />
-        </>
-      )}
-
-      {/* Gradient + bottom stats slot */}
-      {children && (
-        <div className="absolute bottom-0 left-0 right-0 bg-linear-to-t from-black/90 via-black/40 to-transparent pt-12 pb-3 px-3 pointer-events-none">
-          {children}
-        </div>
-      )}
+      {/* The live frame intentionally stays clean. Workout feedback lives below it. */}
     </div>
   );
 }
