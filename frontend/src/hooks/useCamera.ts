@@ -69,9 +69,15 @@ export function useCamera(mirror = true) {
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
 
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    // Pose tracking does not need the full preview resolution. Keeping the
+    // preview at 1280x720 while sending a smaller 16:9 frame reduces inference
+    // latency and prevents old frames from arriving after the user has moved.
+    const maxTrackingWidth = 640;
+    const scale = Math.min(1, maxTrackingWidth / video.videoWidth);
+    canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+    canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
 
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     if (mirror) {
       ctx.translate(canvas.width, 0);
       ctx.scale(-1, 1);
