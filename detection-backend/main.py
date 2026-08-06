@@ -59,6 +59,9 @@ from src.routes.full_body.inchwormRoutes import router as inchwormRouter
 from src.routes.upper_body.bentOverRowRoutes import router as bentOverRowRouter
 from src.routes.full_body.shoulderStandRoutes import router as shoulderStandRouter
 from src.routes.upper_body.tricepDipRoutes import router as tricepDipRouter
+from src.routes.upper_body.singleArmCableLateralRaiseCrossbodyRoutes import (
+    router as singleArmCableLateralRaiseCrossbodyRouter,
+)
 from src.routes.upper_body.standingTrunkRotationRoutes import (
     router as standingTrunkRotationRouter,
 )
@@ -139,6 +142,11 @@ app.include_router(bentOverRowRouter, prefix="/ws", tags="bent-over-row-router")
 app.include_router(shoulderStandRouter, prefix="/ws", tags="shoulder-stand-router")
 app.include_router(frontRaiseRouter, prefix="/ws", tags="front-raise-router")
 app.include_router(tricepDipRouter, prefix="/ws", tags="tricep-dip-router")
+app.include_router(
+    singleArmCableLateralRaiseCrossbodyRouter,
+    prefix="/ws",
+    tags="single-arm-cable-lateral-raise-cross-body-router",
+)
 app.include_router(
     standingTrunkRotationRouter, prefix="/ws", tags="standing-trunk-rotation-router"
 )
