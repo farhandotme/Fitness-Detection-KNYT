@@ -283,7 +283,8 @@ export const exercises: ExerciseConfig[] = [
     category: "lower_body",
     setupTip: "Back flat on wall, thighs parallel to floor, knees at 90°.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://media.istockphoto.com/id/1365425038/photo/young-man-doing-the-wall-sit-exercise-outdoors.jpg?s=612x612&w=0&k=20&c=0etXyX6J6zNnym0cq0w2NjzUtGfKp1GWtdIA7mtZdag=",
   },
   {
     id: "chair_pose",
@@ -298,7 +299,8 @@ export const exercises: ExerciseConfig[] = [
     category: "lower_body",
     setupTip: "Feet together, sit back as if into a chair, arms overhead.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://media.istockphoto.com/id/1693785644/video/strong-african-muscular-man-in-activewear-practicing-squats-on-mat.jpg?s=640x640&k=20&c=Vq4A7tE9KvZGQX2_PSpkitZen92t9PnXgBxPJezgtns=",
   },
 
   // Core (reps)
@@ -315,7 +317,8 @@ export const exercises: ExerciseConfig[] = [
     category: "core",
     setupTip: "Alternate elbow to opposite knee in controlled rotation.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://media.istockphoto.com/id/1288561179/photo/man-exercising-in-living-room.jpg?s=612x612&w=0&k=20&c=49FKPJC-OOGQ1ZB1cv2Rleyi88OpaptZf0heak5nN0M=",
   },
   {
     id: "bird_dog",
@@ -330,7 +333,8 @@ export const exercises: ExerciseConfig[] = [
     category: "core",
     setupTip: "On all fours, extend opposite arm and leg, keep back flat.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://media.istockphoto.com/id/2266523731/photo/young-african-man-doing-bird-dog-pose-at-home.jpg?s=612x612&w=0&k=20&c=ktgfJESAPe3Yrkr6ria42z6nJHNTEEdqH0Uls59mu_E=",
   },
   {
     id: "dead_bug",
@@ -345,7 +349,8 @@ export const exercises: ExerciseConfig[] = [
     category: "core",
     setupTip: "Lie on back, lower opposite arm and leg slowly toward floor.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://trainingstation.co.uk/cdn/shop/articles/dead-bug-dark-black-skin-tone_85ffd456-9891-4b85-87ed-5fb85961c72d_1248x.png?v=1780253571",
   },
   {
     id: "flutter_kicks",
@@ -360,7 +365,8 @@ export const exercises: ExerciseConfig[] = [
     category: "core",
     setupTip: "Lie flat, legs slightly raised, alternate rapid up-down kicks.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://cache.getarchive.net/Prod/thumb/cdn2/L3Bob3RvLzIwMTgvMDcvMzAvZmx1dHRlci1raWNrcy1hcmUtYS10eXBlLW9mLWFiZG9taW5hbC13b3Jrb3V0LXRoYXQtMDVmZTRmLTEwMjQuanBn/320/228/jpg",
   },
   {
     id: "leg_raise",
@@ -376,7 +382,8 @@ export const exercises: ExerciseConfig[] = [
     setupTip:
       "Lie flat, raise both legs to 90° keeping lower back pressed down.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRO-1oU22NO4lrqVQvzl0jMKFGbw705jU_KULTnnA-6IHq15i-0ALOgmiVk&s=10",
   },
   {
     id: "russian_twist",
@@ -391,7 +398,8 @@ export const exercises: ExerciseConfig[] = [
     category: "core",
     setupTip: "Sit at 45°, rotate torso side to side, feet off ground.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://www.themanual.com/tachyon/sites/9/2020/12/ab-workout-medicine-ball-russian-twist-e1741878022454.jpg?fit=1500%2C900",
   },
 
   // Core (hold)
@@ -408,7 +416,8 @@ export const exercises: ExerciseConfig[] = [
     category: "core",
     setupTip: "Forearms on floor, body in straight line, don't let hips drop.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQbF38U7zRzIbduE7TZhg5K8FzeXYONDiZqxG1XBwYcQURDFAt0JTHZGZk&s=10",
   },
   {
     id: "side_plank",
@@ -935,6 +944,22 @@ export const exercises: ExerciseConfig[] = [
     category: "upper_body",
     setupTip:
       "Attach a straight bar or rope to a low pulley. Stand tall, grip with hands shoulder-width or slightly narrower, pull the bar up along your body by leading with elbows until they reach ~shoulder height, then lower under control.",
+    cameraMirror: true,
+    imageUrl: "",
+  },
+  {
+    id: "dumbbell_pull_over",
+    name: "Dumbbell Pull Over",
+    wsRoute: "/ws/dumbbell_pull_over",
+    mode: "reps",
+    defaultTarget: 10,
+    defaultSets: 3,
+    defaultRestSeconds: 60,
+    difficulty: "intermediate",
+    tagline: "Chest and lats stretch-and-pull",
+    category: "upper_body",
+    setupTip:
+      "Lie perpendicular on a flat bench with upper back supported, feet flat. Hold one dumbbell with both hands over your chest, arms nearly straight. Lower the weight in an arc behind your head until arms are about parallel to the floor, then pull it back over your chest.",
     cameraMirror: true,
     imageUrl: "",
   },
