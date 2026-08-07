@@ -61,6 +61,7 @@ from src.routes.full_body.shoulderStandRoutes import router as shoulderStandRout
 from src.routes.upper_body.tricepDipRoutes import router as tricepDipRouter
 from src.routes.upper_body.cableUprightRowRoutes import router as cableUprightRowRouter
 from src.routes.upper_body.ropeTricepRoutes import router as ropeTricepRouter
+from src.routes.lower_body.laterialLungeRoutes import router as laterialLungeRouter
 from src.routes.core.sitUpRoutes import router as sitUpRouter
 from src.routes.upper_body.dumbbellPulloverRoutes import (
     router as dumbbellPulloverRouter,
@@ -147,6 +148,7 @@ app.include_router(skandhaChakraRouter, prefix="/ws", tags="skandha-chakra-route
 app.include_router(bentOverRowRouter, prefix="/ws", tags="bent-over-row-router")
 app.include_router(shoulderStandRouter, prefix="/ws", tags="shoulder-stand-router")
 app.include_router(frontRaiseRouter, prefix="/ws", tags="front-raise-router")
+app.include_router(laterialLungeRouter, prefix="/ws", tags="laterial-lunge-router")
 app.include_router(tricepDipRouter, prefix="/ws", tags="tricep-dip-router")
 app.include_router(ropeTricepRouter, prefix="/ws", tags="rope-tricep-router")
 app.include_router(sitUpRouter, prefix="/ws", tags="sit-up-router")
