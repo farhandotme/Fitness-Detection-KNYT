@@ -1059,6 +1059,22 @@ export const exercises: ExerciseConfig[] = [
     cameraMirror: true,
     imageUrl: "",
   },
+  {
+    id: "squat_jacks",
+    name: "Squat Jacks",
+    wsRoute: "/ws/squat_jacks",
+    mode: "reps",
+    defaultTarget: 15,
+    defaultSets: 3,
+    defaultRestSeconds: 45,
+    difficulty: "intermediate",
+    tagline: "Explosive squat and cardio movement",
+    category: "cardio",
+    setupTip:
+      "Stand with feet together, jump them wide, and land softly in a squat with hips back and knees bent. Jump back to the starting position and repeat while keeping your chest lifted.",
+    cameraMirror: true,
+    imageUrl: "",
+  },
 ];
 
 export function getExerciseById(id: string): ExerciseConfig | undefined {
