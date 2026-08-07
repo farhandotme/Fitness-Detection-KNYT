@@ -1043,6 +1043,22 @@ export const exercises: ExerciseConfig[] = [
     cameraMirror: true,
     imageUrl: "",
   },
+  {
+    id: "skier_jumping_jacks",
+    name: "Skier jumping Jacks",
+    wsRoute: "/ws/skier_jumping_jacks",
+    mode: "reps",
+    defaultTarget: 20,
+    defaultSets: 3,
+    defaultRestSeconds: 30,
+    difficulty: "beginner",
+    tagline: "Full-body cardio and coordination",
+    category: "full_body",
+    setupTip:
+      "Stand tall with one foot forward and the other back. Swing the opposite arm forward and the other arm backward, then jump and switch your feet and arms like a cross-country skier.",
+    cameraMirror: true,
+    imageUrl: "",
+  },
 ];
 
 export function getExerciseById(id: string): ExerciseConfig | undefined {
