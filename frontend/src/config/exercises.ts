@@ -1011,6 +1011,22 @@ export const exercises: ExerciseConfig[] = [
     cameraMirror: true,
     imageUrl: "",
   },
+  {
+    id: "bulgarian_split_squat",
+    name: "Bulgarian Split Squat",
+    wsRoute: "/ws/bulgarian_split_squat",
+    mode: "reps",
+    defaultTarget: 8,
+    defaultSets: 3,
+    defaultRestSeconds: 60,
+    difficulty: "intermediate",
+    tagline: "Unilateral quad and glute strength",
+    category: "lower_body",
+    setupTip:
+      "Stand a comfortable distance in front of a bench, place the top of one foot behind you on the bench, lower your hips by bending the front knee, then drive through the front foot to stand.",
+    cameraMirror: true,
+    imageUrl: "",
+  },
 ];
 
 export function getExerciseById(id: string): ExerciseConfig | undefined {
