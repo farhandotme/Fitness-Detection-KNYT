@@ -63,6 +63,9 @@ from src.routes.upper_body.cableUprightRowRoutes import router as cableUprightRo
 from src.routes.upper_body.ropeTricepRoutes import router as ropeTricepRouter
 from src.routes.lower_body.laterialLungeRoutes import router as laterialLungeRouter
 from src.routes.core.sitUpRoutes import router as sitUpRouter
+from src.routes.lower_body.bulgarianSplitSquatRoutes import (
+    router as bulgarianSplitSquatRouter,
+)
 from src.routes.upper_body.dumbbellPulloverRoutes import (
     router as dumbbellPulloverRouter,
 )
@@ -153,6 +156,9 @@ app.include_router(tricepDipRouter, prefix="/ws", tags="tricep-dip-router")
 app.include_router(ropeTricepRouter, prefix="/ws", tags="rope-tricep-router")
 app.include_router(sitUpRouter, prefix="/ws", tags="sit-up-router")
 app.include_router(cableUprightRowRouter, prefix="/ws", tags="cable-upright-row-router")
+app.include_router(
+    bulgarianSplitSquatRouter, prefix="/ws", tags="bulgarian-split-squat-router"
+)
 app.include_router(
     dumbbellPulloverRouter, prefix="/ws", tags="dumbbell-pull-over-router"
 )
