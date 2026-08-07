@@ -64,6 +64,7 @@ from src.routes.upper_body.ropeTricepRoutes import router as ropeTricepRouter
 from src.routes.lower_body.laterialLungeRoutes import router as laterialLungeRouter
 from src.routes.cardio.crossJacksRoutes import router as crossJacksRouter
 from src.routes.core.sitUpRoutes import router as sitUpRouter
+from src.routes.cardio.squatJacksRoutes import router as squatJacksRouter
 from src.routes.cardio.skierJumpingJacksRoutes import router as skierJumpingJacksRouter
 from src.routes.lower_body.bulgarianSplitSquatRoutes import (
     router as bulgarianSplitSquatRouter,
@@ -159,6 +160,7 @@ app.include_router(ropeTricepRouter, prefix="/ws", tags="rope-tricep-router")
 app.include_router(sitUpRouter, prefix="/ws", tags="sit-up-router")
 app.include_router(cableUprightRowRouter, prefix="/ws", tags="cable-upright-row-router")
 app.include_router(crossJacksRouter, prefix="/ws", tags="cross-jacks-router")
+app.include_router(squatJacksRouter, prefix="/ws", tags="squat-jacks-router")
 app.include_router(
     skierJumpingJacksRouter, prefix="/ws", tags="skier-jumping-jacks-router"
 )
