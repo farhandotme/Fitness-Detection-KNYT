@@ -1027,6 +1027,22 @@ export const exercises: ExerciseConfig[] = [
     cameraMirror: true,
     imageUrl: "",
   },
+  {
+    id: "cross_jacks",
+    name: "Cross Jacks",
+    wsRoute: "/ws/cross_jacks",
+    mode: "reps",
+    defaultTarget: 20,
+    defaultSets: 3,
+    defaultRestSeconds: 30,
+    difficulty: "beginner",
+    tagline: "Full-body cardio and coordination",
+    category: "full_body",
+    setupTip:
+      "Stand with feet apart and arms extended to the sides. Jump while crossing one foot in front of the other and crossing your arms at chest height, then jump back open and alternate sides.",
+    cameraMirror: true,
+    imageUrl: "",
+  },
 ];
 
 export function getExerciseById(id: string): ExerciseConfig | undefined {
