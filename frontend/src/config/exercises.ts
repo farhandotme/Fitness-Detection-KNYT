@@ -995,6 +995,22 @@ export const exercises: ExerciseConfig[] = [
     cameraMirror: true,
     imageUrl: "",
   },
+  {
+    id: "lateral_lunge",
+    name: "Lateral Lunge",
+    wsRoute: "/ws/lateral_lunge",
+    mode: "reps",
+    defaultTarget: 10,
+    defaultSets: 3,
+    defaultRestSeconds: 45,
+    difficulty: "beginner",
+    tagline: "Side-to-side lower-body strength and mobility",
+    category: "lower_body",
+    setupTip:
+      "Stand tall, step one foot out to the side, push your hips back, bend the stepping knee while keeping the opposite leg straight, then push back to center and alternate sides.",
+    cameraMirror: true,
+    imageUrl: "",
+  },
 ];
 
 export function getExerciseById(id: string): ExerciseConfig | undefined {
