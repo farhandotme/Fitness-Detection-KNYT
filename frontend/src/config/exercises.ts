@@ -963,6 +963,38 @@ export const exercises: ExerciseConfig[] = [
     cameraMirror: true,
     imageUrl: "",
   },
+  {
+    id: "rope_tricep_pushdown",
+    name: "Rope Tricep",
+    wsRoute: "/ws/rope_tricep",
+    mode: "reps",
+    defaultTarget: 12,
+    defaultSets: 3,
+    defaultRestSeconds: 60,
+    difficulty: "beginner",
+    tagline: "Isolated triceps extension with rope",
+    category: "upper_body",
+    setupTip:
+      "Attach a rope to a high pulley. Stand tall, elbows tucked at your sides, forearms parallel to the floor. Push the rope down by extending your elbows, split the rope ends slightly at the bottom, then return under control.",
+    cameraMirror: true,
+    imageUrl: "",
+  },
+  {
+    id: "sit_up",
+    name: "Sit Up",
+    wsRoute: "/ws/sit_up",
+    mode: "reps",
+    defaultTarget: 12,
+    defaultSets: 3,
+    defaultRestSeconds: 45,
+    difficulty: "beginner",
+    tagline: "Full-range abdominal curl to seated",
+    category: "core",
+    setupTip:
+      "Lie on your back with knees bent ~90° and feet flat. Cross arms over chest or place hands lightly behind ears. Engage core and curl up one vertebra at a time until torso is near perpendicular, then lower slowly with control.",
+    cameraMirror: true,
+    imageUrl: "",
+  },
 ];
 
 export function getExerciseById(id: string): ExerciseConfig | undefined {
