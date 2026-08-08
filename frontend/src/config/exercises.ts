@@ -1107,6 +1107,22 @@ export const exercises: ExerciseConfig[] = [
     cameraMirror: true,
     imageUrl: "",
   },
+  {
+    id: "knee_strike",
+    name: "Knee Strike",
+    wsRoute: "/ws/knee_strike",
+    mode: "reps",
+    defaultTarget: 20,
+    defaultSets: 3,
+    defaultRestSeconds: 30,
+    difficulty: "beginner",
+    tagline: "Full-body cardio with alternating knee drive",
+    category: "cardio",
+    setupTip:
+      "Stand tall with a soft bend in your knees and hands near chest height. Drive one knee upward toward hip level while keeping your torso controlled, lower it, then alternate sides without striking a person or object.",
+    cameraMirror: true,
+    imageUrl: "",
+  },
 ];
 
 export function getExerciseById(id: string): ExerciseConfig | undefined {
