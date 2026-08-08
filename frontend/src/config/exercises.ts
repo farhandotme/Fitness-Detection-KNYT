@@ -432,7 +432,8 @@ export const exercises: ExerciseConfig[] = [
     category: "core",
     setupTip: "Stack feet, lift hips into straight line, keep hips high.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://media.istockphoto.com/id/1143721932/photo/muscular-athlete-doing-a-sideways-plank-exercise-in-a-gym-gym.jpg?s=612x612&w=0&k=20&c=Vr_TDyDlyEi4v5Mfvx-btLocEsiUdg1YtlULQOZyx6s=",
   },
   {
     id: "hollow_hold",
@@ -447,7 +448,8 @@ export const exercises: ExerciseConfig[] = [
     category: "core",
     setupTip: "Lie on back, arms overhead, lift shoulders and legs slightly.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://images.ctfassets.net/6ilvqec50fal/2UwZp8tGL5VUzyAJwWgNVJ/5ed6b3c8a3b6e2feb22db455edc8ea41/hollowbody_andyspeer.png",
   },
 
   // Cardio (reps)
@@ -464,7 +466,8 @@ export const exercises: ExerciseConfig[] = [
     category: "cardio",
     setupTip: "Jump feet wide and arms up simultaneously, then return.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://sworkit.com/wp-content/uploads/2020/06/sworkit-jumping-jack.gif",
   },
   {
     id: "high_knees",
@@ -479,7 +482,8 @@ export const exercises: ExerciseConfig[] = [
     category: "cardio",
     setupTip: "Drive alternating knees up to hip height at a fast pace.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://media.post.rvohealth.io/wp-content/uploads/sites/2/2019/05/RUNNING-DRILLS_HIGH-KNEES_2.gif",
   },
   {
     id: "mountain_climber",
@@ -494,7 +498,8 @@ export const exercises: ExerciseConfig[] = [
     category: "cardio",
     setupTip: "High plank position, alternate driving knees to chest rapidly.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://media.post.rvohealth.io/wp-content/uploads/sites/2/2019/05/LOWER-ABS_MOUNTAIN-CLIMBERS.gif",
   },
   {
     id: "butt_kicks",
@@ -509,7 +514,7 @@ export const exercises: ExerciseConfig[] = [
     category: "cardio",
     setupTip: "Jog in place kicking heels up to touch glutes alternately.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl: "https://i.makeagif.com/media/8-31-2022/PEMH1o.gif",
   },
   {
     id: "tuck_jump",
@@ -524,7 +529,8 @@ export const exercises: ExerciseConfig[] = [
     category: "cardio",
     setupTip: "Jump and pull both knees to chest, land softly with bent knees.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://i.pinimg.com/originals/7f/2a/de/7f2adee8886b5964e937e0232edee31b.gif",
   },
   {
     id: "standing_cross_crunch",
@@ -539,7 +545,8 @@ export const exercises: ExerciseConfig[] = [
     category: "cardio",
     setupTip: "Bring elbow and opposite knee together in standing crunch.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://www.zing.coach/exercises/standing-elbow-to-knee-crunches.webp",
   },
 
   // Full Body (reps)
@@ -556,7 +563,8 @@ export const exercises: ExerciseConfig[] = [
     category: "full_body",
     setupTip: "Start in downward dog, dive forward into upward dog, reverse.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://flabfix.com/wp-content/uploads/2019/06/Hindu-Push-Ups.gif",
   },
   {
     id: "inchworm",
@@ -571,7 +579,8 @@ export const exercises: ExerciseConfig[] = [
     category: "full_body",
     setupTip: "Hinge forward, walk hands out to plank, walk back up, stand.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://downloads.ctfassets.net/6ilvqec50fal/12KWVMr128HkdwjWGZoNfv/371f71339d04795c24edb947a2d5cc86/Untitled_design__22_.gif",
   },
   {
     id: "skandha_chakra",
@@ -586,7 +595,8 @@ export const exercises: ExerciseConfig[] = [
     category: "full_body",
     setupTip: "Rotate shoulders in wide circular motion, both directions.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://echo.santulan.in/wp-content/uploads/2022/04/Skanda-Blog-Image-1-1568x882.png",
   },
   {
     id: "arm_circles",
@@ -601,7 +611,8 @@ export const exercises: ExerciseConfig[] = [
     category: "mobility",
     setupTip: "Extend arms sideways, rotate in controlled circles.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://i.pinimg.com/originals/d0/87/8c/d0878cb3d04c3bcfa16774df4dc60dd3.gif",
   },
 
   // Full Body (hold)
@@ -619,7 +630,8 @@ export const exercises: ExerciseConfig[] = [
     setupTip:
       "Lie face down, simultaneously lift arms, chest and legs off floor.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://images.ctfassets.net/hjcv6wdwxsdz/79sS2tpNEIFtGYuBfCNxYi/8367923f934c6f2369f50b3f42c57be8/superman-exercise-hold.png?w=1200",
   },
 
   // Mobility / Yoga (hold)
@@ -636,7 +648,8 @@ export const exercises: ExerciseConfig[] = [
     category: "mobility",
     setupTip: "Stand on one leg, press foot to inner thigh, arms overhead.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRtVLzshz-4uB16hbpJG0WeLjDY_cfoH7chkS5kqeCBwZzNde3_GdQXApg&s=10",
   },
   {
     id: "warrior_ii",
@@ -651,7 +664,8 @@ export const exercises: ExerciseConfig[] = [
     category: "mobility",
     setupTip: "Wide lunge stance, arms extended, gaze over front hand.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSxL7hdWnUSz3X2Aw71s_dUg4DOIlC-hJ6gA4T5DLgACHsRcNBIcGCzTZaB&s=10",
   },
   {
     id: "cobra_pose",
@@ -667,7 +681,8 @@ export const exercises: ExerciseConfig[] = [
     setupTip:
       "Lie prone, press hands under shoulders, lift chest, elbows soft.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://cdn.yogajournal.com/wp-content/uploads/2007/08/Cobra-Pose_Andrew-Clark.gif",
   },
   {
     id: "downward_dog",
@@ -682,7 +697,8 @@ export const exercises: ExerciseConfig[] = [
     category: "mobility",
     setupTip: "Inverted V shape, press heels toward floor, shoulders open.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSWdCIHP-LQQVp19Z1jdZ1aE1OnVyUYEToYghP-Kzpp3nqUtUcb8hWQ_k0&s=10",
   },
   {
     id: "dancer_pose",
@@ -697,7 +713,8 @@ export const exercises: ExerciseConfig[] = [
     category: "mobility",
     setupTip: "Stand on one leg, hold back foot, extend arm and leg back.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSBtriRqlWJp-FRDHIu_YQMX6uXbysIFZP5sI7JHw-Tqs5oNitYzF2G8jo&s=10",
   },
   {
     id: "triangle_pose",
@@ -712,7 +729,8 @@ export const exercises: ExerciseConfig[] = [
     category: "mobility",
     setupTip: "Wide stance, reach forward hand down to shin, top arm up.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRh-bJksr36KcX3viO9KdhPU3UfdL6rqkZr5h3zL9v_-PvPX21GiFZx4Gs&s=10",
   },
   {
     id: "peacock_pose",
@@ -727,7 +745,8 @@ export const exercises: ExerciseConfig[] = [
     category: "mobility",
     setupTip: "Balance body on both hands placed together under abdomen.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT6E8iDBGuvCsfanC3Q2qNsU3o90QjxpUtvqgkqo0n7Q4uyg-TtjCtmWUQ&s=10",
   },
   {
     id: "half_moon",
@@ -742,7 +761,8 @@ export const exercises: ExerciseConfig[] = [
     category: "mobility",
     setupTip: "Balance on one leg, raise other leg parallel, top arm up.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcS4_khlLMGgr834ZjpyXVFgtOFw15tUdhe360VyakvTlJscePxaPLhhBXA&s=10",
   },
   {
     id: "reverse_warrior",
@@ -757,7 +777,8 @@ export const exercises: ExerciseConfig[] = [
     category: "mobility",
     setupTip: "From Warrior II, lower back arm to back leg, lift front arm up.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSR4SOvWgfFZ60vs_S89iqRDCUIw7ZexAFdntnBJ0wyQfHRpRnvIJ39_TR4&s=10",
   },
   {
     id: "standing_forward_fold",
@@ -772,7 +793,8 @@ export const exercises: ExerciseConfig[] = [
     category: "mobility",
     setupTip: "Feet hip-width, hinge forward from hips, let head hang heavy.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR0HR1I1bxXAPe41-zPWrcRvvQYP77v6A1Mue01bro4ZA&s=10",
   },
   {
     id: "childs_pose",
@@ -787,7 +809,8 @@ export const exercises: ExerciseConfig[] = [
     category: "mobility",
     setupTip: "Kneel, sit back on heels, arms extended forward on mat.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://www.theyogacollective.com/wp-content/uploads/2019/10/4143473057707883372_IMG_8546-2-e1572149256273.jpg",
   },
   {
     id: "shoulder_stand",
@@ -802,7 +825,8 @@ export const exercises: ExerciseConfig[] = [
     category: "full_body",
     setupTip: "Lie on back, lift legs and hips, support lower back with hands.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://beyogi.b-cdn.net/wp-content/uploads/2015/03/Shoulderstand-Pose-Sarvangasana.png?width=600&quality=70",
   },
 
   // Mobility (reps)
@@ -819,7 +843,7 @@ export const exercises: ExerciseConfig[] = [
     category: "mobility",
     setupTip: "Hold wall, swing leg forward and back in controlled arc.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl: "https://i.makeagif.com/media/10-07-2024/gH2w9M.gif",
   },
   {
     id: "side_leg_swing",
@@ -834,7 +858,8 @@ export const exercises: ExerciseConfig[] = [
     category: "mobility",
     setupTip: "Hold wall, swing leg side to side across body.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://i.pinimg.com/originals/84/d8/44/84d844a7f515f69f2eb05696031d5790.gif",
   },
   {
     id: "windmill",
@@ -849,7 +874,8 @@ export const exercises: ExerciseConfig[] = [
     category: "mobility",
     setupTip: "Wide stance, rotate upper body touching opposite hand to foot.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://www.24hourfitness.com/24life/fitness/2020/media_1cf7da6901d3546f68cf5b6be431983f84a03d816.gif?width=750&format=gif&optimize=medium",
   },
   {
     id: "front_raise",
@@ -865,7 +891,8 @@ export const exercises: ExerciseConfig[] = [
     setupTip:
       "Stand tall, arms at sides, raise straight arms to shoulder height in front.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://i0.wp.com/www.strengthlog.com/wp-content/uploads/2020/03/Dumbbell-Front-Raise.gif?fit=600%2C600&ssl=1",
   },
   {
     id: "seated_cable_shrug",
@@ -881,7 +908,8 @@ export const exercises: ExerciseConfig[] = [
     setupTip:
       "Sit facing a low-pulley cable with a V-bar or straight bar. Keep arms straight, back tall, and shrug shoulders up toward ears, pause, then lower slowly.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://hips.hearstapps.com/hmg-prod/images/766/fitgif9-22-tnoverride-1506088802.gif?crop=1xw:0.884xh;center,top&resize=1200:*",
   },
   {
     id: "tricep_dip",
@@ -1136,6 +1164,22 @@ export const exercises: ExerciseConfig[] = [
     category: "upper_body",
     setupTip:
       "Hold a dumbbell in each hand, hinge forward with a flat back, keep your knees slightly bent and elbows softly bent. Raise the dumbbells out to the sides until your arms are near shoulder height, squeeze your upper back, then lower slowly.",
+    cameraMirror: true,
+    imageUrl: "",
+  },
+  {
+    id: "skipping",
+    name: "Skipping",
+    wsRoute: "/ws/skipping",
+    mode: "reps",
+    defaultTarget: 30,
+    defaultSets: 3,
+    defaultRestSeconds: 30,
+    difficulty: "beginner",
+    tagline: "Full-body jump-rope cardio and coordination",
+    category: "cardio",
+    setupTip:
+      "Stand tall with feet close together, elbows near your sides, and hands around waist height. Rotate the rope with your wrists while making small, soft jumps on the balls of your feet.",
     cameraMirror: true,
     imageUrl: "",
   },
