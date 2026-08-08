@@ -1123,6 +1123,22 @@ export const exercises: ExerciseConfig[] = [
     cameraMirror: true,
     imageUrl: "",
   },
+  {
+    id: "dumbbell_reverse_fly",
+    name: "Dumbbell Reverse Fly",
+    wsRoute: "/ws/dumbbell_reverse_fly",
+    mode: "reps",
+    defaultTarget: 12,
+    defaultSets: 3,
+    defaultRestSeconds: 60,
+    difficulty: "beginner",
+    tagline: "Rear deltoid and upper-back isolation",
+    category: "upper_body",
+    setupTip:
+      "Hold a dumbbell in each hand, hinge forward with a flat back, keep your knees slightly bent and elbows softly bent. Raise the dumbbells out to the sides until your arms are near shoulder height, squeeze your upper back, then lower slowly.",
+    cameraMirror: true,
+    imageUrl: "",
+  },
 ];
 
 export function getExerciseById(id: string): ExerciseConfig | undefined {
