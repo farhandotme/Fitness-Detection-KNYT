@@ -925,7 +925,8 @@ export const exercises: ExerciseConfig[] = [
     setupTip:
       "Grip parallel bars shoulder-width, keep torso upright, elbows tucked. Lower until upper arms are about parallel to the floor, then press back up.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTBHVpdsO4CVFy1lJz-jdX2qFOq_38woukY5OvTowpkirKwfui3FeKcCxc&s=10",
   },
   {
     id: "standing_trunk_rotation",
@@ -941,7 +942,8 @@ export const exercises: ExerciseConfig[] = [
     setupTip:
       "Feet hip-width, arms bent 90° or straight in front, rotate upper body left and right while keeping hips stable.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://www.bhf.org.uk/-/media/images/information-support/heart-matters/2024/feb-2024/activity/exercises-for-lower-back-pain/14_standingtrunkrotation_1x1_v2.gif?rev=e4df5cf9870f45cab757ef5baadaf38d&hash=5410AADDF7B955DF27A971D989A7F002",
   },
   {
     id: "single_arm_cable_lateral_raise_crossbody",
@@ -957,7 +959,8 @@ export const exercises: ExerciseConfig[] = [
     setupTip:
       "Set cable to lowest position, stand sideways, reach across body with far hand, slight elbow bend, raise arm out to side until ~shoulder height, then lower under control.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://cdn.muscleandstrength.com/sites/default/files/single-arm-cable-lateral-raise.jpg",
   },
   {
     id: "cable_upright_row",
@@ -973,7 +976,8 @@ export const exercises: ExerciseConfig[] = [
     setupTip:
       "Attach a straight bar or rope to a low pulley. Stand tall, grip with hands shoulder-width or slightly narrower, pull the bar up along your body by leading with elbows until they reach ~shoulder height, then lower under control.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://cdn.muscleandstrength.com/sites/default/files/cable-upright-row-1.jpg",
   },
   {
     id: "dumbbell_pull_over",
@@ -989,7 +993,7 @@ export const exercises: ExerciseConfig[] = [
     setupTip:
       "Lie perpendicular on a flat bench with upper back supported, feet flat. Hold one dumbbell with both hands over your chest, arms nearly straight. Lower the weight in an arc behind your head until arms are about parallel to the floor, then pull it back over your chest.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl: "https://cdn.jefit.com/assets/img/exercises/gifs/375.gif",
   },
   {
     id: "rope_tricep_pushdown",
@@ -1005,7 +1009,8 @@ export const exercises: ExerciseConfig[] = [
     setupTip:
       "Attach a rope to a high pulley. Stand tall, elbows tucked at your sides, forearms parallel to the floor. Push the rope down by extending your elbows, split the rope ends slightly at the bottom, then return under control.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://cdn.shopify.com/s/files/1/0618/9462/3460/files/ezgif_com-gif-maker-1.gif",
   },
   {
     id: "sit_up",
@@ -1021,7 +1026,8 @@ export const exercises: ExerciseConfig[] = [
     setupTip:
       "Lie on your back with knees bent ~90° and feet flat. Cross arms over chest or place hands lightly behind ears. Engage core and curl up one vertebra at a time until torso is near perpendicular, then lower slowly with control.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://i0.wp.com/post.healthline.com/wp-content/uploads/2019/05/Traditional-situps.gif?w=1155&h=840",
   },
   {
     id: "lateral_lunge",
@@ -1037,7 +1043,7 @@ export const exercises: ExerciseConfig[] = [
     setupTip:
       "Stand tall, step one foot out to the side, push your hips back, bend the stepping knee while keeping the opposite leg straight, then push back to center and alternate sides.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl: "https://cdn.jefit.com/assets/img/exercises/gifs/1220.gif",
   },
   {
     id: "bulgarian_split_squat",
@@ -1053,7 +1059,8 @@ export const exercises: ExerciseConfig[] = [
     setupTip:
       "Stand a comfortable distance in front of a bench, place the top of one foot behind you on the bench, lower your hips by bending the front knee, then drive through the front foot to stand.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://media4.giphy.com/media/v1.Y2lkPTZjMDliOTUydGQwZDFhNzN3Y2owanRyNGd0bGFhcmdnY2c3djJmODdmNGpqd3Y3biZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/g0Kz180GdPYCsKqMyf/giphy.gif",
   },
   {
     id: "cross_jacks",
@@ -1069,7 +1076,7 @@ export const exercises: ExerciseConfig[] = [
     setupTip:
       "Stand with feet apart and arms extended to the sides. Jump while crossing one foot in front of the other and crossing your arms at chest height, then jump back open and alternate sides.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl: "https://flabfix.com/wp-content/uploads/2019/06/Cross-Jacks.gif",
   },
   {
     id: "skier_jumping_jacks",
@@ -1085,7 +1092,8 @@ export const exercises: ExerciseConfig[] = [
     setupTip:
       "Stand tall with one foot forward and the other back. Swing the opposite arm forward and the other arm backward, then jump and switch your feet and arms like a cross-country skier.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRAhxDHqUKq4voVCaynBMBM-O3a8Q0IYeNmF30OBPKq3Np8bFI2amC8QGfF&s=10",
   },
   {
     id: "squat_jacks",
@@ -1101,7 +1109,7 @@ export const exercises: ExerciseConfig[] = [
     setupTip:
       "Stand with feet together, jump them wide, and land softly in a squat with hips back and knees bent. Jump back to the starting position and repeat while keeping your chest lifted.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl: "https://i.makeagif.com/media/1-27-2017/HgSiwz.gif",
   },
   {
     id: "battle_rope_cardio",
@@ -1117,7 +1125,8 @@ export const exercises: ExerciseConfig[] = [
     setupTip:
       "Stand with feet shoulder-width apart, knees slightly bent, and core engaged. Hold one rope end in each hand and rapidly alternate raising and lowering your arms to create continuous waves.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://hips.hearstapps.com/hmg-prod/images/gettyimages-657495548-1527710829.jpg?crop=0.6674528301886793xw:1xh;center,top&resize=1200:*",
   },
   {
     id: "line_hop",
@@ -1133,7 +1142,8 @@ export const exercises: ExerciseConfig[] = [
     setupTip:
       "Place an imaginary or visible line on the floor. Stand beside it with knees slightly bent, then hop side to side over the line, landing softly and maintaining a steady rhythm.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://app-media.fitbod.me/v2/3383/images/landscape/0_960x540.jpg",
   },
   {
     id: "knee_strike",
@@ -1149,7 +1159,8 @@ export const exercises: ExerciseConfig[] = [
     setupTip:
       "Stand tall with a soft bend in your knees and hands near chest height. Drive one knee upward toward hip level while keeping your torso controlled, lower it, then alternate sides without striking a person or object.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://i.pinimg.com/originals/6d/64/08/6d6408cca5ae5d77d8bab4881deecb59.gif",
   },
   {
     id: "dumbbell_reverse_fly",
@@ -1165,7 +1176,8 @@ export const exercises: ExerciseConfig[] = [
     setupTip:
       "Hold a dumbbell in each hand, hinge forward with a flat back, keep your knees slightly bent and elbows softly bent. Raise the dumbbells out to the sides until your arms are near shoulder height, squeeze your upper back, then lower slowly.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://media2.giphy.com/media/v1.Y2lkPTZjMDliOTUyaHFyeGExcXdpdHlwcXY2MDI0bW1iOGxxMTV6cHNnczRjMTdjcTM4biZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/cJboHdxNDIySmj8DTS/source.gif",
   },
   {
     id: "skipping",
@@ -1181,7 +1193,8 @@ export const exercises: ExerciseConfig[] = [
     setupTip:
       "Stand tall with feet close together, elbows near your sides, and hands around waist height. Rotate the rope with your wrists while making small, soft jumps on the balls of your feet.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://flabfix.com/wp-content/uploads/2019/06/Invisible-Jump-Rope.gif",
   },
 ];
 
