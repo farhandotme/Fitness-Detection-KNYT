@@ -1196,6 +1196,22 @@ export const exercises: ExerciseConfig[] = [
     imageUrl:
       "https://flabfix.com/wp-content/uploads/2019/06/Invisible-Jump-Rope.gif",
   },
+  {
+    id: "alternating-toe-touch",
+    name: "Alternating Toe Touch",
+    wsRoute: "/ws/alternating_toe_touch",
+    mode: "reps",
+    defaultTarget: 20,
+    defaultSets: 3,
+    defaultRestSeconds: 30,
+    difficulty: "beginner",
+    tagline: "Controlled core exercise for abs, obliques, and coordination",
+    category: "core",
+    setupTip:
+      "Lie on your back with your legs extended upward and arms reaching overhead. Brace your core, then lift your shoulder blades and reach your right hand toward your left foot. Return with control and alternate sides while keeping your neck neutral and lower back stable.",
+    cameraMirror: true,
+    imageUrl: "https://i.ytimg.com/vi/hfITeQzFP9s/maxresdefault.jpg",
+  },
 ];
 
 export function getExerciseById(id: string): ExerciseConfig | undefined {
