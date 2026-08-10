@@ -70,6 +70,9 @@ from src.routes.cardio.battleRopeRoutes import router as battleRopeRouter
 from src.routes.cardio.lineHopRoutes import router as lineHopRouter
 from src.routes.cardio.kneeStrikeRoutes import router as kneeStrikeRouter
 from src.routes.full_body.skippingRoutes import router as skippingRouter
+from src.routes.core.alternatingToeTouchRoutes import (
+    router as alternatingToeTouchRouter,
+)
 
 from src.routes.upper_body.reverseFlyDumbellRoutes import (
     router as reverseFlyDumbellRouter,
@@ -174,6 +177,9 @@ app.include_router(battleRopeRouter, prefix="/ws", tags="battle-rope-router")
 app.include_router(lineHopRouter, prefix="/ws", tags="line-hop-router")
 app.include_router(kneeStrikeRouter, prefix="/ws", tags="knee-strike-router")
 app.include_router(skippingRouter, prefix="/ws", tags="skipping-router")
+app.include_router(
+    alternatingToeTouchRouter, prefix="/ws", tags="alternating_toe_touch_router"
+)
 app.include_router(
     reverseFlyDumbellRouter, prefix="/ws", tags="reverse-fly-dumbell-router"
 )
