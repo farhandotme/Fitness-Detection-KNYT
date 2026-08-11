@@ -72,6 +72,7 @@ from src.routes.cardio.kneeStrikeRoutes import router as kneeStrikeRouter
 from src.routes.full_body.skippingRoutes import router as skippingRouter
 from src.routes.lower_body.hamstringCurlRoutes import router as hamstringCurlRouter
 from src.routes.upper_body.lyingChestFlyRoutes import router as lyingChestFlyRouter
+from src.routes.upper_body.lyingChestPressRoutes import router as lyingChestPressRouter
 from src.routes.lower_body.standingHamstringCurlRoutes import (
     router as standingHamstringCurlRouter,
 )
@@ -187,6 +188,7 @@ app.include_router(kneeStrikeRouter, prefix="/ws", tags="knee-strike-router")
 app.include_router(skippingRouter, prefix="/ws", tags="skipping-router")
 app.include_router(lyingChestFlyRouter, prefix="/ws", tags="lying-chest-fly-router")
 app.include_router(hamstringCurlRouter, prefix="/ws", tags="hamstring-curl-router")
+app.include_router(lyingChestPressRouter, prefix="/ws", tags="lying-chest-press-router")
 app.include_router(
     standingHamstringCurlRouter, prefix="/ws", tags="standing-hamstring-curl-router"
 )
