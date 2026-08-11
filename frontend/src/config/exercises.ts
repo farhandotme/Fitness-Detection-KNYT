@@ -1311,6 +1311,23 @@ export const exercises: ExerciseConfig[] = [
     setupTip:
       "Start in a deep squat with feet slightly wider than shoulder-width, hips low, and hands touching or near the floor in front of you. Explosively jump upward, swinging arms overhead, then land softly back into the deep squat position.",
     cameraMirror: true,
+    imageUrl:
+      "https://i.pinimg.com/originals/9d/bb/86/9dbb86c5e1d59fc612bbb1e805a237ac.gif",
+  },
+  {
+    id: "burpees",
+    name: "Burpees",
+    wsRoute: "/ws/burpees",
+    mode: "reps",
+    defaultTarget: 10,
+    defaultSets: 3,
+    defaultRestSeconds: 60,
+    difficulty: "intermediate",
+    tagline: "Full-body squat–plank–jump combo",
+    category: "full_body",
+    setupTip:
+      "Stand with feet shoulder-width apart. Squat down and place your hands on the floor, jump your feet back into a plank, optionally perform a push-up, jump your feet forward back to a squat, then explode up into a jump with arms overhead.",
+    cameraMirror: true,
     imageUrl: "",
   },
 ];
