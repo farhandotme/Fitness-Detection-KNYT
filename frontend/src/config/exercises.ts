@@ -1212,6 +1212,57 @@ export const exercises: ExerciseConfig[] = [
     cameraMirror: true,
     imageUrl: "https://i.ytimg.com/vi/hfITeQzFP9s/maxresdefault.jpg",
   },
+  {
+    id: "standing_side_leg_raise",
+    name: "Standing Side Leg Raise",
+    wsRoute: "/ws/standing_side_leg_raise",
+    mode: "reps",
+    defaultTarget: 12,
+    defaultSets: 3,
+    defaultRestSeconds: 30,
+    difficulty: "beginner",
+    tagline: "Hip abductor and outer-glute strengthening",
+    category: "lower_body",
+    setupTip:
+      "Stand tall with feet together and hold a wall or chair for balance if needed. Shift your weight onto one leg, lift the other leg straight out to the side with toes facing forward, then lower it slowly without leaning your torso.",
+    cameraMirror: true,
+    imageUrl:
+      "https://cdn.motra.com/exercise-assets/cf23f8b081/thumbnailOriginal.jpg",
+  },
+  {
+    id: "hamstring_curl",
+    name: "Hamstring Curl",
+    wsRoute: "/ws/hamstring_curl",
+    mode: "reps",
+    defaultTarget: 12,
+    defaultSets: 3,
+    defaultRestSeconds: 45,
+    difficulty: "beginner",
+    tagline: "Hamstring isolation and knee stability",
+    category: "lower_body",
+    setupTip:
+      "Stand tall and hold a wall or chair for balance. Shift your weight onto one leg, bend the other knee, and bring your heel toward your glutes, then lower it slowly. Keep your thighs parallel and avoid arching your back.",
+    cameraMirror: true,
+    imageUrl:
+      "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTiBoH-r0T9jhLpRystrMQTIwfzE6oSyorkv0sN7NoS3ySPgq55nezOSUXa&s=10",
+  },
+  {
+    id: "standing_hamstring_curl",
+    name: "Standing Hamstring Curl",
+    wsRoute: "/ws/standing_hamstring_curl",
+    mode: "reps",
+    defaultTarget: 12,
+    defaultSets: 3,
+    defaultRestSeconds: 45,
+    difficulty: "beginner",
+    tagline: "Single-leg hamstring isolation in standing",
+    category: "lower_body",
+    setupTip:
+      "Stand tall with feet hip-width apart and hold a wall or chair for balance. Shift your weight onto one leg, bend the other knee, and bring your heel toward your glutes while keeping your thighs parallel, then lower slowly.",
+    cameraMirror: true,
+    imageUrl:
+      "https://images.squarespace-cdn.com/content/v1/5f5e8592d2b0854b18af6975/11fe7089-63b3-427a-bf08-adf4ada0bd66/standing+dumbbell+hamstring+curl.jpg",
+  },
 ];
 
 export function getExerciseById(id: string): ExerciseConfig | undefined {
