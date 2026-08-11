@@ -76,6 +76,9 @@ from src.routes.upper_body.lyingChestPressRoutes import router as lyingChestPres
 from src.routes.lower_body.frogJumpsRoutes import router as frogJumpsRouter
 from src.routes.full_body.burpeesRoutes import router as burpeesRouter
 from src.routes.full_body.squatThrustsRoutes import router as squatThrustsRouter
+from src.routes.upper_body.overheadTricepsExtensionsRoutes import (
+    router as overheadTricepsExtensionsRouter,
+)
 from src.routes.lower_body.standingHamstringCurlRoutes import (
     router as standingHamstringCurlRouter,
 )
@@ -195,6 +198,11 @@ app.include_router(lyingChestPressRouter, prefix="/ws", tags="lying-chest-press-
 app.include_router(frogJumpsRouter, prefix="/ws", tags="frog-jumps-router")
 app.include_router(burpeesRouter, prefix="/ws", tags="burpees-router")
 app.include_router(squatThrustsRouter, prefix="/ws", tags="squat-thrusts-router")
+app.include_router(
+    overheadTricepsExtensionsRouter,
+    prefix="/ws",
+    tags="overhead-triceps-extensions-router",
+)
 app.include_router(
     standingHamstringCurlRouter, prefix="/ws", tags="standing-hamstring-curl-router"
 )
