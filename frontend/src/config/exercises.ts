@@ -1280,6 +1280,23 @@ export const exercises: ExerciseConfig[] = [
     imageUrl:
       "https://media.post.rvohealth.io/wp-content/uploads/2022/08/Dumbbell-chest-fly.gif",
   },
+  {
+    id: "lying_chest_press",
+    name: "Lying Chest Press",
+    wsRoute: "/ws/lying_chest_press",
+    mode: "reps",
+    defaultTarget: 10,
+    defaultSets: 3,
+    defaultRestSeconds: 60,
+    difficulty: "beginner",
+    tagline: "Flat dumbbell press for chest strength",
+    category: "upper_body",
+    setupTip:
+      "Lie on a flat bench with feet firmly on the floor, holding a dumbbell in each hand at chest level, elbows bent ~90° and slightly away from your torso. Press the weights up over your mid-chest until arms are nearly straight, then lower slowly back to the starting position.",
+    cameraMirror: true,
+    imageUrl:
+      "https://cdn.muscleandstrength.com/sites/default/files/dumbbell-floor-press-thumb.jpg",
+  },
 ];
 
 export function getExerciseById(id: string): ExerciseConfig | undefined {
