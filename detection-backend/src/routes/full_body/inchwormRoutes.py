@@ -1,115 +1,120 @@
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+"""
+WebSocket Router for Inchworm Exercise.
 
-import asyncio
+Endpoints supported:
+  - ws://localhost:8000/ws/inchworm
+  - ws://localhost:8000/ws/inchworm_exercise
+"""
+
 import base64
+import json
 import time
-
 import cv2
 import numpy as np
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from src.detectors.full_body.inchworm import InchwormSession
 
 router = APIRouter()
 
 
-def decode_frame(raw: str):
-    if "," in raw:
-        raw = raw.split(",")[1]
+def _decode_frame(message: dict) -> np.ndarray | None:
+    """Decodes binary frame bytes or base64 text payload into OpenCV matrix."""
+    if "bytes" in message and message["bytes"]:
+        np_arr = np.frombuffer(message["bytes"], np.uint8)
+        return cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
 
-    image_bytes = base64.b64decode(raw)
-    np_array = np.frombuffer(image_bytes, dtype=np.uint8)
+    if "text" in message and message["text"]:
+        text_data = message["text"].strip()
+        base64_str = None
 
-    return cv2.imdecode(np_array, cv2.IMREAD_COLOR)
+        if text_data.startswith("{"):
+            try:
+                data = json.loads(text_data)
+                if data.get("action") == "stop":
+                    return None
+                base64_str = data.get("image") or data.get("frame") or data.get("data")
+            except json.JSONDecodeError:
+                return None
+        else:
+            base64_str = text_data
 
+        if base64_str:
+            if "," in base64_str:
+                base64_str = base64_str.split(",")[1]
+            try:
+                img_bytes = base64.b64decode(base64_str)
+                np_arr = np.frombuffer(img_bytes, np.uint8)
+                return cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+            except Exception:
+                return None
 
-def _query_int(websocket: WebSocket, name: str, default: int, lo: int, hi: int) -> int:
-    """Read an integer query param off the websocket URL, clamped to [lo, hi].
-
-    This is how the coach-assigned plan (reps per set / number of sets /
-    which set this connection is for) reaches the backend. The frontend
-    sends these when it opens the socket; it does NOT get to decide on its
-    own whether that plan has been completed — InchwormSession is the only
-    thing that sets `session_complete` / `exercise_complete` in the response.
-    """
-    raw = websocket.query_params.get(name)
-    if raw is None:
-        return default
-    try:
-        value = int(raw)
-    except (TypeError, ValueError):
-        return default
-    return max(lo, min(hi, value))
-
-
-def _log_rep_progress(label: str, result: dict, exercise_already_logged: bool) -> bool:
-    """Print exactly one line per completed rep, and one line when the
-    exercise finishes — never per-frame. `rep_completed` coming out of
-    InchwormAnalyzer is already an edge-triggered flag (True only on the
-    one frame a rep lands).
-
-    Returns the (possibly updated) `exercise_already_logged` flag — pass it
-    back in on the next call so the "exercise complete" line only prints
-    once even though `exercise_complete` stays True on subsequent frames
-    until the socket closes.
-    """
-    if result.get("rep_completed"):
-        rep_count = result.get("rep_count")
-        target_reps = result.get("target_reps")
-        set_number = result.get("set_number")
-        target_sets = result.get("target_sets")
-        quality = result.get("rep_form_quality") or "n/a"
-        hold = result.get("rep_hold_duration")
-        hold_text = f"{hold:.2f}s" if hold is not None else "n/a"
-        print(
-            f"[{label}] Rep {rep_count}/{target_reps} "
-            f"(set {set_number}/{target_sets}) — quality={quality} hold={hold_text}"
-        )
-
-    if result.get("exercise_complete") and not exercise_already_logged:
-        print(
-            f"[{label}] EXERCISE COMPLETE — "
-            f"{result.get('target_sets')} sets x {result.get('target_reps')} reps done."
-        )
-        return True
-
-    return exercise_already_logged
+    return None
 
 
 @router.websocket("/inchworm")
-async def inchworm(websocket: WebSocket):
+@router.websocket("/inchworm_exercise")
+async def inchworm_stream(websocket: WebSocket):
+    """
+    WebSocket stream handler for Inchworm exercise.
+    Accepts incoming stream and parses query parameters.
+    """
+    # 1. IMMEDIATELY accept connection to avoid 403 / 422 handshake errors
     await websocket.accept()
 
-    print("Client connected: Inchworm")
+    params = websocket.query_params
 
-    target_reps = _query_int(websocket, "target_reps", default=10, lo=1, hi=100)
-    target_sets = _query_int(websocket, "target_sets", default=1, lo=1, hi=20)
-    set_number = _query_int(websocket, "set_number", default=1, lo=1, hi=target_sets)
+    try:
+        target_reps = int(params.get("target_reps", 10))
+    except (ValueError, TypeError):
+        target_reps = 10
 
-    counter = InchwormSession(
+    try:
+        target_sets = int(params.get("target_sets", 1))
+    except (ValueError, TypeError):
+        target_sets = 1
+
+    try:
+        set_number = int(params.get("set_number", 1))
+    except (ValueError, TypeError):
+        set_number = 1
+
+    session = InchwormSession(
         target_reps=target_reps,
         target_sets=target_sets,
         set_number=set_number,
     )
 
     try:
-        exercise_logged = False
         while True:
-            image = await websocket.receive_text()
+            message = await websocket.receive()
 
-            frame = decode_frame(image)
+            if message.get("type") == "websocket.disconnect":
+                break
 
-            timestamp = int(time.time() * 1000)
+            frame = _decode_frame(message)
+            if frame is None:
+                continue
 
-            result = counter.detect(frame, timestamp)
+            timestamp_ms = int(time.time() * 1000)
+            analysis = session.detect(frame, timestamp_ms)
 
-            exercise_logged = _log_rep_progress("Inchworm", result, exercise_logged)
+            # Send telemetry payload back to client
+            await websocket.send_json(analysis)
 
-            await websocket.send_json(result)
-
-            await asyncio.sleep(0.001)
+            # Check if total assigned set is complete
+            if analysis.get("exercise_complete"):
+                await websocket.send_json(
+                    {
+                        "type": "SESSION_COMPLETE",
+                        "message": "Inchworm set completed successfully!",
+                    }
+                )
+                break
 
     except WebSocketDisconnect:
-        print("Disconnected: Inchworm")
-
+        print("[Inchworm Router] Client disconnected cleanly.")
+    except Exception as e:
+        print(f"[Inchworm Router] Streaming error: {e}")
     finally:
-        counter.close()
+        session.close()
