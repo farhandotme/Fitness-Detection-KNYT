@@ -1263,6 +1263,23 @@ export const exercises: ExerciseConfig[] = [
     imageUrl:
       "https://images.squarespace-cdn.com/content/v1/5f5e8592d2b0854b18af6975/11fe7089-63b3-427a-bf08-adf4ada0bd66/standing+dumbbell+hamstring+curl.jpg",
   },
+  {
+    id: "lying_chest_fly",
+    name: "Lying Chest Fly",
+    wsRoute: "/ws/lying_chest_fly",
+    mode: "reps",
+    defaultTarget: 10,
+    defaultSets: 3,
+    defaultRestSeconds: 60,
+    difficulty: "intermediate",
+    tagline: "Chest isolation with wide arc",
+    category: "upper_body",
+    setupTip:
+      "Lie on a flat bench with feet planted, holding a dumbbell in each hand above your chest, palms facing each other and elbows slightly bent. Lower your arms out to the sides in a wide arc until dumbbells are roughly chest-level, then squeeze your chest to bring them back up.",
+    cameraMirror: true,
+    imageUrl:
+      "https://media.post.rvohealth.io/wp-content/uploads/2022/08/Dumbbell-chest-fly.gif",
+  },
 ];
 
 export function getExerciseById(id: string): ExerciseConfig | undefined {
