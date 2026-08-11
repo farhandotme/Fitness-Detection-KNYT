@@ -1,104 +1,11 @@
 """
-Bicycle Crunch tracker — alternating elbow-to-opposite-knee rep counter.
+Bicycle Crunch Analyzer — Direct Left-to-Right High-Velocity Version.
 
-Design
-------
-Like the Russian twist, this is an alternating-sides exercise, not an
-up/down one, so it gets the same three-state `center` / `left` / `right`
-phase machine instead of a rep up/down state machine — see
-`russian_twist.py`'s module docstring for the fuller rationale, it
-applies here unchanged.
-
-Signal
-------
-A bicycle crunch alternates: right elbow drives toward the left knee
-while the left leg extends, then left elbow toward the right knee while
-the right leg extends. That's directly, cheaply measurable in 2D from
-pretty much any camera angle that has the elbows and knees in frame —
-no depth estimate needed anywhere in this one (a deliberate choice after
-`russian_twist.py` needed real work to get an accurate 2D-only magnitude;
-this exercise doesn't have that problem at all):
-
-    d_R2L = dist(right_elbow, left_knee)  / torso_length
-    d_L2R = dist(left_elbow, right_knee)  / torso_length
-    crunch_signal = d_L2R - d_R2L
-
-Positive `crunch_signal` = left knee is the one being approached (right
-elbow crossing over) → labeled the **"left"** side here. Negative = the
-right knee is being approached (left elbow crossing over) → **"right"**.
-Both distances are normalized by `torso_length` (shoulder-to-hip
-distance) so it's not sensitive to camera zoom/distance.
-
-Unlike the Russian twist's shoulder/hip ratio, this signal needs **no
-baseline recalibration at all** — it's already zero-centered by
-construction (a symmetric, neutral pose naturally gives `d_R2L ≈ d_L2R`,
-so `crunch_signal ≈ 0`), which sidesteps the whole class of bug that
-`russian_twist.py` hit (its baseline had to be "which pose counts as
-center," and recalibrating that mid-movement was what caused held twists
-to silently erode to zero). There's nothing to recalibrate here, so that
-failure mode doesn't exist for this exercise.
-
-What *is* reused from that lesson: the enter/exit rotation thresholds
-that drive the phase machine are a fraction of a running **envelope** of
-how much crossover this specific person/setup/flexibility actually
-produces (`_envelope`), not a fixed absolute distance — same reasoning
-as the Russian twist's adaptive thresholds, just applied to a normalized
-distance instead of a normalized angle. This part of the design carries
-over cleanly precisely because it's a peak-follower, not a
-recalibrate-toward-current-value baseline — it doesn't have the erosion
-bug's failure mode in the first place.
-
-Two counting modes, one event stream
--------------------------------------
-Identical convention to the Russian twist: every confirmed center->side
-transition (confirmed via the same dwell/hysteresis mechanism as the
-phase machine below) is a "side touch." `left_count` /
-`right_count` increment per side; `rep_count` increments once every
-*second* touch (a left+right pair), so the frontend can show both the
-split and the combined total from the same event stream. A repeated
-touch on the same side without visiting the other side first counts for
-neither — bicycle crunches are inherently alternating, so a non-
-alternating "touch" isn't a valid rep by definition, same reasoning as
-the Russian twist.
-
-Gates
------
-The only thing that gates counting at all is landmark visibility —
-everything else is feedback, never a blocker. This wasn't the first
-design: the original version also hard-gated on "hands near head" and
-"knees raised to roughly hip height," debounced with a stability streak
-the same way the Russian twist gates its seated position. That turned
-out to be a real bug, not just an overcautious default — a correct
-bicycle crunch has one leg extended low while the other tucks high, so
-the *average* knee height swings enormously within a single, perfectly
-good rep. A hard gate on that average could use up its grace frames
-during totally normal motion and silently flip `ready` false mid-set,
-which would stop everything downstream from being counted even though
-the person was doing it right. Same reasoning applied to leg
-alternation, which used to block a side touch from counting if the
-non-crunching leg wasn't extended enough — now it's advisory
-(`legs_alternating` / `leg_message` still get computed and surfaced),
-but it never withholds a count. The exercise's own alternating-touch
-requirement (through the phase machine below) is what actually defines
-a valid rep; a secondary form-quality heuristic shouldn't be able to
-override that and erase a real one.
-
-  * **Framing** — full body in frame, not too close/far. Feedback only.
-  * **Shoulders + hips visible** — the one hard requirement left. They
-    anchor `torso_length` (the scale everything else is normalized
-    against) and are essentially always visible lying on your back
-    facing the camera. Elbows and knees are used for the core signal
-    regardless of their own visibility score — they used to be part of
-    this hard gate too, and that was still too strict: hands-behind-head
-    is an inherently self-occluding pose, so MediaPipe can report low
-    elbow confidence even when the person is doing everything right and
-    is clearly in frame. A position estimate MediaPipe isn't fully
-    confident in is still almost always more useful than refusing to
-    count at all.
-  * **Hands-near-head / knees-raised** — advisory coaching tips only
-    (`base_message`), not a `ready` gate.
-  * **Leg alternation** — advisory only (`legs_alternating` /
-    `leg_message`), not a counting gate.
+Optimizations for fast execution:
+  - Direct Left <-> Right state switching (no neutral 'center' phase required).
+  - Low-latency signal smoothing (0.88 raw signal weight).
+  - Dynamic adaptive envelope tolerance for fast, shallow reps.
+  - Complete Schema compliance with standard frontend UI.
 """
 
 import math
@@ -124,58 +31,43 @@ from src.engines.poseEngine import (  # type: ignore
 )
 
 # -------------------------------------------------------------------------
-# Tunable constants
+# Calibrated Constants for High-Speed Motion
 # -------------------------------------------------------------------------
 
-MIN_LANDMARK_VISIBILITY = 0.4
-# Hard requirement — deliberately just these four, not all eight. Elbows
-# and knees used to be required here too, and that was still too strict:
-# hands-behind-head is an inherently self-occluding pose (elbows point
-# back near the head/hair), so MediaPipe can report visibility well
-# under any reasonable threshold for the elbows specifically, even when
-# the person is doing everything correctly and is clearly visible
-# overall. Shoulders and hips anchor `torso_length` (the scale everything
-# else is normalized against) and are essentially always visible lying
-# on your back facing the camera, so they're the only real hard
-# requirement. Elbows/knees are used for the signal regardless of their
-# visibility score below — MediaPipe still returns a position estimate
-# even when it's not fully confident, and that estimate is almost always
-# far more useful than refusing to count at all.
+MIN_LANDMARK_VISIBILITY = 0.20  # Tolerates severe motion blur on fast limbs
 REQUIRED_LANDMARKS = (
     LEFT_SHOULDER,
     RIGHT_SHOULDER,
     LEFT_HIP,
     RIGHT_HIP,
 )
-CORE_VISIBILITY_MIN = 0.3
+CORE_VISIBILITY_MIN = 0.20
 
-ANGLE_SMOOTH_ALPHA = 0.65
-STABLE_FRAMES = 2  # consecutive frames required to commit a phase change
+# Low-Latency Signal Filtering
+ANGLE_SMOOTH_ALPHA = 0.88  # 88% raw frame weight prevents lag at high speeds
 
-# ---- adaptive envelope thresholds (normalized-distance units, not
-# degrees — same "fraction of recently-observed range" idea as the
-# Russian twist, just applied to crunch_signal instead of an angle) ----
-ENVELOPE_DECAY = 0.985
-ENVELOPE_MIN = 0.18
-ENVELOPE_MAX = 1.3
-ENTER_FRACTION = 0.45
-EXIT_FRACTION = 0.20
-PARTIAL_FRACTION = 0.15
-ENTER_FLOOR = 0.10
-EXIT_FLOOR = 0.045
-PARTIAL_FLOOR = 0.03
+# Dynamic Envelope & Crossover Thresholds
+ENVELOPE_DECAY = 0.950  # Rapid envelope decay adjusts quickly to shallow reps
+ENVELOPE_MIN = 0.10  # Lower floor accepts smaller crossovers
+ENVELOPE_MAX = 1.20
 
-# ---- base position gate ----
-HANDS_NEAR_HEAD_MAX = 0.75  # wrist-to-ear distance / torso_length
-KNEES_RAISED_MARGIN = 0.20  # knees may sit this much below hip height (normalized)
+ENTER_FRACTION = 0.28  # Lower fraction triggers phase earlier in the stroke
+EXIT_FRACTION = 0.10
+PARTIAL_FRACTION = 0.08
 
-# ---- leg alternation gate (counting gate only) ----
-LEG_ALT_MIN_DIFF = 0.12  # extending leg must be at least this much longer (normalized)
+ENTER_FLOOR = 0.05
+EXIT_FLOOR = 0.02
+PARTIAL_FLOOR = 0.015
 
-# ---- camera framing ----
-FRAME_EDGE_MARGIN = 0.03
-BBOX_TOO_CLOSE = 0.95
-BBOX_TOO_FAR = 0.10
+# Coaching Advisories
+HANDS_NEAR_HEAD_MAX = 0.90
+KNEES_RAISED_MARGIN = 0.30
+LEG_ALT_MIN_DIFF = 0.06  # Tolerates reduced leg extension during fast pedaling
+
+# Camera Framing Parameters
+FRAME_EDGE_MARGIN = 0.02
+BBOX_TOO_CLOSE = 0.98
+BBOX_TOO_FAR = 0.08
 
 
 class _Point:
@@ -190,12 +82,12 @@ def _midpoint(a, b) -> _Point:
     return _Point((a.x + b.x) / 2.0, (a.y + b.y) / 2.0)
 
 
-def _visible(points) -> bool:
+def _visible(points, min_vis: float = MIN_LANDMARK_VISIBILITY) -> bool:
     for p in points:
         if p is None:
             return False
         v = getattr(p, "visibility", None)
-        if v is not None and v < MIN_LANDMARK_VISIBILITY:
+        if v is not None and v < min_vis:
             return False
     return True
 
@@ -221,7 +113,7 @@ def _framing_feedback(points: list[_Point]) -> Optional[str]:
             or p.y > 1 - FRAME_EDGE_MARGIN
         ):
             return (
-                "You're partly out of frame — reposition so your whole body is visible."
+                "You're partly out of frame — step back so your full body is visible."
             )
 
     box = _bbox_points(points)
@@ -231,60 +123,55 @@ def _framing_feedback(points: list[_Point]) -> Optional[str]:
     width, height = max_x - min_x, max_y - min_y
 
     if width > BBOX_TOO_CLOSE or height > BBOX_TOO_CLOSE:
-        return (
-            "You're too close to the camera — back up so your whole body fits in frame."
-        )
+        return "You're too close to the camera — back up so your whole body fits."
     if width < BBOX_TOO_FAR and height < BBOX_TOO_FAR:
         return "You're too far from the camera — move closer for accurate tracking."
     return None
 
 
-class BicycleCrunchAnalyzer:
-    """Stateful bicycle crunch alternating rep counter.
+def _classify_speed(duration: Optional[float]) -> str:
+    """Classifies movement speed based on stroke duration."""
+    if duration is None or duration <= 0.30:
+        return "Very Fast"
+    if duration <= 0.50:
+        return "Fast"
+    if duration <= 0.85:
+        return "Moderate"
+    return "Slow"
 
-    No rep up/down state machine — same three-state `center` / `left` /
-    `right` phase machine as `RussianTwistAnalyzer`, driven by
-    `crunch_signal` instead of a rotation angle. See module docstring.
-    """
+
+class BicycleCrunchAnalyzer:
+    """High-velocity Bicycle Crunch analyzer with direct left/right switching."""
 
     def __init__(self, target_reps: Optional[int] = None):
         self.target_reps = target_reps
 
-        # Phase machine
-        self.phase = "center"  # "center" | "left" | "right"
-        self._candidate_phase = "center"
-        self._candidate_streak = 0
-
-        self.smoothed_signal: Optional[float] = None
-
-        # Running envelope of observed |crunch_signal| — thresholds are a
-        # fraction of this, not a fixed absolute distance.
-        self._envelope = ENVELOPE_MIN
-
-        # Counting
-        self.left_count = 0
-        self.right_count = 0
-        self.rep_count = 0
+        # Phase tracking ("center" | "left" | "right")
+        self.phase = "center"
         self._last_counted_side: Optional[str] = None
         self._touch_count = 0
 
-        # "Cross over further" partial-attempt detection
-        self._attempt_peak = 0.0
-        self._attempt_flagged = False
+        self.smoothed_signal: Optional[float] = None
+        self._envelope = ENVELOPE_MIN
 
-        # Base-position streak (kept for potential future use/telemetry —
-        # not currently gating anything, see update()).
-        self._base_streak = 0
-        self.ready = False
+        # Standard Rep Counters
+        self.left_count = 0
+        self.right_count = 0
+        self.rep_count = 0
+        self.good_reps = 0
+        self.flawed_reps = 0
 
+        # Timing and Metrics
+        self.last_phase_time: Optional[float] = None
+        self.ready = True
+        self.last_rep_summary: Optional[str] = None
+        self.last_rep_duration: Optional[float] = None
+        self.last_speed_label: str = "-"
         self.session_start_time: Optional[float] = None
-        self.last_timestamp_s: Optional[float] = None
 
-    # ---------------------------------------------------------------
     def _is_complete(self) -> bool:
         return self.target_reps is not None and self.rep_count >= self.target_reps
 
-    # ---------------------------------------------------------------
     def update(self, landmarks, timestamp_ms: int) -> dict[str, Any]:
         t = timestamp_ms / 1000.0
         if self.session_start_time is None:
@@ -293,33 +180,45 @@ class BicycleCrunchAnalyzer:
 
         response: dict[str, Any] = {
             "pose_detected": False,
-            "base_ok": False,
+            "ready": True,
+            "stance_ok": True,
+            "base_ok": True,
             "base_message": None,
-            "ready": self.ready,
             "framing_ok": True,
             "framing_message": None,
+            "alignment": "Good Setup",
+            # Crunch Signals
             "crunch_signal": None,
             "raw_crunch_signal": None,
             "signal_envelope": None,
             "phase": self.phase,
+            # Standard Rep Counts
             "left_count": self.left_count,
             "right_count": self.right_count,
             "rep_count": self.rep_count,
+            "good_reps": self.good_reps,
+            "flawed_reps": self.flawed_reps,
             "target_reps": self.target_reps,
-            "session_complete": self._is_complete(),
+            # Standard UI Metric Parameters
             "rep_completed": False,
             "side_completed": False,
             "side_completed_which": None,
+            "rep_duration": self.last_rep_duration,
+            "rep_form_quality": None,
+            "speed": self.last_speed_label,
+            "last_rep": self.last_rep_summary or "-",
             "legs_alternating": True,
             "legs_visible": False,
             "leg_message": None,
             "low_visibility": False,
             "feedback": None,
+            "session_complete": self._is_complete(),
             "elapsed_time": round(elapsed, 2),
         }
 
         if landmarks is None:
             response["feedback"] = "No person detected — step into frame."
+            response["alignment"] = "Off Screen"
             return response
 
         required_ok = all(
@@ -331,9 +230,10 @@ class BicycleCrunchAnalyzer:
             response["pose_detected"] = True
             response["low_visibility"] = True
             response["feedback"] = (
-                "Can't see your torso clearly — adjust the camera so your "
-                "shoulders and hips are both visible."
+                "Can't see your torso clearly — adjust camera so "
+                "shoulders and hips are visible."
             )
+            response["alignment"] = "Poor Visibility"
             return response
 
         response["pose_detected"] = True
@@ -371,25 +271,13 @@ class BicycleCrunchAnalyzer:
         response["framing_ok"] = framing_message is None
         response["framing_message"] = framing_message
 
-        # ---- base position gate ----
-        # Only landmark visibility gates `ready` now. Hands-near-head and
-        # knees-raised are useful coaching signals but were originally
-        # wired as hard blockers using a streak/grace debounce — and that
-        # was a mistake: real bicycle-crunch form has one leg extended low
-        # while the other tucks high, so the *average* knee height swings
-        # a lot within a single, perfectly correct rep. A hard gate on
-        # that average could flip `ready` false mid-set (using up its
-        # grace frames during a normal extension) and silently stop
-        # everything downstream from being counted — the same class of
-        # bug the Russian twist's seated-lean gate had. So these are
-        # advisory feedback only now, never a block.
-        head_ref = None
-        if _visible((nose,)):
-            head_ref = nose
-        elif _visible((l_ear, r_ear)):
-            head_ref = _midpoint(l_ear, r_ear)
-
-        hands_near_head = True  # best-effort: don't advise on what we can't see
+        # Coaching Advisories
+        head_ref = (
+            nose
+            if _visible((nose,))
+            else (_midpoint(l_ear, r_ear) if _visible((l_ear, r_ear)) else None)
+        )
+        hands_near_head = True
         if head_ref is not None and _visible((l_wrist, r_wrist)):
             l_hand_dist = _dist(l_wrist, head_ref) / torso_length
             r_hand_dist = _dist(r_wrist, head_ref) / torso_length
@@ -400,203 +288,131 @@ class BicycleCrunchAnalyzer:
         ) > -KNEES_RAISED_MARGIN * torso_length
 
         if not knees_raised:
-            base_advisory_message = "Lift your knees toward your chest."
+            base_advisory_message = "Lift knees higher toward chest."
         elif not hands_near_head:
-            base_advisory_message = "Bring your hands up behind your head."
+            base_advisory_message = "Keep hands up near your head."
         else:
             base_advisory_message = None
 
-        # `ready` only reflects "can I trust the signal at all" — i.e. the
-        # required landmarks have been visible for a few consecutive
-        # frames (already true here, since `required_ok` gated earlier in
-        # this function on every single frame). There's nothing left to
-        # debounce; if we got this far, the landmarks are visible now.
-        self._base_streak += 1
-        self.ready = True
-
-        base_ok = self.ready
-        response["base_ok"] = base_ok
-        response["ready"] = self.ready
         response["base_message"] = base_advisory_message
 
-        # ---- core signal: elbow-to-opposite-knee distance difference ----
+        # Calculate Crossover Signal (d_L2R - d_R2L)
         d_r2l = _dist(r_elbow, l_knee) / torso_length
         d_l2r = _dist(l_elbow, r_knee) / torso_length
-        raw_signal = d_l2r - d_r2l  # positive = left side (right elbow -> left knee)
+        raw_signal = (
+            d_l2r - d_r2l
+        )  # Positive = Left side touch (Right elbow -> Left knee)
 
         if self.smoothed_signal is None:
             self.smoothed_signal = raw_signal
         else:
             self.smoothed_signal = (
                 ANGLE_SMOOTH_ALPHA * raw_signal
-                + (1 - ANGLE_SMOOTH_ALPHA) * self.smoothed_signal
+                + (1.0 - ANGLE_SMOOTH_ALPHA) * self.smoothed_signal
             )
+
         response["raw_crunch_signal"] = round(raw_signal, 3)
         response["crunch_signal"] = round(self.smoothed_signal, 3)
 
-        # ---- adaptive envelope ----
+        # Dynamic Envelope Calculation
         self._envelope = max(abs(self.smoothed_signal), self._envelope * ENVELOPE_DECAY)
         self._envelope = max(ENVELOPE_MIN, min(ENVELOPE_MAX, self._envelope))
         response["signal_envelope"] = round(self._envelope, 3)
 
         enter = max(ENTER_FLOOR, ENTER_FRACTION * self._envelope)
         exit_ = max(EXIT_FLOOR, EXIT_FRACTION * self._envelope)
-        partial = max(PARTIAL_FLOOR, PARTIAL_FRACTION * self._envelope)
 
-        # ---- leg alternation (counting gate only) ----
+        # Safe Leg Extension Evaluation
         legs_visible = _visible((l_ankle, r_ankle))
-        legs_alternating = True
-        leg_message = None
-        if legs_visible:
-            l_leg_ext = _dist(l_hip, l_ankle) / torso_length
-            r_leg_ext = _dist(r_hip, r_ankle) / torso_length
-        else:
-            l_leg_ext = r_leg_ext = None
+        l_leg_ext = _dist(l_hip, l_ankle) / torso_length if legs_visible else None
+        r_leg_ext = _dist(r_hip, r_ankle) / torso_length if legs_visible else None
         response["legs_visible"] = legs_visible
 
         feedback = framing_message
-
-        # `base_ok` is always true here (see gate above — required
-        # landmarks were already confirmed visible earlier in this
-        # function, which is the only thing `ready` reflects now), so
-        # there is no separate "not ready yet" branch to fall into.
         sig = self.smoothed_signal
 
-        # ---- hysteresis phase classification ----
-        if self.phase == "center":
-            if sig >= enter:
-                target_phase = "left"
-            elif sig <= -enter:
-                target_phase = "right"
-            else:
-                target_phase = "center"
-        else:
-            if abs(sig) <= exit_:
-                target_phase = "center"
-            else:
-                target_phase = self.phase
+        # -----------------------------------------------------------------
+        # DIRECT LEFT <-> RIGHT STATE MACHINE (No Center Pause Required)
+        # -----------------------------------------------------------------
+        side_detected = None
 
-        if target_phase == self._candidate_phase:
-            self._candidate_streak += 1
-        else:
-            self._candidate_phase = target_phase
-            self._candidate_streak = 1
+        if sig >= enter and self._last_counted_side != "left":
+            side_detected = "left"
+        elif sig <= -enter and self._last_counted_side != "right":
+            side_detected = "right"
 
-        phase_changed = False
-        if (
-            self._candidate_streak >= STABLE_FRAMES
-            and self._candidate_phase != self.phase
-        ):
-            self.phase = self._candidate_phase
-            phase_changed = True
+        if side_detected is not None:
+            self.phase = side_detected
+            self._last_counted_side = side_detected
 
-            if self.phase in ("left", "right"):
-                side = self.phase
-                # "left" = right elbow -> left knee, so the RIGHT leg is
-                # the one that should be extending (pedaling out) while
-                # the LEFT leg stays tucked; and vice versa for "right".
-                # This is advisory only (see comment above) — a rep
-                # still counts even with imperfect leg form, since the
-                # elbow-to-knee crossover itself is what actually
-                # defines the rep.
+            side_duration = (t - self.last_phase_time) if self.last_phase_time else 0.20
+            self.last_phase_time = t
+
+            legs_alternating = True
+            if legs_visible and l_leg_ext is not None and r_leg_ext is not None:
                 extending_leg, crunching_leg = (
-                    (r_leg_ext, l_leg_ext) if side == "left" else (l_leg_ext, r_leg_ext)
+                    (r_leg_ext, l_leg_ext)
+                    if side_detected == "left"
+                    else (l_leg_ext, r_leg_ext)
                 )
-                if legs_visible:
-                    legs_alternating = (
-                        extending_leg - crunching_leg
-                    ) >= LEG_ALT_MIN_DIFF
-                    leg_message = (
-                        None
-                        if legs_alternating
-                        else ("Try extending your other leg out further like pedaling.")
-                    )
-                response["legs_alternating"] = legs_alternating
-                response["leg_message"] = leg_message
+                legs_alternating = (extending_leg - crunching_leg) >= LEG_ALT_MIN_DIFF
 
-                # A timing-based "too fast" rejection used to live here,
-                # but MIN_TOUCH_DURATION (0.10s) sits right at the
-                # theoretical minimum the dwell mechanism above already
-                # takes (STABLE_FRAMES * one frame interval — e.g. 3 *
-                # ~33ms = 99ms at 30fps), so it was rejecting genuinely-
-                # paced reps essentially at random depending on rounding,
-                # not because anyone actually moved implausibly fast. The
-                # dwell requirement already filters real jitter/glitches;
-                # this check added no protection beyond that and only
-                # caused missed reps, so it's gone rather than re-tuned.
+            response["legs_alternating"] = legs_alternating
+            response["side_completed"] = True
+            response["side_completed_which"] = side_detected
 
-                if side == self._last_counted_side:
-                    feedback = "Switch to the other side to keep the rep going."
+            if side_detected == "left":
+                self.left_count += 1
+            else:
+                self.right_count += 1
+
+            self._touch_count += 1
+            self.last_rep_duration = round(side_duration, 2)
+            self.last_speed_label = _classify_speed(side_duration)
+
+            # Every 2 touches = 1 Full Pair Rep
+            if self._touch_count % 2 == 0:
+                self.rep_count += 1
+                response["rep_completed"] = True
+
+                if legs_alternating:
+                    self.good_reps += 1
+                    response["rep_form_quality"] = "good"
+                    feedback = f"Rep {self.rep_count} — great fast pace!"
+                    self.last_rep_summary = f"Good Rep {self.rep_count}"
                 else:
-                    if side == "left":
-                        self.left_count += 1
-                    else:
-                        self.right_count += 1
-                    response["side_completed"] = True
-                    response["side_completed_which"] = side
+                    self.flawed_reps += 1
+                    response["rep_form_quality"] = "needs_improvement"
+                    feedback = f"Rep {self.rep_count} counted — extend non-crunching leg further."
+                    self.last_rep_summary = f"Shallow Rep {self.rep_count}"
+            else:
+                feedback = f"{side_detected.capitalize()} side — now switch sides!"
 
-                    self._touch_count += 1
-                    if self._touch_count % 2 == 0:
-                        self.rep_count += 1
-                        response["rep_completed"] = True
-                        feedback = f"Rep {self.rep_count} — nice, keep pedaling."
-                    else:
-                        feedback = (
-                            f"{side.capitalize()} side — now switch to the other side."
-                        )
+        # Visual indicator update when resting in neutral
+        elif abs(sig) < exit_:
+            self.phase = "center"
 
-                    self._last_counted_side = side
-
-            self._attempt_peak = 0.0
-            self._attempt_flagged = False
-
-        # ---- "Cross over further" partial-attempt detection ----
-        if not phase_changed and self.phase == "center":
-            if abs(sig) > abs(self._attempt_peak):
-                self._attempt_peak = sig
-            elif (
-                not self._attempt_flagged
-                and abs(self._attempt_peak) >= partial
-                and abs(self._attempt_peak) < enter
-                and abs(sig) < abs(self._attempt_peak) - exit_ / 2
-            ):
-                self._attempt_flagged = True
-                direction = "left" if self._attempt_peak > 0 else "right"
-                if feedback is None:
-                    feedback = f"Cross over further to the {direction}."
-
-            if abs(sig) < exit_ / 2:
-                self._attempt_peak = 0.0
-                self._attempt_flagged = False
-
+        # Final Response Data Sync
         response["phase"] = self.phase
-        # Refresh cumulative counters from current state — they were
-        # populated at the top of this function before this frame's
-        # possible increment, so re-assigning here (rather than relying
-        # on the stale top-of-function values) keeps `side_completed` /
-        # `rep_completed` and the counts they describe consistent within
-        # the same message instead of the count trailing by one frame.
         response["left_count"] = self.left_count
         response["right_count"] = self.right_count
         response["rep_count"] = self.rep_count
+        response["good_reps"] = self.good_reps
+        response["flawed_reps"] = self.flawed_reps
+        response["rep_duration"] = self.last_rep_duration
+        response["speed"] = self.last_speed_label
+        response["last_rep"] = self.last_rep_summary or "-"
 
         if feedback is None:
-            feedback = "Keep pedaling — elbow to the opposite knee."
+            feedback = "Keep pedaling — drive opposite elbow to knee."
 
         response["feedback"] = feedback
         response["session_complete"] = self._is_complete()
-        self.last_timestamp_s = t
         return response
 
 
 class BicycleCrunchSession:
-    """Full bicycle crunch session: one shared pose model + one analyzer.
-
-    Same convention as `RussianTwistSession` / `PushupSession`:
-    `target_reps` / `target_sets` / `set_number` are the coach-assigned
-    plan, supplied by the caller from query params. `session_complete` /
-    `exercise_complete` are computed here, not on the frontend.
-    """
+    """Session wrapper for Bicycle Crunch Analysis."""
 
     def __init__(
         self,
