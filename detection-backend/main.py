@@ -70,6 +70,13 @@ from src.routes.cardio.battleRopeRoutes import router as battleRopeRouter
 from src.routes.cardio.lineHopRoutes import router as lineHopRouter
 from src.routes.cardio.kneeStrikeRoutes import router as kneeStrikeRouter
 from src.routes.full_body.skippingRoutes import router as skippingRouter
+from src.routes.lower_body.hamstringCurlRoutes import router as hamstringCurlRouter
+from src.routes.lower_body.standingHamstringCurlRoutes import (
+    router as standingHamstringCurlRouter,
+)
+from src.routes.lower_body.standingSideLegRaiseRoutes import (
+    router as standingSideLegRaiseRouter,
+)
 from src.routes.core.alternatingToeTouchRoutes import (
     router as alternatingToeTouchRouter,
 )
@@ -177,6 +184,13 @@ app.include_router(battleRopeRouter, prefix="/ws", tags="battle-rope-router")
 app.include_router(lineHopRouter, prefix="/ws", tags="line-hop-router")
 app.include_router(kneeStrikeRouter, prefix="/ws", tags="knee-strike-router")
 app.include_router(skippingRouter, prefix="/ws", tags="skipping-router")
+app.include_router(hamstringCurlRouter, prefix="/ws", tags="hamstring-curl-router")
+app.include_router(
+    standingHamstringCurlRouter, prefix="/ws", tags="standing-hamstring-curl-router"
+)
+app.include_router(
+    standingSideLegRaiseRouter, prefix="/ws", tags="standing-side-leg-raise-router"
+)
 app.include_router(
     alternatingToeTouchRouter, prefix="/ws", tags="alternating_toe_touch_router"
 )
