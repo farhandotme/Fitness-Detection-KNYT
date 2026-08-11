@@ -1,118 +1,129 @@
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+"""
+WebSocket Router for Battle Rope Cardio Exercise.
 
-import asyncio
+Supported Endpoints:
+  - ws://localhost:8000/ws/battle_rope
+  - ws://localhost:8000/ws/battle_rope_cardio
+"""
+
 import base64
+import json
 import time
-
 import cv2
 import numpy as np
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from src.detectors.cardio.battle_rope import BattleRopeCardioSession
 
 router = APIRouter()
 
 
-def decode_frame(raw: str):
-    if "," in raw:
-        raw = raw.split(",")[1]
+def _decode_frame(message: dict) -> np.ndarray | None:
+    """Decodes raw binary bytes or base64 text into an OpenCV BGR image."""
+    # Case 1: Raw binary frame bytes
+    if "bytes" in message and message["bytes"]:
+        np_arr = np.frombuffer(message["bytes"], np.uint8)
+        return cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
 
-    image_bytes = base64.b64decode(raw)
-    np_array = np.frombuffer(image_bytes, dtype=np.uint8)
+    # Case 2: Text payload (JSON or raw Base64 string)
+    if "text" in message and message["text"]:
+        text_data = message["text"].strip()
+        base64_str = None
 
-    return cv2.imdecode(np_array, cv2.IMREAD_COLOR)
+        if text_data.startswith("{"):
+            try:
+                data = json.loads(text_data)
+                if data.get("action") == "stop":
+                    return None
+                base64_str = data.get("image") or data.get("frame") or data.get("data")
+            except json.JSONDecodeError:
+                return None
+        else:
+            base64_str = text_data
 
+        if base64_str:
+            if "," in base64_str:
+                base64_str = base64_str.split(",")[1]
+            try:
+                img_bytes = base64.b64decode(base64_str)
+                np_arr = np.frombuffer(img_bytes, np.uint8)
+                return cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+            except Exception:
+                return None
 
-def _query_int(websocket: WebSocket, name: str, default: int, lo: int, hi: int) -> int:
-    """Read an integer query param off the websocket URL, clamped to [lo, hi].
-
-    Same convention as `pushupRoutes.py` / `seatedCableShrugRoutes.py` /
-    `plankHoldRoutes.py` — the coach-assigned plan (hold seconds per set /
-    number of sets / which set this connection is for) reaches the
-    backend this way; the frontend does NOT get to decide on its own
-    whether that plan has been completed — `BattleRopeCardioSession` is
-    the only thing that sets `session_complete` / `exercise_complete` in
-    the response.
-    """
-    raw = websocket.query_params.get(name)
-    if raw is None:
-        return default
-    try:
-        value = int(raw)
-    except (TypeError, ValueError):
-        return default
-    return max(lo, min(hi, value))
-
-
-def _log_hold_progress(label: str, result: dict, exercise_already_logged: bool) -> bool:
-    """Print one line whenever the hold state transitions (started
-    holding / broke), one line per completed wave (for pace/cadence
-    visibility), and one line when the exercise finishes — never
-    per-frame. Mirrors the edge-triggered logging convention used by the
-    rep-based routes, adapted to a hold timer: there's no single
-    `rep_completed` flag here, so state-transition edges are tracked
-    locally instead.
-
-    Returns the (possibly updated) `exercise_already_logged` flag — pass
-    it back in on the next call so the "exercise complete" line only
-    prints once even though `exercise_complete` stays True on subsequent
-    frames until the socket closes.
-    """
-    if result.get("exercise_complete") and not exercise_already_logged:
-        print(
-            f"[{label}] EXERCISE COMPLETE — "
-            f"{result.get('target_sets')} sets x {result.get('target_seconds')}s held, done."
-        )
-        return True
-
-    return exercise_already_logged
+    return None
 
 
+@router.websocket("/battle_rope")
 @router.websocket("/battle_rope_cardio")
-async def battle_rope_cardio(websocket: WebSocket):
+async def battle_rope_stream(websocket: WebSocket):
+    """
+    WebSocket handler for Battle Rope live stream.
+    Accepts connections to both /ws/battle_rope and /ws/battle_rope_cardio.
+    """
+    # 1. Complete handshake immediately
     await websocket.accept()
 
-    print("Client connected: Battle Rope Cardio")
+    # 2. Extract query parameters safely
+    params = websocket.query_params
 
-    target_seconds = _query_int(websocket, "target_seconds", default=30, lo=5, hi=600)
-    target_sets = _query_int(websocket, "target_sets", default=1, lo=1, hi=20)
-    set_number = _query_int(websocket, "set_number", default=1, lo=1, hi=target_sets)
+    try:
+        target_reps = int(params.get("target_reps", 30))
+    except (ValueError, TypeError):
+        target_reps = 30
 
-    counter = BattleRopeCardioSession(
-        target_seconds=target_seconds,
+    try:
+        target_sets = int(params.get("target_sets", 1))
+    except (ValueError, TypeError):
+        target_sets = 1
+
+    try:
+        set_number = int(params.get("set_number", 1))
+    except (ValueError, TypeError):
+        set_number = 1
+
+    # 3. Initialize engine session
+    session = BattleRopeCardioSession(
+        target_reps=target_reps,
         target_sets=target_sets,
         set_number=set_number,
     )
 
     try:
-        exercise_logged = False
-        last_hold_state = None
         while True:
-            image = await websocket.receive_text()
+            message = await websocket.receive()
 
-            frame = decode_frame(image)
+            # Check for disconnect signals or control frames
+            if message.get("type") == "websocket.disconnect":
+                break
 
-            timestamp = int(time.time() * 1000)
+            # Decode frame
+            frame = _decode_frame(message)
 
-            result = counter.detect(frame, timestamp)
+            if frame is None:
+                # Skip invalid frames or non-image control frames
+                continue
 
-            if result.get("hold_state") != last_hold_state:
-                print(
-                    f"[Battle Rope Cardio] hold_state -> {result.get('hold_state')} "
-                    f"(hold_seconds={result.get('hold_seconds')}, "
-                    f"wave_count={result.get('wave_count')})"
+            # Process detection
+            timestamp_ms = int(time.time() * 1000)
+            analysis = session.detect(frame, timestamp_ms)
+
+            # Push telemetry back to frontend
+            await websocket.send_json(analysis)
+
+            # End exercise session if overall target is met
+            if analysis.get("exercise_complete"):
+                await websocket.send_json(
+                    {
+                        "type": "SESSION_COMPLETE",
+                        "message": "Exercise set completed successfully!",
+                    }
                 )
-                last_hold_state = result.get("hold_state")
-
-            exercise_logged = _log_hold_progress(
-                "Battle Rope Cardio", result, exercise_logged
-            )
-
-            await websocket.send_json(result)
-
-            await asyncio.sleep(0.001)
+                break
 
     except WebSocketDisconnect:
-        print("Disconnected: Battle Rope Cardio")
-
+        print("[BattleRope Router] Client disconnected cleanly.")
+    except Exception as e:
+        print(f"[BattleRope Router] Stream error: {e}")
     finally:
-        counter.close()
+        session.close()
