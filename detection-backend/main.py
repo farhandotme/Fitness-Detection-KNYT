@@ -66,7 +66,6 @@ from src.routes.cardio.crossJacksRoutes import router as crossJacksRouter
 from src.routes.core.sitUpRoutes import router as sitUpRouter
 from src.routes.cardio.squatJacksRoutes import router as squatJacksRouter
 from src.routes.cardio.skierJumpingJacksRoutes import router as skierJumpingJacksRouter
-from src.routes.cardio.battleRopeRoutes import router as battleRopeRouter
 from src.routes.cardio.lineHopRoutes import router as lineHopRouter
 from src.routes.cardio.kneeStrikeRoutes import router as kneeStrikeRouter
 from src.routes.full_body.skippingRoutes import router as skippingRouter
@@ -76,6 +75,7 @@ from src.routes.upper_body.lyingChestPressRoutes import router as lyingChestPres
 from src.routes.lower_body.frogJumpsRoutes import router as frogJumpsRouter
 from src.routes.full_body.burpeesRoutes import router as burpeesRouter
 from src.routes.full_body.squatThrustsRoutes import router as squatThrustsRouter
+from src.routes.cardio.battleRopeRoutes import router as battleRopeRouter
 from src.routes.upper_body.overheadTricepsExtensionsRoutes import (
     router as overheadTricepsExtensionsRouter,
 )
