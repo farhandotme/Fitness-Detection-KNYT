@@ -1328,7 +1328,8 @@ export const exercises: ExerciseConfig[] = [
     setupTip:
       "Stand with feet shoulder-width apart. Squat down and place your hands on the floor, jump your feet back into a plank, optionally perform a push-up, jump your feet forward back to a squat, then explode up into a jump with arms overhead.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://media2.giphy.com/media/v1.Y2lkPTZjMDliOTUyaWRubGxvc2Q2ZDRtd2k3cGRoZmZmcDNhYXhzY2Y2d2pvYTVtaG42YyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/l4pT6Obikzs5gxWSI/giphy.gif",
   },
   {
     id: "squat_thrusts",
@@ -1344,7 +1345,25 @@ export const exercises: ExerciseConfig[] = [
     setupTip:
       "Stand with feet shoulder-width apart. Squat down and place your hands on the floor in front of your feet, then jump your feet back into a plank. Briefly hold, jump your feet back toward your hands into a squat, and stand up tall to finish each rep.",
     cameraMirror: true,
-    imageUrl: "",
+    imageUrl:
+      "https://i.pinimg.com/originals/ea/05/e4/ea05e4a21f2f351c3ad7dd95c60c0521.gif",
+  },
+  {
+    id: "overhead_triceps_extension",
+    name: "Overhead Triceps Extension",
+    wsRoute: "/ws/overhead_triceps_extension/both",
+    mode: "reps",
+    defaultTarget: 12,
+    defaultSets: 3,
+    defaultRestSeconds: 60,
+    difficulty: "beginner",
+    tagline: "Overhead dumbbell extension for triceps",
+    category: "upper_body",
+    setupTip:
+      "Stand with feet shoulder-width apart, hold one end of a dumbbell with both hands, and press it overhead with elbows close to your ears. Keeping upper arms still, bend your elbows to lower the dumbbell behind your head, then extend your arms to press it back up.",
+    cameraMirror: true,
+    imageUrl:
+      "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRY9oA08N-imXp2TaL8ppFUZTkHm0HJ4fGlKbELOhls9Q&s=10",
   },
 ];
 
