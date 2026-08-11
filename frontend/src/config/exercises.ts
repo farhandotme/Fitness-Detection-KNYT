@@ -1330,6 +1330,22 @@ export const exercises: ExerciseConfig[] = [
     cameraMirror: true,
     imageUrl: "",
   },
+  {
+    id: "squat_thrusts",
+    name: "Squat Thrusts",
+    wsRoute: "/ws/squat_thrusts",
+    mode: "reps",
+    defaultTarget: 12,
+    defaultSets: 3,
+    defaultRestSeconds: 60,
+    difficulty: "intermediate",
+    tagline: "Full-body squat–plank–stand without push-up",
+    category: "full_body",
+    setupTip:
+      "Stand with feet shoulder-width apart. Squat down and place your hands on the floor in front of your feet, then jump your feet back into a plank. Briefly hold, jump your feet back toward your hands into a squat, and stand up tall to finish each rep.",
+    cameraMirror: true,
+    imageUrl: "",
+  },
 ];
 
 export function getExerciseById(id: string): ExerciseConfig | undefined {
