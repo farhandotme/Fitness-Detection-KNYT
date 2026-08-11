@@ -1,3 +1,10 @@
+"""
+Calf Raise Analyzer (Leg-Only Restricted Version).
+
+This version tracks Calf Raises strictly from the hips down. Upper body,
+shoulders, and torso deviations are no longer required to be visible in frame.
+"""
+
 import math
 from typing import Any, Optional
 
@@ -7,14 +14,12 @@ from src.engines.poseEngine import (  # type: ignore
     LEFT_HEEL,
     LEFT_HIP,
     LEFT_KNEE,
-    LEFT_SHOULDER,
     PoseEngine,
     RIGHT_ANKLE,
     RIGHT_FOOT_INDEX,
     RIGHT_HEEL,
     RIGHT_HIP,
     RIGHT_KNEE,
-    RIGHT_SHOULDER,
 )
 
 MIN_LANDMARK_VISIBILITY = 0.4
@@ -32,8 +37,6 @@ KNEE_STRAIGHT_MIN_DEG = 155.0
 KNEE_HARD_BEND_DEG = 140.0
 HIP_RISE_JUMP_RATIO = 0.18
 
-TORSO_VERTICAL_MAX_DEV_DEG = 20.0
-BBOX_ASPECT_STANDING_MAX = 0.85
 STABLE_STANDING_FRAMES = 5
 GRACE_FRAMES = 8
 CALIBRATION_FRAMES = 12
@@ -79,26 +82,6 @@ def _dist(a, b) -> float:
     return math.hypot(a.x - b.x, a.y - b.y)
 
 
-def _vertical_deviation_deg(top, bottom) -> Optional[float]:
-    dx = bottom.x - top.x
-    dy = bottom.y - top.y
-    if dx == 0 and dy == 0:
-        return None
-    return math.degrees(math.atan2(abs(dx), max(abs(dy), 1e-9)))
-
-
-def _bbox_aspect(points: list[_Point]) -> Optional[float]:
-    if len(points) < 4:
-        return None
-    xs = [p.x for p in points]
-    ys = [p.y for p in points]
-    width = max(xs) - min(xs)
-    height = max(ys) - min(ys)
-    if height <= 1e-6:
-        return None
-    return width / height
-
-
 def _framing_feedback(points: list[_Point]) -> Optional[str]:
     for p in points:
         if (
@@ -108,8 +91,8 @@ def _framing_feedback(points: list[_Point]) -> Optional[str]:
             or p.y > 1 - FRAME_EDGE_MARGIN
         ):
             return (
-                "You're partly out of frame — step back so your whole body, "
-                "including both feet, is visible."
+                "Legs partly out of frame — adjust camera so hips, knees, "
+                "and feet are fully visible."
             )
 
     if len(points) < 4:
@@ -121,14 +104,16 @@ def _framing_feedback(points: list[_Point]) -> Optional[str]:
     height = max(ys) - min(ys)
 
     if width > BBOX_TOO_CLOSE or height > BBOX_TOO_CLOSE:
-        return "You're too close to the camera — back up so your feet and head are both in frame."
+        return "Legs too close to camera — step back so lower body fits."
     if width < BBOX_TOO_FAR and height < BBOX_TOO_FAR:
-        return "You're too far from the camera — move closer for accurate tracking."
+        return "Too far from camera — move closer for accurate foot tracking."
 
     return None
 
 
 class CalfRaiseAnalyzer:
+    """Stateful Calf Raise analyzer restricted exclusively to leg tracking."""
+
     def __init__(self, target_reps: Optional[int] = None):
         self.target_reps = target_reps
         self.stage = "down"
@@ -218,28 +203,26 @@ class CalfRaiseAnalyzer:
             response["feedback"] = "No person detected — step into frame."
             return response
 
-        l_shoulder, r_shoulder = landmarks[LEFT_SHOULDER], landmarks[RIGHT_SHOULDER]
         l_hip, r_hip = landmarks[LEFT_HIP], landmarks[RIGHT_HIP]
         l_knee, r_knee = landmarks[LEFT_KNEE], landmarks[RIGHT_KNEE]
         l_ankle, r_ankle = landmarks[LEFT_ANKLE], landmarks[RIGHT_ANKLE]
         l_heel, r_heel = landmarks[LEFT_HEEL], landmarks[RIGHT_HEEL]
         l_toe, r_toe = landmarks[LEFT_FOOT_INDEX], landmarks[RIGHT_FOOT_INDEX]
 
-        core_visible = _visible((l_shoulder, r_shoulder, l_hip, r_hip, l_knee, r_knee))
-        legs_visible = _visible((l_ankle, r_ankle))
+        # Only require lower body landmarks (Hips, Knees, Ankles)
+        legs_visible = _visible((l_hip, r_hip, l_knee, r_knee, l_ankle, r_ankle))
 
-        if not core_visible or not legs_visible:
+        if not legs_visible:
             response["pose_detected"] = True
             response["low_visibility"] = True
             response["feedback"] = (
-                "Can't see your whole body clearly — step back so your shoulders, "
-                "hips, knees and ankles are all in frame."
+                "Can't see lower body clearly — adjust camera so your hips, "
+                "knees, and ankles are in frame."
             )
             return response
 
         response["pose_detected"] = True
 
-        mid_shoulder = _midpoint(l_shoulder, r_shoulder)
         mid_hip = _midpoint(l_hip, r_hip)
         shin_left = _dist(l_knee, l_ankle)
         shin_right = _dist(r_knee, r_ankle)
@@ -248,8 +231,6 @@ class CalfRaiseAnalyzer:
         bbox_points = [
             _Point(p.x, p.y)
             for p in (
-                l_shoulder,
-                r_shoulder,
                 l_hip,
                 r_hip,
                 l_knee,
@@ -266,18 +247,14 @@ class CalfRaiseAnalyzer:
         response["framing_ok"] = framing_message is None
         response["framing_message"] = framing_message
 
-        torso_dev = _vertical_deviation_deg(mid_shoulder, mid_hip)
         left_knee_angle = _angle_deg(l_hip, l_knee, l_ankle)
         right_knee_angle = _angle_deg(r_hip, r_knee, r_ankle)
         knee_angle = (left_knee_angle + right_knee_angle) / 2.0
-        bbox_aspect = _bbox_aspect(bbox_points)
 
+        # Leg-Only Standing Check (based purely on knee extension angle)
         is_standing = (
-            torso_dev is not None
-            and torso_dev <= TORSO_VERTICAL_MAX_DEV_DEG
-            and left_knee_angle >= KNEE_STRAIGHT_MIN_DEG
+            left_knee_angle >= KNEE_STRAIGHT_MIN_DEG
             and right_knee_angle >= KNEE_STRAIGHT_MIN_DEG
-            and (bbox_aspect is None or bbox_aspect <= BBOX_ASPECT_STANDING_MAX)
         )
 
         if is_standing:
@@ -302,8 +279,8 @@ class CalfRaiseAnalyzer:
 
         if not self.ready:
             response["position_message"] = (
-                "Stand up straight with your legs (nearly) straight — feet flat, "
-                "facing the camera — to start counting."
+                "Stand up straight with your legs nearly extended and feet flat "
+                "facing the camera."
             )
 
         feet_visible = _visible(
@@ -347,7 +324,7 @@ class CalfRaiseAnalyzer:
         if not self._calibrated():
             response["feedback"] = (
                 feedback
-                or "Hold still for a moment with your heels flat so we can calibrate your starting position…"
+                or "Hold still for a moment with your heels flat so we can calibrate your baseline..."
             )
             self.last_timestamp_s = t
             return response
@@ -455,19 +432,19 @@ class CalfRaiseAnalyzer:
             else:
                 rep_completed = False
                 if not both_feet_moved:
-                    feedback = "Only one foot really lifted — not counted. Raise both heels evenly."
+                    feedback = "Only one foot really lifted — raise both heels evenly."
                 elif "bent_knees" in self._current_rep_issues:
-                    feedback = "That looked like a squat, not a calf raise — keep your legs straight. Not counted."
-                elif "jumping" in self._current_rep_issues:
-                    feedback = "Stay grounded — that was a jump, not a controlled calf raise. Not counted."
-                elif rep_duration is not None and rep_duration < MIN_REP_DURATION:
                     feedback = (
-                        "Too fast — that one wasn't counted, control the movement."
+                        "Keep legs straight — calf raises require non-bent knees."
                     )
+                elif "jumping" in self._current_rep_issues:
+                    feedback = "Controlled extension only — do not jump."
+                elif rep_duration is not None and rep_duration < MIN_REP_DURATION:
+                    feedback = "Too fast — control the movement."
                 elif rep_duration is not None and rep_duration > MAX_REP_DURATION:
-                    feedback = "That rep took too long — not counted. Keep it flowing."
+                    feedback = "Movement too slow — keep a steady rhythm."
                 else:
-                    feedback = "Not enough heel lift — not counted. Rise higher onto your toes."
+                    feedback = "Not enough heel lift — rise higher onto your toes."
 
             self.rep_start_time = None
             self._rep_hip_start_y = None
