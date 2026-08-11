@@ -1297,6 +1297,22 @@ export const exercises: ExerciseConfig[] = [
     imageUrl:
       "https://cdn.muscleandstrength.com/sites/default/files/dumbbell-floor-press-thumb.jpg",
   },
+  {
+    id: "frog_jumps",
+    name: "Frog Jumps",
+    wsRoute: "/ws/frog_jumps",
+    mode: "reps",
+    defaultTarget: 12,
+    defaultSets: 3,
+    defaultRestSeconds: 60,
+    difficulty: "intermediate",
+    tagline: "Explosive squat jump for lower body and cardio",
+    category: "lower_body",
+    setupTip:
+      "Start in a deep squat with feet slightly wider than shoulder-width, hips low, and hands touching or near the floor in front of you. Explosively jump upward, swinging arms overhead, then land softly back into the deep squat position.",
+    cameraMirror: true,
+    imageUrl: "",
+  },
 ];
 
 export function getExerciseById(id: string): ExerciseConfig | undefined {
