@@ -1114,8 +1114,8 @@ export const exercises: ExerciseConfig[] = [
   {
     id: "battle_rope_cardio",
     name: "Battle Rope Cardio",
-    wsRoute: "/ws/battle_rope_cardio",
-    mode: "hold",
+    wsRoute: "/ws/battle_rope",
+    mode: "reps",
     defaultTarget: 30,
     defaultSets: 3,
     defaultRestSeconds: 10,
