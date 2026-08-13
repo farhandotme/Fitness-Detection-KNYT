@@ -6,7 +6,7 @@ import { connectMongo, disconnectMongo } from "./config/db.js";
 import { redis } from "./config/redis.js";
 import { createApp } from "./app.js";
 import { registerSocketHandlers } from "./sockets/handlers.js";
-import { competitionEngine } from "./services/competitionEngine.js";
+import { eventScheduler } from "./services/eventScheduler.js";
 
 async function main() {
   await connectMongo();
@@ -22,10 +22,14 @@ async function main() {
   });
 
   registerSocketHandlers(io);
-  await competitionEngine.recoverInFlight();
+  // Recovers scheduled events on every boot - see eventScheduler.ts for why
+  // this is a polling worker rather than setTimeout-per-event.
+  eventScheduler.start(io);
 
   httpServer.listen(env.PORT, () => {
-    logger.info(`competition-backend listening on :${env.PORT} (${env.NODE_ENV})`);
+    logger.info(
+      `competition-backend listening on :${env.PORT} (${env.NODE_ENV})`,
+    );
   });
 
   let shuttingDown = false;
@@ -45,6 +49,7 @@ async function main() {
     forceExit.unref();
 
     try {
+      eventScheduler.stop();
       io.close();
       await new Promise<void>((resolve) => httpServer.close(() => resolve()));
       await disconnectMongo();
