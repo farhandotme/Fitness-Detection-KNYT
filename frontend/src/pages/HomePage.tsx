@@ -2,8 +2,8 @@ import React, { useState } from "react";
 import { Link } from "wouter";
 import { exercises, ExerciseCategory } from "@/config/exercises";
 import { cn } from "@/lib/utils";
+import { Navbar } from "@/components/Navbar";
 import {
-  Settings,
   Dumbbell,
   Activity,
   ShieldCheck,
@@ -76,31 +76,7 @@ export function HomePage() {
 
   return (
     <div className="min-h-dvh bg-background text-foreground pb-20">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-xl border-b border-border p-4">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-primary rounded-2xl flex items-center justify-center text-primary-foreground font-black text-xl shadow-lg shadow-primary/20">
-              <Activity className="w-5 h-5" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold uppercase tracking-tight leading-none">
-                Fitness Coach
-              </h1>
-              <p className="text-xs text-muted-foreground uppercase tracking-widest">
-                Real-time Form Tracking
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={() => setShowSettings(!showSettings)}
-            data-testid="button-settings"
-            className="p-2.5 bg-secondary/70 hover:bg-secondary rounded-full transition-colors"
-          >
-            <Settings className="w-5 h-5 text-muted-foreground" />
-          </button>
-        </div>
-      </header>
+      <Navbar onSettingsClick={() => setShowSettings(!showSettings)} />
 
       {/* Settings Panel */}
       {showSettings && (
