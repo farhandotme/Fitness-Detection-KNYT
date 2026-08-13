@@ -2,7 +2,15 @@ import React, { useEffect, useRef, useState } from "react";
 import { useRoute, Link } from "wouter";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { useAdminSpectate } from "@/hooks/useAdminSpectate";
-import { ArrowLeft, Wifi, WifiOff, Trophy, Users, AlertTriangle, Radio } from "lucide-react";
+import {
+  ArrowLeft,
+  Wifi,
+  WifiOff,
+  Trophy,
+  Users,
+  AlertTriangle,
+  Radio,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -19,19 +27,26 @@ const STATUS_LABEL: Record<string, string> = {
 function useServerClockOffset(serverNow: number | undefined) {
   const offsetRef = useRef(0);
   useEffect(() => {
-    if (typeof serverNow === "number") offsetRef.current = serverNow - Date.now();
+    if (typeof serverNow === "number")
+      offsetRef.current = serverNow - Date.now();
   }, [serverNow]);
   return offsetRef;
 }
 
-function useCountdownTo(targetEpochMs: number | null, offsetRef: React.MutableRefObject<number>) {
+function useCountdownTo(
+  targetEpochMs: number | null,
+  offsetRef: React.MutableRefObject<number>,
+) {
   const [remainingMs, setRemainingMs] = useState<number | null>(null);
   useEffect(() => {
     if (targetEpochMs === null) {
       setRemainingMs(null);
       return;
     }
-    const tick = () => setRemainingMs(Math.max(0, targetEpochMs - (Date.now() + offsetRef.current)));
+    const tick = () =>
+      setRemainingMs(
+        Math.max(0, targetEpochMs - (Date.now() + offsetRef.current)),
+      );
     tick();
     const id = window.setInterval(tick, 200);
     return () => window.clearInterval(id);
@@ -59,7 +74,10 @@ export function AdminLiveRoomPage() {
   const { room, error, connected } = useAdminSpectate(competitionId);
   const offsetRef = useServerClockOffset(room?.serverNow);
 
-  const countdownRemaining = useCountdownTo(room?.countdownEndAt ?? null, offsetRef);
+  const countdownRemaining = useCountdownTo(
+    room?.countdownEndAt ?? null,
+    offsetRef,
+  );
   const roundRemaining = useCountdownTo(room?.roundEndAt ?? null, offsetRef);
   const breakRemaining = useCountdownTo(room?.breakEndAt ?? null, offsetRef);
 
@@ -72,7 +90,8 @@ export function AdminLiveRoomPage() {
           ? breakRemaining
           : null;
 
-  const isLive = room?.status === "ROUND_RUNNING" || room?.status === "COUNTDOWN";
+  const isLive =
+    room?.status === "ROUND_RUNNING" || room?.status === "COUNTDOWN";
 
   return (
     <AdminShell>
@@ -103,13 +122,22 @@ export function AdminLiveRoomPage() {
           <div className="flex items-start justify-between flex-wrap gap-4 mb-8">
             <div>
               <div className="flex items-center gap-2 mb-1.5">
-                <span className={cn("w-2 h-2 rounded-full bg-destructive", isLive && "live-pulse")} />
+                <span
+                  className={cn(
+                    "w-2 h-2 rounded-full bg-destructive",
+                    isLive && "live-pulse",
+                  )}
+                />
                 <span className="text-[10px] font-mono uppercase tracking-[0.25em] text-destructive font-bold">
                   Live spectate
                 </span>
               </div>
-              <h1 className="font-display text-2xl md:text-3xl font-extrabold tracking-tight">{room.eventName}</h1>
-              <p className="text-sm text-muted-foreground mt-1">{STATUS_LABEL[room.status] ?? room.status}</p>
+              <h1 className="font-display text-2xl md:text-3xl font-extrabold tracking-tight">
+                {room.eventName}
+              </h1>
+              <p className="text-sm text-muted-foreground mt-1">
+                {STATUS_LABEL[room.status] ?? room.status}
+              </p>
             </div>
 
             <div className="flex items-center gap-2">
@@ -130,23 +158,37 @@ export function AdminLiveRoomPage() {
           {/* Broadcast strip: round + timer + participants */}
           <div className="grid grid-cols-3 gap-3 mb-8">
             <div className="bg-card border border-card-border rounded-3xl p-5">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1">Round</p>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                Round
+              </p>
               <p className="font-mono text-3xl font-bold tabular-nums">
                 {room.currentRound || 1}
-                <span className="text-muted-foreground text-lg">/{room.totalRounds}</span>
+                <span className="text-muted-foreground text-lg">
+                  /{room.totalRounds}
+                </span>
               </p>
             </div>
             <div className="bg-card border border-card-border rounded-3xl p-5">
               <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
-                {room.status === "BREAK" ? "Break ends in" : room.status === "COUNTDOWN" ? "Starts in" : "Time left"}
+                {room.status === "BREAK"
+                  ? "Break ends in"
+                  : room.status === "COUNTDOWN"
+                    ? "Starts in"
+                    : "Time left"}
               </p>
-              <p className="font-mono text-3xl font-bold tabular-nums">{formatClock(clock)}</p>
+              <p className="font-mono text-3xl font-bold tabular-nums">
+                {formatClock(clock)}
+              </p>
             </div>
             <div className="bg-card border border-card-border rounded-3xl p-5">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1">Players</p>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                Players
+              </p>
               <p className="font-mono text-3xl font-bold tabular-nums">
                 {room.participants.length}
-                <span className="text-muted-foreground text-lg">/{room.maxParticipants}</span>
+                <span className="text-muted-foreground text-lg">
+                  /{room.maxParticipants}
+                </span>
               </p>
             </div>
           </div>
@@ -155,18 +197,24 @@ export function AdminLiveRoomPage() {
           <section>
             <div className="flex items-center gap-2 mb-4">
               <Trophy className="w-4 h-4 text-primary" />
-              <h2 className="font-display text-lg font-extrabold tracking-tight">Live leaderboard</h2>
+              <h2 className="font-display text-lg font-extrabold tracking-tight">
+                Live leaderboard
+              </h2>
             </div>
 
             <div className="bg-card border border-card-border rounded-3xl overflow-hidden divide-y divide-card-border/60">
               {room.leaderboard.length === 0 && (
                 <div className="p-8 text-center">
                   <Users className="w-8 h-8 text-muted-foreground mx-auto mb-2 opacity-40" />
-                  <p className="text-sm text-muted-foreground font-semibold">No scores reported yet.</p>
+                  <p className="text-sm text-muted-foreground font-semibold">
+                    No scores reported yet.
+                  </p>
                 </div>
               )}
               {room.leaderboard.map((entry) => {
-                const participant = room.participants.find((p) => p.participantId === entry.participantId);
+                const participant = room.participants.find(
+                  (p) => p.participantId === entry.participantId,
+                );
                 return (
                   <div
                     key={entry.participantId}
@@ -176,20 +224,29 @@ export function AdminLiveRoomPage() {
                     <span
                       className={cn(
                         "w-8 h-8 rounded-lg flex items-center justify-center font-mono font-bold text-sm shrink-0",
-                        RANK_STYLE[entry.rank] ?? "bg-secondary/50 text-muted-foreground",
+                        RANK_STYLE[entry.rank] ??
+                          "bg-secondary/50 text-muted-foreground",
                       )}
                     >
                       {entry.rank}
                     </span>
-                    <span className="flex-1 font-bold truncate">{entry.displayName}</span>
+                    <span className="flex-1 font-bold truncate">
+                      {entry.displayName}
+                    </span>
                     <span
                       className={cn(
                         "w-1.5 h-1.5 rounded-full shrink-0",
-                        participant?.connected ? "bg-primary" : "bg-muted-foreground/40",
+                        participant?.connected
+                          ? "bg-primary"
+                          : "bg-muted-foreground/40",
                       )}
-                      title={participant?.connected ? "Connected" : "Disconnected"}
+                      title={
+                        participant?.connected ? "Connected" : "Disconnected"
+                      }
                     />
-                    <span className="font-mono text-xl font-bold tabular-nums w-16 text-right">{entry.score}</span>
+                    <span className="font-mono text-xl font-bold tabular-nums w-16 text-right">
+                      {entry.score}
+                    </span>
                   </div>
                 );
               })}
@@ -200,8 +257,8 @@ export function AdminLiveRoomPage() {
             <div className="mt-6 flex items-center gap-2.5 bg-primary/10 border border-primary/20 rounded-2xl p-4">
               <Radio className="w-4 h-4 text-primary" />
               <p className="text-sm font-semibold text-primary">
-                This competition has finished. Final results are stored - the room stays visible here briefly for
-                review.
+                This competition has finished. Final results are stored - the
+                room stays visible here briefly for review.
               </p>
             </div>
           )}

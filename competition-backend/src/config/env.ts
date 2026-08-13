@@ -43,10 +43,6 @@ if (!parsed.success) {
 
 const data = parsed.data;
 
-// Refuse to boot in production with secrets that are obviously still the
-// placeholder defaults from .env.example - this is the single most common
-// way "it worked in dev" turns into a real incident, so fail loudly here
-// instead of silently running with a guessable JWT secret / admin key.
 if (data.NODE_ENV === "production") {
   const weakDefaults: Record<string, string> = {
     JWT_SECRET: "change-me-jwt-secret-please-override",
