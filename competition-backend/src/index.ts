@@ -6,6 +6,7 @@ import { connectMongo, disconnectMongo } from "./config/db.js";
 import { redis } from "./config/redis.js";
 import { createApp } from "./app.js";
 import { registerSocketHandlers } from "./sockets/handlers.js";
+import { competitionEngine } from "./services/competitionEngine.js";
 
 async function main() {
   await connectMongo();
@@ -21,11 +22,10 @@ async function main() {
   });
 
   registerSocketHandlers(io);
+  await competitionEngine.recoverInFlight();
 
   httpServer.listen(env.PORT, () => {
-    logger.info(
-      `competition-backend listening on :${env.PORT} (${env.NODE_ENV})`,
-    );
+    logger.info(`competition-backend listening on :${env.PORT} (${env.NODE_ENV})`);
   });
 
   let shuttingDown = false;
@@ -34,6 +34,10 @@ async function main() {
     shuttingDown = true;
     logger.info({ signal }, "shutting down");
 
+    // Give in-flight requests/sockets a bounded window to finish instead of
+    // hanging forever if something (e.g. a stuck Mongo call) never resolves -
+    // orchestrators (Docker, k8s) send SIGKILL after their own grace period
+    // anyway, so this just makes sure we exit cleanly before that happens.
     const forceExit = setTimeout(() => {
       logger.warn("graceful shutdown timed out, forcing exit");
       process.exit(1);

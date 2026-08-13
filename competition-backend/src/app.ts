@@ -15,6 +15,8 @@ import { authRateLimiter } from "./middleware/rateLimit.js";
 export function createApp() {
   const app = express();
 
+  // Required for express-rate-limit (and any other req.ip use) to see the
+  // real client IP instead of the reverse proxy's when TRUST_PROXY=true.
   if (env.TRUST_PROXY) {
     app.set("trust proxy", 1);
   }
@@ -28,15 +30,13 @@ export function createApp() {
     }),
   );
   app.use(express.json({ limit: "256kb" }));
-  app.use(
-    pinoHttp({
-      logger,
-      autoLogging: { ignore: (req) => req.url === "/health" },
-    }),
-  );
+  app.use(pinoHttp({ logger, autoLogging: { ignore: (req) => req.url === "/health" } }));
 
   app.use("/health", healthRoutes);
   app.use("/api/events", eventRoutes);
+  // Mounted before the protected /api/admin routes so register/login never
+  // hit the admin-session middleware defined in adminRoutes. Rate-limited
+  // since this is the endpoint most worth brute-forcing.
   app.use("/api/admin/auth", authRateLimiter, authRoutes);
   app.use("/api/admin", adminRoutes);
 

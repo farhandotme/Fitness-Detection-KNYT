@@ -14,8 +14,7 @@ const sampleEvents = [
     roundDurationSeconds: 60,
     breakDurationSeconds: 15,
     maxParticipants: 5,
-    description:
-      "Two 60-second rounds. Most good reps across both rounds wins.",
+    description: "Two 60-second rounds. Most good reps across both rounds wins.",
     status: "live" as const,
   },
   {

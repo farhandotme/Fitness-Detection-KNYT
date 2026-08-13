@@ -7,10 +7,8 @@ import type { LeaderboardEntry } from "../types/index.js";
 // so abandoned rooms don't accumulate forever.
 const ROOM_TTL_SECONDS = 60 * 60 * 6;
 
-const participantsKey = (competitionId: string) =>
-  `comp:${competitionId}:participants`;
-const scoresKey = (competitionId: string, round: number) =>
-  `comp:${competitionId}:scores:${round}`;
+const participantsKey = (competitionId: string) => `comp:${competitionId}:participants`;
+const scoresKey = (competitionId: string, round: number) => `comp:${competitionId}:scores:${round}`;
 const roundSetKey = (competitionId: string) => `comp:${competitionId}:rounds`; // tracks which round keys exist
 
 interface StoredParticipant {
@@ -26,12 +24,7 @@ export async function joinRoomAtomic(
 ): Promise<"joined" | "full" | "already_member"> {
   const key = participantsKey(competitionId);
   const payload: StoredParticipant = { displayName, connected: true };
-  const result = await redis.joinRoom(
-    key,
-    maxParticipants,
-    participantId,
-    JSON.stringify(payload),
-  );
+  const result = await redis.joinRoom(key, maxParticipants, participantId, JSON.stringify(payload));
   await redis.expire(key, ROOM_TTL_SECONDS);
   if (result === 0) return "full";
   if (result === 2) return "already_member";
@@ -51,50 +44,29 @@ export async function setParticipantConnected(
   await redis.hset(key, participantId, JSON.stringify(parsed));
 }
 
-export async function removeParticipant(
-  competitionId: string,
-  participantId: string,
-): Promise<void> {
+export async function removeParticipant(competitionId: string, participantId: string): Promise<void> {
   await redis.hdel(participantsKey(competitionId), participantId);
 }
 
-export async function getParticipantCount(
-  competitionId: string,
-): Promise<number> {
+export async function getParticipantCount(competitionId: string): Promise<number> {
   return redis.hlen(participantsKey(competitionId));
 }
 
 export async function getParticipants(
   competitionId: string,
-): Promise<
-  { participantId: string; displayName: string; connected: boolean }[]
-> {
+): Promise<{ participantId: string; displayName: string; connected: boolean }[]> {
   const all = await redis.hgetall(participantsKey(competitionId));
   return Object.entries(all).map(([participantId, raw]) => {
     const parsed: StoredParticipant = JSON.parse(raw);
-    return {
-      participantId,
-      displayName: parsed.displayName,
-      connected: parsed.connected,
-    };
+    return { participantId, displayName: parsed.displayName, connected: parsed.connected };
   });
 }
 
-export async function hasParticipant(
-  competitionId: string,
-  participantId: string,
-): Promise<boolean> {
-  return (
-    (await redis.hexists(participantsKey(competitionId), participantId)) === 1
-  );
+export async function hasParticipant(competitionId: string, participantId: string): Promise<boolean> {
+  return (await redis.hexists(participantsKey(competitionId), participantId)) === 1;
 }
 
-export async function setScore(
-  competitionId: string,
-  round: number,
-  participantId: string,
-  score: number,
-): Promise<void> {
+export async function setScore(competitionId: string, round: number, participantId: string, score: number): Promise<void> {
   const key = scoresKey(competitionId, round);
   await redis.hset(key, participantId, score);
   await redis.expire(key, ROOM_TTL_SECONDS);
@@ -102,10 +74,7 @@ export async function setScore(
   await redis.expire(roundSetKey(competitionId), ROOM_TTL_SECONDS);
 }
 
-export async function getRoundScores(
-  competitionId: string,
-  round: number,
-): Promise<Record<string, number>> {
+export async function getRoundScores(competitionId: string, round: number): Promise<Record<string, number>> {
   const raw = await redis.hgetall(scoresKey(competitionId, round));
   const out: Record<string, number> = {};
   for (const [participantId, value] of Object.entries(raw)) {
@@ -115,10 +84,7 @@ export async function getRoundScores(
 }
 
 /** Cumulative score across every round played so far, per participant. */
-export async function getCumulativeScores(
-  competitionId: string,
-  uptoRound: number,
-): Promise<Record<string, number>> {
+export async function getCumulativeScores(competitionId: string, uptoRound: number): Promise<Record<string, number>> {
   const totals: Record<string, number> = {};
   for (let round = 1; round <= uptoRound; round += 1) {
     const roundScores = await getRoundScores(competitionId, round);

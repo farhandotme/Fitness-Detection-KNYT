@@ -16,8 +16,6 @@ import {
 } from "../services/competitionService.js";
 import { competitionEngine } from "../services/competitionEngine.js";
 import { AppError } from "../utils/errors.js";
-import { verifyAdminToken } from "../utils/jwt.js";
-import { z } from "zod";
 
 interface SocketSession {
   competitionId?: string;
@@ -37,9 +35,7 @@ const joinAttempts = new WeakMap<Socket, number[]>();
 
 function isRateLimited(socket: Socket): boolean {
   const now = Date.now();
-  const attempts = (joinAttempts.get(socket) ?? []).filter(
-    (t) => now - t < JOIN_WINDOW_MS,
-  );
+  const attempts = (joinAttempts.get(socket) ?? []).filter((t) => now - t < JOIN_WINDOW_MS);
   attempts.push(now);
   joinAttempts.set(socket, attempts);
   return attempts.length > JOIN_MAX_ATTEMPTS;
@@ -50,17 +46,9 @@ function sendError(socket: Socket, err: unknown) {
     socket.emit("error", { code: err.code, message: err.message });
   } else {
     logger.error({ err }, "unexpected socket error");
-    socket.emit("error", {
-      code: "INTERNAL",
-      message: "Something went wrong. Please try again.",
-    });
+    socket.emit("error", { code: "INTERNAL", message: "Something went wrong. Please try again." });
   }
 }
-
-const spectateSchema = z.object({
-  competitionId: z.string().trim().min(1),
-  adminToken: z.string().trim().min(1),
-});
 
 export function registerSocketHandlers(io: Server): void {
   competitionEngine.attach(io);
@@ -72,22 +60,13 @@ export function registerSocketHandlers(io: Server): void {
     socket.on("competition:join", async (payload) => {
       try {
         if (isRateLimited(socket)) {
-          throw AppError.badRequest(
-            "Too many join attempts, please wait a moment and try again",
-          );
+          throw AppError.badRequest("Too many join attempts, please wait a moment and try again");
         }
         const input = joinCompetitionSchema.parse(payload);
-        const result = await joinEvent(
-          input.eventId,
-          input.displayName,
-          input.deviceId,
-        );
+        const result = await joinEvent(input.eventId, input.displayName, input.deviceId);
 
         socket.join(result.competitionId);
-        sessions.set(socket, {
-          competitionId: result.competitionId,
-          participantId: result.participantId,
-        });
+        sessions.set(socket, { competitionId: result.competitionId, participantId: result.participantId });
 
         socket.emit("competition:joined", result);
       } catch (err) {
@@ -98,22 +77,13 @@ export function registerSocketHandlers(io: Server): void {
     socket.on("competition:reconnect", async (payload) => {
       try {
         if (isRateLimited(socket)) {
-          throw AppError.badRequest(
-            "Too many reconnect attempts, please wait a moment and try again",
-          );
+          throw AppError.badRequest("Too many reconnect attempts, please wait a moment and try again");
         }
         const input = reconnectSchema.parse(payload);
-        const room = await reconnectToCompetition(
-          input.competitionId,
-          input.participantId,
-          input.participantToken,
-        );
+        const room = await reconnectToCompetition(input.competitionId, input.participantId, input.participantToken);
 
         socket.join(input.competitionId);
-        sessions.set(socket, {
-          competitionId: input.competitionId,
-          participantId: input.participantId,
-        });
+        sessions.set(socket, { competitionId: input.competitionId, participantId: input.participantId });
 
         socket.emit("competition:reconnected", { room });
         socket.to(input.competitionId).emit("room:state", room);
@@ -126,20 +96,10 @@ export function registerSocketHandlers(io: Server): void {
       try {
         const input = scoreUpdateSchema.parse(payload);
         const session = sessions.get(socket);
-        if (
-          !session ||
-          session.competitionId !== input.competitionId ||
-          session.participantId !== input.participantId
-        ) {
+        if (!session || session.competitionId !== input.competitionId || session.participantId !== input.participantId) {
           throw AppError.forbidden("Not a member of this competition room");
         }
-        await submitScore(
-          input.competitionId,
-          input.participantId,
-          input.participantToken,
-          input.round,
-          input.score,
-        );
+        await submitScore(input.competitionId, input.participantId, input.participantToken, input.round, input.score);
       } catch (err) {
         sendError(socket, err);
       }
@@ -148,11 +108,7 @@ export function registerSocketHandlers(io: Server): void {
     socket.on("competition:leave", async (payload) => {
       try {
         const input = leaveCompetitionSchema.parse(payload);
-        await leaveCompetition(
-          input.competitionId,
-          input.participantId,
-          input.participantToken,
-        );
+        await leaveCompetition(input.competitionId, input.participantId, input.participantToken);
         socket.leave(input.competitionId);
         await competitionEngine.onParticipantCountChanged(input.competitionId);
         const room = await getRoomSnapshot(input.competitionId);
@@ -163,40 +119,11 @@ export function registerSocketHandlers(io: Server): void {
       }
     });
 
-    // Admin dashboard "watch live" view - joins the same Socket.IO room as
-    // participants so it receives every room:state broadcast the engine
-    // already sends, but is never added to the competition's participant
-    // list (see competitionService.joinEvent) - purely read-only, doesn't
-    // occupy a seat and can't submit scores.
-    socket.on("admin:spectate", async (payload) => {
-      try {
-        const input = spectateSchema.parse(payload);
-        try {
-          verifyAdminToken(input.adminToken);
-        } catch {
-          throw AppError.unauthorized(
-            "Invalid or expired admin session, please log in again",
-          );
-        }
-
-        const room = await getRoomSnapshot(input.competitionId);
-        if (!room) throw AppError.notFound("Competition room not found");
-
-        socket.join(input.competitionId);
-        socket.emit("admin:spectating", { room });
-      } catch (err) {
-        sendError(socket, err);
-      }
-    });
-
     socket.on("disconnect", async () => {
       const session = sessions.get(socket);
       if (session?.competitionId && session.participantId) {
         try {
-          await markParticipantDisconnected(
-            session.competitionId,
-            session.participantId,
-          );
+          await markParticipantDisconnected(session.competitionId, session.participantId);
           const room = await getRoomSnapshot(session.competitionId);
           if (room) io.to(session.competitionId).emit("room:state", room);
         } catch (err) {

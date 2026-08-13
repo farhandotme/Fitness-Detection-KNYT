@@ -4,6 +4,9 @@ import { logger } from "./logger.js";
 
 export async function connectMongo(): Promise<void> {
   mongoose.set("strictQuery", true);
+  // Auto-creating indexes on every boot is fine in dev but adds startup
+  // latency and lock contention in production - build them once out of band
+  // (`mongosh` / a migration step) and disable it here.
   mongoose.set("autoIndex", env.NODE_ENV !== "production");
 
   mongoose.connection.on("connected", () => logger.info("MongoDB connected"));

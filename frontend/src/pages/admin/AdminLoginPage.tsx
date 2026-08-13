@@ -1,12 +1,19 @@
 import React, { useState } from "react";
 import { Link, useLocation } from "wouter";
+import { Navbar } from "@/components/Navbar";
 import {
   getAdminToken,
   loginAdmin,
   registerAdmin,
   saveAdminSession,
 } from "@/lib/adminApi";
-import { ArrowLeft, AlertTriangle, Radio, LogIn, UserPlus } from "lucide-react";
+import {
+  ArrowLeft,
+  AlertTriangle,
+  ShieldCheck,
+  LogIn,
+  UserPlus,
+} from "lucide-react";
 
 type Tab = "login" | "register";
 
@@ -49,24 +56,10 @@ export function AdminLoginPage() {
   };
 
   return (
-    <div className="min-h-dvh bg-background text-foreground flex flex-col">
-      <header className="px-4 md:px-8 pt-6">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-            <Radio className="w-4 h-4 text-primary-foreground" />
-          </div>
-          <div>
-            <p className="font-display font-extrabold tracking-tight text-sm leading-none">
-              KNYT Ops
-            </p>
-            <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-muted-foreground mt-1">
-              Control Console
-            </p>
-          </div>
-        </div>
-      </header>
+    <div className="min-h-dvh bg-background text-foreground">
+      <Navbar />
 
-      <main className="max-w-md w-full mx-auto p-4 mt-10 flex-1">
+      <main className="max-w-md mx-auto p-4 mt-10">
         <Link
           href="/events"
           className="inline-flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors mb-6"
@@ -76,10 +69,10 @@ export function AdminLoginPage() {
         </Link>
 
         <div className="bg-card border border-card-border rounded-4xl p-6 md:p-8 shadow-sm">
-          <div className="flex items-center gap-2 text-primary text-[10px] font-mono uppercase tracking-[0.25em] font-bold mb-4">
-            <Radio className="w-3.5 h-3.5" /> Admin access
+          <div className="flex items-center gap-2 text-primary text-xs uppercase tracking-[.2em] font-bold mb-4">
+            <ShieldCheck className="w-4 h-4" /> Admin access
           </div>
-          <h1 className="font-display text-2xl md:text-3xl font-extrabold tracking-tight mb-1">
+          <h1 className="text-2xl md:text-3xl font-black tracking-tighter mb-1">
             {tab === "login" ? "Log in" : "Create an admin account"}
           </h1>
           <p className="text-sm text-muted-foreground mb-6">

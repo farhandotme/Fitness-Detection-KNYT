@@ -10,13 +10,6 @@ export const createEventSchema = z.object({
   breakDurationSeconds: z.number().int().min(5).max(300).default(15),
   maxParticipants: z.number().int().min(2).max(5).default(5),
   description: z.string().max(500).optional(),
-  imageUrl: z
-    .string()
-    .trim()
-    .url("Must be a valid URL")
-    .max(500)
-    .optional()
-    .or(z.literal("")),
   status: z.enum(["draft", "live", "closed"]).default("live"),
 });
 

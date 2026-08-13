@@ -423,7 +423,7 @@ export function CompetitionPlayPage() {
                         "flex items-center gap-3 rounded-xl px-3 py-2.5 border",
                         isMe
                           ? "border-primary/40 bg-primary/10"
-                          : "border-white/10 bg-white/3",
+                          : "border-white/10 bg-white/[0.03]",
                       )}
                     >
                       <span

@@ -32,15 +32,10 @@ function identityKey(competitionId: string) {
 }
 
 export function saveParticipantIdentity(identity: ParticipantIdentity): void {
-  localStorage.setItem(
-    identityKey(identity.competitionId),
-    JSON.stringify(identity),
-  );
+  localStorage.setItem(identityKey(identity.competitionId), JSON.stringify(identity));
 }
 
-export function loadParticipantIdentity(
-  competitionId: string,
-): ParticipantIdentity | null {
+export function loadParticipantIdentity(competitionId: string): ParticipantIdentity | null {
   const raw = localStorage.getItem(identityKey(competitionId));
   if (!raw) return null;
   try {

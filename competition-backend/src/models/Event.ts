@@ -3,6 +3,10 @@ import { Schema, model, type InferSchemaType } from "mongoose";
 const eventSchema = new Schema(
   {
     name: { type: String, required: true, trim: true, maxlength: 120 },
+    // Must match an `id` in the existing frontend's src/config/exercises.ts catalog,
+    // e.g. "pushup", "squat", "jumping_jack", "skipping". The competition backend
+    // never interprets this itself - it is passed straight to the client and to
+    // whatever reports scores back, so new exercises need zero backend changes.
     exerciseId: { type: String, required: true, trim: true },
     exerciseName: { type: String, required: true, trim: true },
     exerciseMode: { type: String, enum: ["reps", "hold"], required: true },
@@ -34,7 +38,6 @@ const eventSchema = new Schema(
       default: "live",
     },
     description: { type: String, default: "" },
-    imageUrl: { type: String, default: "" },
   },
   { timestamps: true },
 );

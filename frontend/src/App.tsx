@@ -14,7 +14,8 @@ import { CompetitionPlayPage } from "@/pages/events/CompetitionPlayPage";
 import { CompetitionResultsPage } from "@/pages/events/CompetitionResultsPage";
 import { AdminLoginPage } from "@/pages/admin/AdminLoginPage";
 import { AdminDashboardPage } from "@/pages/admin/AdminDashboardPage";
-import { AdminLiveRoomPage } from "@/pages/admin/AdminLiveRoomPage";
+import { AdminEventDetailPage } from "@/pages/admin/AdminEventDetailPage";
+import { AdminCompetitionDetailPage } from "@/pages/admin/AdminCompetitionDetailPage";
 
 const queryClient = new QueryClient();
 
@@ -28,23 +29,15 @@ function Router() {
       {/* Competition platform - built around the existing exercise engine above */}
       <Route path="/events" component={EventsPage} />
       <Route path="/events/:eventId" component={EventJoinPage} />
-      <Route
-        path="/competitions/:competitionId/waiting"
-        component={WaitingRoomPage}
-      />
-      <Route
-        path="/competitions/:competitionId/play"
-        component={CompetitionPlayPage}
-      />
-      <Route
-        path="/competitions/:competitionId/results"
-        component={CompetitionResultsPage}
-      />
+      <Route path="/competitions/:competitionId/waiting" component={WaitingRoomPage} />
+      <Route path="/competitions/:competitionId/play" component={CompetitionPlayPage} />
+      <Route path="/competitions/:competitionId/results" component={CompetitionResultsPage} />
 
       {/* Admin - create/manage events. No relation to the anonymous participant flow above. */}
       <Route path="/admin/login" component={AdminLoginPage} />
       <Route path="/admin" component={AdminDashboardPage} />
-      <Route path="/admin/rooms/:competitionId" component={AdminLiveRoomPage} />
+      <Route path="/admin/events/:eventId" component={AdminEventDetailPage} />
+      <Route path="/admin/competitions/:competitionId" component={AdminCompetitionDetailPage} />
 
       <Route component={NotFound} />
     </Switch>
