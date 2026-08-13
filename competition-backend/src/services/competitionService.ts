@@ -43,6 +43,8 @@ async function createRoom(eventDoc: {
   roundDurationSeconds: number;
   breakDurationSeconds: number;
   maxParticipants: number;
+  minParticipants?: number;
+  eventType?: "instant" | "scheduled";
 }): Promise<CompetitionDoc> {
   const doc = await CompetitionModel.create({
     eventId: eventDoc._id,
@@ -52,6 +54,10 @@ async function createRoom(eventDoc: {
     roomCode: generateRoomCode(),
     status: "WAITING",
     maxParticipants: eventDoc.maxParticipants,
+    minParticipants: eventDoc.minParticipants ?? 1,
+    // Scheduled-event rooms wait for eventScheduler.ts to force-start them
+    // at scheduledAt rather than starting the instant they fill up.
+    autoStartOnFull: eventDoc.eventType !== "scheduled",
     totalRounds: eventDoc.rounds,
     roundDurationSeconds: eventDoc.roundDurationSeconds,
     breakDurationSeconds: eventDoc.breakDurationSeconds,
@@ -73,6 +79,14 @@ export async function joinEvent(eventId: string, displayName: string, deviceId: 
   const event = await EventModel.findById(eventId).lean().catch(() => null);
   if (!event || event.status !== "live") {
     throw AppError.notFound("This event is not currently live");
+  }
+  // Scheduled events only accept joins during their configured registration
+  // window - everything else about the event may say "live" (it's visible,
+  // published) while registration itself is not open yet, or has already
+  // closed ahead of the scheduled start. See eventScheduler.ts for what
+  // drives scheduleStatus forward.
+  if (event.eventType === "scheduled" && event.scheduleStatus !== "REGISTRATION_OPEN") {
+    throw AppError.badRequest("Registration is not currently open for this event");
   }
 
   const deviceIdHash = hashToken(deviceId);
@@ -288,230 +302,4 @@ export async function getRoomSnapshot(competitionId: string): Promise<RoomStateS
     breakEndAt: engineState.breakEndAt,
     serverNow: Date.now(),
   };
-}
-
-// ---------------------------------------------------------------------------
-// Admin: monitoring, moderation, reporting
-// ---------------------------------------------------------------------------
-
-export interface PageInput {
-  page?: number;
-  limit?: number;
-}
-
-function pagination({ page = 1, limit = 20 }: PageInput) {
-  const safeLimit = Math.min(Math.max(limit, 1), 100);
-  const safePage = Math.max(page, 1);
-  return { skip: (safePage - 1) * safeLimit, limit: safeLimit, page: safePage };
-}
-
-export async function listCompetitionsForEvent(
-  eventId: string,
-  opts: PageInput & { status?: string } = {},
-) {
-  const { skip, limit, page } = pagination(opts);
-  const filter: Record<string, unknown> = { eventId };
-  if (opts.status) filter.status = opts.status;
-
-  const [rows, total] = await Promise.all([
-    CompetitionModel.find(filter)
-      .select("-participants.tokenHash -participants.deviceIdHash")
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .lean(),
-    CompetitionModel.countDocuments(filter),
-  ]);
-
-  return { rooms: rows, total, page, limit };
-}
-
-export async function listAllCompetitionsAdmin(
-  opts: PageInput & { status?: string; eventId?: string } = {},
-) {
-  const { skip, limit, page } = pagination(opts);
-  const filter: Record<string, unknown> = {};
-  if (opts.status) filter.status = opts.status;
-  if (opts.eventId) filter.eventId = opts.eventId;
-
-  const [rows, total] = await Promise.all([
-    CompetitionModel.find(filter)
-      .select("-participants.tokenHash -participants.deviceIdHash")
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .lean(),
-    CompetitionModel.countDocuments(filter),
-  ]);
-
-  return { rooms: rows, total, page, limit };
-}
-
-/** Full admin detail view: persisted history plus the live snapshot (timings, connection state) where relevant. */
-export async function getAdminCompetitionDetail(competitionId: string) {
-  const room = await CompetitionModel.findById(competitionId)
-    .select("-participants.tokenHash -participants.deviceIdHash")
-    .lean();
-  if (!room) throw AppError.notFound("Competition not found");
-
-  const snapshot = await getRoomSnapshot(competitionId);
-  return { room, snapshot };
-}
-
-/**
- * Admin-initiated removal, distinct from a participant leaving themselves:
- * no token check (the admin is trusted by their session, not a participant
- * credential), and only permitted pre-start so it can never be used to
- * disrupt a round already in progress - use `abandonCompetition` for that.
- */
-export async function removeParticipantAdmin(competitionId: string, participantId: string): Promise<void> {
-  const room = await CompetitionModel.findById(competitionId).lean<CompetitionDoc | null>();
-  if (!room) throw AppError.notFound("Competition not found");
-  if (room.status !== "WAITING" && room.status !== "FULL") {
-    throw AppError.conflict("Can only remove a participant before the competition starts");
-  }
-  const isMember = room.participants.some((p) => p.participantId === participantId);
-  if (!isMember) throw AppError.notFound("Participant not found in this competition");
-
-  await removeParticipant(competitionId, participantId);
-  await CompetitionModel.updateOne({ _id: competitionId }, { $pull: { participants: { participantId } } });
-  // Room may have been FULL and waiting on the countdown - removing a seat
-  // means it no longer is, so re-evaluate (this also broadcasts room:state).
-  await CompetitionModel.updateOne(
-    { _id: competitionId, status: "FULL" },
-    { status: "WAITING" },
-  );
-  await competitionEngine.onParticipantCountChanged(competitionId);
-  logger.info({ competitionId, participantId }, "participant removed by admin");
-}
-
-export async function abandonCompetitionAdmin(competitionId: string, reason: string): Promise<void> {
-  const ok = await competitionEngine.abandonCompetition(
-    competitionId,
-    reason || "Ended by admin",
-  );
-  if (!ok) {
-    const exists = await CompetitionModel.exists({ _id: competitionId });
-    if (!exists) throw AppError.notFound("Competition not found");
-    throw AppError.conflict("This competition has already finished or been ended");
-  }
-}
-
-export interface DashboardStats {
-  events: { total: number; draft: number; live: number; closed: number };
-  competitions: {
-    total: number;
-    active: number;
-    completed: number;
-    abandoned: number;
-    liveParticipantsNow: number;
-  };
-  completedLast24h: number;
-  mostPopularExercise: { exerciseId: string; exerciseName: string; count: number } | null;
-}
-
-export async function getDashboardStats(): Promise<DashboardStats> {
-  const [eventCounts, competitionCounts, activeRooms, completedLast24h, popularExercise] = await Promise.all([
-    EventModel.aggregate([{ $group: { _id: "$status", count: { $sum: 1 } } }]),
-    CompetitionModel.aggregate([{ $group: { _id: "$status", count: { $sum: 1 } } }]),
-    CompetitionModel.find({ status: { $in: ACTIVE_STATUSES_FOR_STATS } })
-      .select("_id")
-      .lean(),
-    CompetitionModel.countDocuments({
-      status: "COMPLETED",
-      completedAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
-    }),
-    CompetitionModel.aggregate([
-      { $group: { _id: { exerciseId: "$exerciseId", exerciseName: "$exerciseName" }, count: { $sum: 1 } } },
-      { $sort: { count: -1 } },
-      { $limit: 1 },
-    ]),
-  ]);
-
-  const eventsByStatus = Object.fromEntries(eventCounts.map((r) => [r._id, r.count as number]));
-  const competitionsByStatus = Object.fromEntries(competitionCounts.map((r) => [r._id, r.count as number]));
-
-  let liveParticipantsNow = 0;
-  for (const room of activeRooms) {
-    liveParticipantsNow += await getParticipantCount(String(room._id));
-  }
-
-  const totalEvents = eventCounts.reduce((sum, r) => sum + (r.count as number), 0);
-  const totalCompetitions = competitionCounts.reduce((sum, r) => sum + (r.count as number), 0);
-  const activeCompetitions = ACTIVE_STATUSES_FOR_STATS.reduce(
-    (sum, s) => sum + (competitionsByStatus[s] ?? 0),
-    0,
-  );
-
-  return {
-    events: {
-      total: totalEvents,
-      draft: eventsByStatus.draft ?? 0,
-      live: eventsByStatus.live ?? 0,
-      closed: eventsByStatus.closed ?? 0,
-    },
-    competitions: {
-      total: totalCompetitions,
-      active: activeCompetitions,
-      completed: competitionsByStatus.COMPLETED ?? 0,
-      abandoned: competitionsByStatus.ABANDONED ?? 0,
-      liveParticipantsNow,
-    },
-    completedLast24h,
-    mostPopularExercise: popularExercise[0]
-      ? {
-          exerciseId: popularExercise[0]._id.exerciseId,
-          exerciseName: popularExercise[0]._id.exerciseName,
-          count: popularExercise[0].count,
-        }
-      : null,
-  };
-}
-
-const ACTIVE_STATUSES_FOR_STATS = [
-  "WAITING",
-  "FULL",
-  "COUNTDOWN",
-  "ROUND_RUNNING",
-  "ROUND_FINISHED",
-  "BREAK",
-];
-
-/**
- * CSV of final results across every completed competition under an event -
- * one row per participant per room. Hand-rolled rather than pulling in a
- * CSV library: the shape is fixed and small, and RFC 4180 quoting for the
- * one free-text field (displayName) is a couple of lines.
- */
-export async function exportEventResultsCsv(eventId: string): Promise<string> {
-  const rooms = await CompetitionModel.find({ eventId, status: "COMPLETED" })
-    .sort({ completedAt: 1 })
-    .lean();
-
-  const header = ["Room Code", "Completed At", "Rank", "Participant", "Total Score"];
-  const lines = [header.join(",")];
-
-  for (const room of rooms) {
-    const sorted = [...room.finalResults].sort((a, b) => a.rank - b.rank);
-    for (const result of sorted) {
-      lines.push(
-        [
-          csvCell(room.roomCode),
-          csvCell(room.completedAt ? room.completedAt.toISOString() : ""),
-          csvCell(String(result.rank)),
-          csvCell(result.displayName),
-          csvCell(String(result.totalScore)),
-        ].join(","),
-      );
-    }
-  }
-
-  return lines.join("\r\n");
-}
-
-function csvCell(value: string): string {
-  if (/[",\r\n]/.test(value)) {
-    return `"${value.replace(/"/g, '""')}"`;
-  }
-  return value;
 }
