@@ -1,119 +1,78 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-
-import asyncio
-import base64
-import time
-
 import cv2
 import numpy as np
+import base64
+import json
+from typing import Optional
 
-from src.detectors.upper_body.seated_cable_shrug import SeatedCableShrugSession
+from src.detectors.upper_body.seated_cable_shrug import SeatedCableRowSession
 
 router = APIRouter()
 
 
-def decode_frame(raw: str):
-    if "," in raw:
-        raw = raw.split(",")[1]
-
-    image_bytes = base64.b64decode(raw)
-    np_array = np.frombuffer(image_bytes, dtype=np.uint8)
-
-    return cv2.imdecode(np_array, cv2.IMREAD_COLOR)
-
-
-def _query_int(websocket: WebSocket, name: str, default: int, lo: int, hi: int) -> int:
-    """Read an integer query param off the websocket URL, clamped to [lo, hi].
-
-    Same convention as `pushupRoutes.py` / `flutterKicksRoutes.py` — the
-    coach-assigned plan (reps per set / number of sets / which set this
-    connection is for) reaches the backend this way; the frontend does
-    NOT get to decide on its own whether that plan has been completed —
-    `SeatedCableShrugSession` is the only thing that sets
-    `session_complete` / `exercise_complete` in the response.
-    """
-    raw = websocket.query_params.get(name)
-    if raw is None:
-        return default
-    try:
-        value = int(raw)
-    except (TypeError, ValueError):
-        return default
-    return max(lo, min(hi, value))
-
-
-def _log_rep_progress(label: str, result: dict, exercise_already_logged: bool) -> bool:
-    """Print exactly one line per completed rep, and one line when the
-    exercise finishes — never per-frame. `rep_completed` is already an
-    edge-triggered flag (True only on the one frame a rep lands), so we
-    don't need our own counter for reps.
-
-    Returns the (possibly updated) `exercise_already_logged` flag — pass
-    it back in on the next call so the "exercise complete" line only
-    prints once even though `exercise_complete` stays True on subsequent
-    frames until the socket closes.
-    """
-    if result.get("rep_completed"):
-        rep_count = result.get("rep_count")
-        target_reps = result.get("target_reps")
-        set_number = result.get("set_number")
-        target_sets = result.get("target_sets")
-        quality = result.get("rep_form_quality") or "n/a"
-        tempo = result.get("rep_classification") or "n/a"
-        flaws = result.get("rep_flaws") or []
-        print(
-            f"[{label}] Rep {rep_count}/{target_reps} "
-            f"(set {set_number}/{target_sets}) — "
-            f"quality={quality} tempo={tempo} flaws={flaws}"
-        )
-
-    if result.get("exercise_complete") and not exercise_already_logged:
-        print(
-            f"[{label}] EXERCISE COMPLETE — "
-            f"{result.get('target_sets')} sets x {result.get('target_reps')} reps done."
-        )
-        return True
-
-    return exercise_already_logged
-
-
+@router.websocket("/ws/seated_cable_shrug")
 @router.websocket("/seated_cable_shrug")
-async def seated_cable_shrug(websocket: WebSocket):
+async def seated_cable_row_websocket(websocket: WebSocket):
     await websocket.accept()
 
-    print("Client connected: Seated Cable Shrug")
+    # Extract query parameters sent by the frontend connection URL
+    query_params = websocket.query_params
+    target_reps_param = query_params.get("target_reps")
+    target_sets_param = query_params.get("target_sets")
+    set_number_param = query_params.get("set_number")
 
-    target_reps = _query_int(websocket, "target_reps", default=15, lo=1, hi=200)
-    target_sets = _query_int(websocket, "target_sets", default=1, lo=1, hi=20)
-    set_number = _query_int(websocket, "set_number", default=1, lo=1, hi=target_sets)
+    target_reps: Optional[int] = int(target_reps_param) if target_reps_param else None
+    target_sets: int = int(target_sets_param) if target_sets_param else 1
+    set_number: int = int(set_number_param) if set_number_param else 1
 
-    counter = SeatedCableShrugSession(
-        target_reps=target_reps,
-        target_sets=target_sets,
-        set_number=set_number,
+    session = SeatedCableRowSession(
+        target_reps=target_reps, target_sets=target_sets, set_number=set_number
     )
 
     try:
-        exercise_logged = False
         while True:
-            image = await websocket.receive_text()
+            raw_data = await websocket.receive_text()
+            payload = json.loads(raw_data)
 
-            frame = decode_frame(image)
+            if "config" in payload:
+                config = payload["config"]
+                target_reps = config.get("target_reps", target_reps)
+                target_sets = config.get("target_sets", target_sets)
+                set_number = config.get("set_number", set_number)
+                session = SeatedCableRowSession(
+                    target_reps=target_reps,
+                    target_sets=target_sets,
+                    set_number=set_number,
+                )
 
-            timestamp = int(time.time() * 1000)
+            frame_data = payload.get("frame") or payload.get("image")
+            if not frame_data:
+                continue
 
-            result = counter.detect(frame, timestamp)
+            if "," in frame_data:
+                frame_data = frame_data.split(",")[1]
 
-            exercise_logged = _log_rep_progress(
-                "Seated Cable Shrug", result, exercise_logged
+            img_bytes = base64.b64decode(frame_data)
+            np_arr = np.frombuffer(img_bytes, np.uint8)
+            frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+
+            if frame is None:
+                continue
+
+            timestamp_ms = payload.get(
+                "timestamp_ms", int(cv2.getTickCount() / cv2.getTickFrequency() * 1000)
             )
 
-            await websocket.send_json(result)
-
-            await asyncio.sleep(0.001)
+            result = session.detect(frame, timestamp_ms)
+            await websocket.send_text(json.dumps(result))
 
     except WebSocketDisconnect:
-        print("Disconnected: Seated Cable Shrug")
-
-    finally:
-        counter.close()
+        if session:
+            session.close()
+    except Exception as e:
+        if session:
+            session.close()
+        try:
+            await websocket.send_text(json.dumps({"error": str(e)}))
+        except:
+            pass

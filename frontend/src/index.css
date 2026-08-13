@@ -186,6 +186,20 @@ button,
   }
 }
 
+@keyframes live-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 hsl(var(--destructive) / 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 8px hsl(var(--destructive) / 0);
+  }
+}
+
+.live-pulse {
+  animation: live-pulse 1.8s ease-out infinite;
+}
+
 .ambient-pulse {
   animation: ambient-pulse 4s ease-in-out infinite;
 }

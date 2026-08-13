@@ -27,6 +27,9 @@ bun.lock
 *.swo
 /tmp
 /.worktrees
+package-lock.json
+.env*
+.env
 .claude/*.local.*
 .claude/worktrees
 
