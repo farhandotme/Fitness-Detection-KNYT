@@ -1,0 +1,32 @@
+import { z } from "zod";
+
+export const joinCompetitionSchema = z.object({
+  eventId: z.string().trim().min(1),
+  displayName: z
+    .string()
+    .trim()
+    .min(1, "Display name is required")
+    .max(24, "Display name must be 24 characters or fewer"),
+  deviceId: z.string().trim().min(1).max(100),
+});
+
+export const reconnectSchema = z.object({
+  competitionId: z.string().trim().min(1),
+  participantId: z.string().trim().min(1),
+  participantToken: z.string().trim().min(1),
+});
+
+export const scoreUpdateSchema = z.object({
+  competitionId: z.string().trim().min(1),
+  participantId: z.string().trim().min(1),
+  participantToken: z.string().trim().min(1),
+  round: z.number().int().min(1),
+  score: z.number().min(0).max(100000),
+  status: z.enum(["RUNNING", "PAUSED", "DONE"]).optional(),
+});
+
+export const leaveCompetitionSchema = z.object({
+  competitionId: z.string().trim().min(1),
+  participantId: z.string().trim().min(1),
+  participantToken: z.string().trim().min(1),
+});
