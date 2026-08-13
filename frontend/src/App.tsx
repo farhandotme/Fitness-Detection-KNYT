@@ -14,8 +14,7 @@ import { CompetitionPlayPage } from "@/pages/events/CompetitionPlayPage";
 import { CompetitionResultsPage } from "@/pages/events/CompetitionResultsPage";
 import { AdminLoginPage } from "@/pages/admin/AdminLoginPage";
 import { AdminDashboardPage } from "@/pages/admin/AdminDashboardPage";
-import { AdminEventDetailPage } from "@/pages/admin/AdminEventDetailPage";
-import { AdminCompetitionDetailPage } from "@/pages/admin/AdminCompetitionDetailPage";
+import { AdminLiveRoomPage } from "@/pages/admin/AdminLiveRoomPage";
 
 const queryClient = new QueryClient();
 
@@ -36,8 +35,7 @@ function Router() {
       {/* Admin - create/manage events. No relation to the anonymous participant flow above. */}
       <Route path="/admin/login" component={AdminLoginPage} />
       <Route path="/admin" component={AdminDashboardPage} />
-      <Route path="/admin/events/:eventId" component={AdminEventDetailPage} />
-      <Route path="/admin/competitions/:competitionId" component={AdminCompetitionDetailPage} />
+      <Route path="/admin/rooms/:competitionId" component={AdminLiveRoomPage} />
 
       <Route component={NotFound} />
     </Switch>

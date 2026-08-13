@@ -2,10 +2,13 @@ import { Router } from "express";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { AppError } from "../utils/errors.js";
 import { env } from "../config/env.js";
-import { changePasswordSchema, loginAdminSchema, registerAdminSchema } from "../schemas/authSchemas.js";
+import {
+  loginAdminSchema,
+  registerAdminSchema,
+} from "../schemas/authSchemas.js";
 import { AdminUserModel } from "../models/AdminUser.js";
 import { hashPassword, verifyPassword } from "../utils/password.js";
-import { signAdminToken, verifyAdminToken } from "../utils/jwt.js";
+import { signAdminToken } from "../utils/jwt.js";
 import { logger } from "../config/logger.js";
 
 export const authRoutes = Router();
@@ -36,7 +39,10 @@ authRoutes.post(
     const passwordHash = await hashPassword(input.password);
     const admin = await AdminUserModel.create({ username, passwordHash });
 
-    const token = signAdminToken({ sub: String(admin._id), username: admin.username });
+    const token = signAdminToken({
+      sub: String(admin._id),
+      username: admin.username,
+    });
     logger.info({ username: admin.username }, "admin account registered");
     res.status(201).json({ token, username: admin.username });
   }),
@@ -54,43 +60,10 @@ authRoutes.post(
       throw AppError.unauthorized("Invalid username or password");
     }
 
-    const token = signAdminToken({ sub: String(admin._id), username: admin.username });
+    const token = signAdminToken({
+      sub: String(admin._id),
+      username: admin.username,
+    });
     res.json({ token, username: admin.username });
-  }),
-);
-
-// POST /api/admin/auth/change-password - requires a valid admin session
-// (unlike register/login, which issue one). Re-verifies the current
-// password server-side rather than trusting the session alone, so a
-// hijacked-but-not-yet-expired token can't silently take over the account.
-authRoutes.post(
-  "/change-password",
-  asyncHandler(async (req, res) => {
-    const header = req.header("authorization");
-    const token = header?.startsWith("Bearer ") ? header.slice(7) : null;
-    if (!token) throw AppError.unauthorized("Missing admin session token");
-
-    let claims;
-    try {
-      claims = verifyAdminToken(token);
-    } catch {
-      throw AppError.unauthorized("Invalid or expired admin session, please log in again");
-    }
-
-    const input = changePasswordSchema.parse(req.body);
-    const admin = await AdminUserModel.findById(claims.sub);
-    if (!admin) throw AppError.unauthorized("Account no longer exists");
-
-    const valid = await verifyPassword(input.currentPassword, admin.passwordHash);
-    if (!valid) throw AppError.unauthorized("Current password is incorrect");
-
-    admin.passwordHash = await hashPassword(input.newPassword);
-    await admin.save();
-
-    logger.info({ username: admin.username }, "admin password changed");
-    // Issue a fresh token so the session keeps working without a re-login,
-    // consistent with register/login above.
-    const newToken = signAdminToken({ sub: String(admin._id), username: admin.username });
-    res.json({ token: newToken, username: admin.username });
   }),
 );

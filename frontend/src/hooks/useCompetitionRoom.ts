@@ -20,6 +20,7 @@ export function useCompetitionRoom(competitionId: string | undefined) {
     competitionId ? loadParticipantIdentity(competitionId) : null,
   );
   const [error, setError] = useState<string | null>(null);
+  const [cancelled, setCancelled] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {
@@ -30,10 +31,17 @@ export function useCompetitionRoom(competitionId: string | undefined) {
     const onRoomState = (payload: RoomStateSnapshot) => {
       if (payload.competitionId === competitionId) setRoom(payload);
     };
-    const onReconnected = (payload: { room: RoomStateSnapshot }) =>
-      setRoom(payload.room);
-    const onSocketError = (payload: SocketErrorPayload) =>
-      setError(payload.message);
+    const onReconnected = (payload: { room: RoomStateSnapshot }) => setRoom(payload.room);
+    const onSocketError = (payload: SocketErrorPayload) => setError(payload.message);
+    // The scheduler (services/eventScheduler.ts) sends this if a scheduled
+    // event's start time arrives without enough participants having
+    // joined - the room this participant is waiting in gets called off.
+    const onCancelled = (payload: { competitionId: string; reason: string }) => {
+      if (payload.competitionId === competitionId) {
+        setCancelled(payload.reason);
+        clearParticipantIdentity(competitionId);
+      }
+    };
     const onConnect = () => {
       setConnected(true);
       // Rejoin the Socket.IO room after any reconnect (e.g. brief network drop).
@@ -44,6 +52,7 @@ export function useCompetitionRoom(competitionId: string | undefined) {
 
     socket.on("room:state", onRoomState);
     socket.on("competition:reconnected", onReconnected);
+    socket.on("competition:cancelled", onCancelled);
     socket.on("error", onSocketError);
     socket.on("connect", onConnect);
     socket.on("disconnect", onDisconnect);
@@ -57,6 +66,7 @@ export function useCompetitionRoom(competitionId: string | undefined) {
     return () => {
       socket.off("room:state", onRoomState);
       socket.off("competition:reconnected", onReconnected);
+      socket.off("competition:cancelled", onCancelled);
       socket.off("error", onSocketError);
       socket.off("connect", onConnect);
       socket.off("disconnect", onDisconnect);
@@ -88,7 +98,7 @@ export function useCompetitionRoom(competitionId: string | undefined) {
     clearParticipantIdentity(competitionId);
   }, [competitionId, identity]);
 
-  return { room, identity, error, connected, submitScore, leave, setError };
+  return { room, identity, error, cancelled, connected, submitScore, leave, setError };
 }
 
 /** One-shot join flow used from the event lobby / join screen. */
@@ -97,53 +107,46 @@ export function useJoinCompetition() {
   const [error, setError] = useState<string | null>(null);
   const pendingRef = useRef(false);
 
-  const join = useCallback(
-    (eventId: string, displayName: string): Promise<JoinedAckPayload> => {
-      return new Promise((resolve, reject) => {
-        if (pendingRef.current) return;
-        pendingRef.current = true;
-        setJoining(true);
-        setError(null);
+  const join = useCallback((eventId: string, displayName: string): Promise<JoinedAckPayload> => {
+    return new Promise((resolve, reject) => {
+      if (pendingRef.current) return;
+      pendingRef.current = true;
+      setJoining(true);
+      setError(null);
 
-        const socket = getCompetitionSocket();
+      const socket = getCompetitionSocket();
 
-        const cleanup = () => {
-          socket.off("competition:joined", onJoined);
-          socket.off("error", onError);
-          pendingRef.current = false;
-          setJoining(false);
-        };
+      const cleanup = () => {
+        socket.off("competition:joined", onJoined);
+        socket.off("error", onError);
+        pendingRef.current = false;
+        setJoining(false);
+      };
 
-        const onJoined = (payload: JoinedAckPayload) => {
-          cleanup();
-          saveParticipantIdentity({
-            competitionId: payload.competitionId,
-            participantId: payload.participantId,
-            participantToken: payload.participantToken,
-          });
-          resolve(payload);
-        };
-
-        const onError = (payload: SocketErrorPayload) => {
-          cleanup();
-          setError(payload.message);
-          reject(new Error(payload.message));
-        };
-
-        socket.on("competition:joined", onJoined);
-        socket.on("error", onError);
-        // deviceId lets the backend recognize repeat join attempts from this
-        // browser and reattach to the existing seat instead of creating a
-        // duplicate participant - see lib/deviceId.ts.
-        socket.emit("competition:join", {
-          eventId,
-          displayName,
-          deviceId: getDeviceId(),
+      const onJoined = (payload: JoinedAckPayload) => {
+        cleanup();
+        saveParticipantIdentity({
+          competitionId: payload.competitionId,
+          participantId: payload.participantId,
+          participantToken: payload.participantToken,
         });
-      });
-    },
-    [],
-  );
+        resolve(payload);
+      };
+
+      const onError = (payload: SocketErrorPayload) => {
+        cleanup();
+        setError(payload.message);
+        reject(new Error(payload.message));
+      };
+
+      socket.on("competition:joined", onJoined);
+      socket.on("error", onError);
+      // deviceId lets the backend recognize repeat join attempts from this
+      // browser and reattach to the existing seat instead of creating a
+      // duplicate participant - see lib/deviceId.ts.
+      socket.emit("competition:join", { eventId, displayName, deviceId: getDeviceId() });
+    });
+  }, []);
 
   return { join, joining, error };
 }

@@ -16,6 +16,8 @@ import {
 } from "../services/competitionService.js";
 import { competitionEngine } from "../services/competitionEngine.js";
 import { AppError } from "../utils/errors.js";
+import { verifyAdminToken } from "../utils/jwt.js";
+import { z } from "zod";
 
 interface SocketSession {
   competitionId?: string;
@@ -49,6 +51,15 @@ function sendError(socket: Socket, err: unknown) {
     socket.emit("error", { code: "INTERNAL", message: "Something went wrong. Please try again." });
   }
 }
+
+const spectateSchema = z.object({
+  competitionId: z.string().trim().min(1),
+  adminToken: z.string().trim().min(1),
+});
+
+const eventWatchSchema = z.object({
+  eventId: z.string().trim().min(1),
+});
 
 export function registerSocketHandlers(io: Server): void {
   competitionEngine.attach(io);
@@ -117,6 +128,47 @@ export function registerSocketHandlers(io: Server): void {
       } catch (err) {
         sendError(socket, err);
       }
+    });
+
+    // Admin dashboard "watch live" view - joins the same Socket.IO room as
+    // participants so it receives every room:state broadcast the engine
+    // already sends, but is never added to the competition's participant
+    // list (see competitionService.joinEvent) - purely read-only, doesn't
+    // occupy a seat and can't submit scores.
+    socket.on("admin:spectate", async (payload) => {
+      try {
+        const input = spectateSchema.parse(payload);
+        try {
+          verifyAdminToken(input.adminToken);
+        } catch {
+          throw AppError.unauthorized("Invalid or expired admin session, please log in again");
+        }
+
+        const room = await getRoomSnapshot(input.competitionId);
+        if (!room) throw AppError.notFound("Competition room not found");
+
+        socket.join(input.competitionId);
+        socket.emit("admin:spectating", { room });
+      } catch (err) {
+        sendError(socket, err);
+      }
+    });
+
+    // Public join/results pages subscribe to a scheduled event's phase
+    // (registration opens/closes, goes live, gets cancelled) so their
+    // countdowns update the moment services/eventScheduler.ts broadcasts a
+    // transition, instead of waiting on a poll. Read-only, no auth needed -
+    // this is the same information the public GET /api/events/:id returns.
+    socket.on("event:watch", (payload) => {
+      const input = eventWatchSchema.safeParse(payload);
+      if (!input.success) return;
+      socket.join(`event:${input.data.eventId}`);
+    });
+
+    socket.on("event:unwatch", (payload) => {
+      const input = eventWatchSchema.safeParse(payload);
+      if (!input.success) return;
+      socket.leave(`event:${input.data.eventId}`);
     });
 
     socket.on("disconnect", async () => {

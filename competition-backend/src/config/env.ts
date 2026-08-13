@@ -43,6 +43,15 @@ const envSchema = z.object({
   // stuffing / brute force on the admin login form.
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(10),
   AUTH_RATE_LIMIT_WINDOW_MINUTES: z.coerce.number().int().min(1).default(15),
+
+  // How often (ms) the event scheduler worker re-derives "what phase should
+  // each scheduled event be in right now" from its stored timestamps. See
+  // services/eventScheduler.ts. Kept well under a minute so a registration
+  // window or start time is never missed by more than a few seconds.
+  SCHEDULER_TICK_MS: z.coerce.number().int().min(1000).default(5000),
+  // Default IANA zone applied to a scheduled event when the admin doesn't
+  // pick one explicitly - matches this deployment's primary audience.
+  EVENT_TIMEZONE_DEFAULT: z.string().default("Asia/Kolkata"),
 });
 
 const parsed = envSchema.safeParse(process.env);

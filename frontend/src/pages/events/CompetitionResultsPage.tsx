@@ -13,19 +13,13 @@ export function CompetitionResultsPage() {
   const competitionId = params?.competitionId;
 
   const { room, identity } = useCompetitionRoom(competitionId);
-  const [finalResults, setFinalResults] = useState<FinalResultEntry[] | null>(
-    null,
-  );
+  const [finalResults, setFinalResults] = useState<FinalResultEntry[] | null>(null);
 
   useEffect(() => {
     if (!competitionId) return;
     const socket = getCompetitionSocket();
-    const onCompleted = (payload: {
-      competitionId: string;
-      finalResults: FinalResultEntry[];
-    }) => {
-      if (payload.competitionId === competitionId)
-        setFinalResults(payload.finalResults);
+    const onCompleted = (payload: { competitionId: string; finalResults: FinalResultEntry[] }) => {
+      if (payload.competitionId === competitionId) setFinalResults(payload.finalResults);
     };
     socket.on("competition:completed", onCompleted);
     return () => {
@@ -48,9 +42,7 @@ export function CompetitionResultsPage() {
       : null);
 
   if (!match || !competitionId) {
-    return (
-      <div className="p-8 text-center text-destructive">Room not found.</div>
-    );
+    return <div className="p-8 text-center text-destructive">Room not found.</div>;
   }
 
   const podium = results?.slice(0, 3) ?? [];
@@ -141,9 +133,7 @@ export function CompetitionResultsPage() {
                         {entry.displayName}
                         {isMe && <span className="text-primary"> (You)</span>}
                       </span>
-                      <span className="font-mono font-black">
-                        {entry.totalScore}
-                      </span>
+                      <span className="font-mono font-black">{entry.totalScore}</span>
                     </div>
                   );
                 })}

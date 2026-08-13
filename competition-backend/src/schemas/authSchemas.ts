@@ -16,12 +16,5 @@ export const loginAdminSchema = z.object({
   password: z.string().min(1, "Password is required"),
 });
 
-export const changePasswordSchema = z.object({
-  currentPassword: z.string().min(1, "Current password is required"),
-  newPassword: z.string().min(8, "New password must be at least 8 characters").max(100),
-});
-
-export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
-
 export type RegisterAdminInput = z.infer<typeof registerAdminSchema>;
 export type LoginAdminInput = z.infer<typeof loginAdminSchema>;

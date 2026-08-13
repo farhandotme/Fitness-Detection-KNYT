@@ -1,19 +1,7 @@
 import React, { useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Navbar } from "@/components/Navbar";
-import {
-  getAdminToken,
-  loginAdmin,
-  registerAdmin,
-  saveAdminSession,
-} from "@/lib/adminApi";
-import {
-  ArrowLeft,
-  AlertTriangle,
-  ShieldCheck,
-  LogIn,
-  UserPlus,
-} from "lucide-react";
+import { getAdminToken, loginAdmin, registerAdmin, saveAdminSession } from "@/lib/adminApi";
+import { ArrowLeft, AlertTriangle, Radio, LogIn, UserPlus } from "lucide-react";
 
 type Tab = "login" | "register";
 
@@ -56,10 +44,22 @@ export function AdminLoginPage() {
   };
 
   return (
-    <div className="min-h-dvh bg-background text-foreground">
-      <Navbar />
+    <div className="min-h-dvh bg-background text-foreground flex flex-col">
+      <header className="px-4 md:px-8 pt-6">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+            <Radio className="w-4 h-4 text-primary-foreground" />
+          </div>
+          <div>
+            <p className="font-display font-extrabold tracking-tight text-sm leading-none">KNYT Ops</p>
+            <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-muted-foreground mt-1">
+              Control Console
+            </p>
+          </div>
+        </div>
+      </header>
 
-      <main className="max-w-md mx-auto p-4 mt-10">
+      <main className="max-w-md w-full mx-auto p-4 mt-10 flex-1">
         <Link
           href="/events"
           className="inline-flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors mb-6"
@@ -69,10 +69,10 @@ export function AdminLoginPage() {
         </Link>
 
         <div className="bg-card border border-card-border rounded-4xl p-6 md:p-8 shadow-sm">
-          <div className="flex items-center gap-2 text-primary text-xs uppercase tracking-[.2em] font-bold mb-4">
-            <ShieldCheck className="w-4 h-4" /> Admin access
+          <div className="flex items-center gap-2 text-primary text-[10px] font-mono uppercase tracking-[0.25em] font-bold mb-4">
+            <Radio className="w-3.5 h-3.5" /> Admin access
           </div>
-          <h1 className="text-2xl md:text-3xl font-black tracking-tighter mb-1">
+          <h1 className="font-display text-2xl md:text-3xl font-extrabold tracking-tight mb-1">
             {tab === "login" ? "Log in" : "Create an admin account"}
           </h1>
           <p className="text-sm text-muted-foreground mb-6">
@@ -89,9 +89,7 @@ export function AdminLoginPage() {
               onClick={() => setTab("login")}
               data-testid="tab-admin-login"
               className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-colors ${
-                tab === "login"
-                  ? "bg-foreground text-background"
-                  : "text-muted-foreground"
+                tab === "login" ? "bg-foreground text-background" : "text-muted-foreground"
               }`}
             >
               <LogIn className="w-3.5 h-3.5" /> Login
@@ -101,9 +99,7 @@ export function AdminLoginPage() {
               onClick={() => setTab("register")}
               data-testid="tab-admin-register"
               className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-colors ${
-                tab === "register"
-                  ? "bg-foreground text-background"
-                  : "text-muted-foreground"
+                tab === "register" ? "bg-foreground text-background" : "text-muted-foreground"
               }`}
             >
               <UserPlus className="w-3.5 h-3.5" /> Register
@@ -136,9 +132,7 @@ export function AdminLoginPage() {
                 className="w-full h-12 rounded-2xl border border-input bg-background px-4 font-semibold text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15"
               />
               {tab === "register" && (
-                <p className="text-xs text-muted-foreground mt-1.5">
-                  At least 8 characters.
-                </p>
+                <p className="text-xs text-muted-foreground mt-1.5">At least 8 characters.</p>
               )}
             </div>
 
@@ -160,9 +154,7 @@ export function AdminLoginPage() {
             {error && (
               <div className="bg-destructive/10 border border-destructive/30 rounded-2xl p-4 flex gap-2.5 items-start">
                 <AlertTriangle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
-                <p className="text-sm text-destructive font-semibold">
-                  {error}
-                </p>
+                <p className="text-sm text-destructive font-semibold">{error}</p>
               </div>
             )}
 
@@ -172,11 +164,7 @@ export function AdminLoginPage() {
               data-testid="button-admin-submit"
               className="w-full bg-primary text-primary-foreground py-4 rounded-2xl font-black uppercase tracking-wider hover:brightness-110 active:scale-[0.98] transition-all shadow-xl shadow-primary/20 disabled:opacity-50"
             >
-              {submitting
-                ? "Please wait..."
-                : tab === "login"
-                  ? "Log in"
-                  : "Create account"}
+              {submitting ? "Please wait..." : tab === "login" ? "Log in" : "Create account"}
             </button>
           </form>
         </div>

@@ -1,3 +1,32 @@
+export type SchedulingPhase =
+  | "DRAFT"
+  | "PUBLISHED"
+  | "REGISTRATION_OPEN"
+  | "REGISTRATION_CLOSED"
+  | "LIVE"
+  | "COMPLETED"
+  | "CANCELLED"
+  | "POSTPONED";
+
+export interface EventSchedulingPublic {
+  scheduledAt: string; // ISO UTC
+  registrationOpensAt: string;
+  registrationClosesAt: string;
+  timezone: string;
+  minParticipants: number;
+  onInsufficientParticipants: "cancel" | "postpone";
+  phase: SchedulingPhase;
+}
+
+export interface EventPhasePayload {
+  eventId: string;
+  phase: SchedulingPhase;
+  serverNow: number;
+  scheduledAt: string | null;
+  registrationOpensAt: string | null;
+  registrationClosesAt: string | null;
+}
+
 export type CompetitionStatus =
   | "WAITING"
   | "FULL"

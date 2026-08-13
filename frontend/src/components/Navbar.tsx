@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Activity, Settings, ShieldCheck, Trophy } from "lucide-react";
+import { Activity, Settings, Trophy } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface NavbarProps {
@@ -8,8 +8,7 @@ interface NavbarProps {
 
 export function Navbar({ onSettingsClick }: NavbarProps) {
   const [location] = useLocation();
-  const isEvents =
-    location.startsWith("/events") || location.startsWith("/competitions");
+  const isEvents = location.startsWith("/events") || location.startsWith("/competitions");
 
   return (
     <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-xl border-b border-border p-4">
@@ -41,19 +40,6 @@ export function Navbar({ onSettingsClick }: NavbarProps) {
           >
             <Trophy className="w-4 h-4" />
             Events
-          </Link>
-          <Link
-            href="/admin"
-            data-testid="link-nav-admin"
-            title="Admin"
-            className={cn(
-              "flex items-center gap-2 px-3 py-2.5 rounded-full text-sm font-bold uppercase tracking-wider transition-colors",
-              location.startsWith("/admin")
-                ? "bg-foreground text-background shadow-lg"
-                : "bg-secondary/70 text-muted-foreground hover:bg-secondary",
-            )}
-          >
-            <ShieldCheck className="w-4 h-4" />
           </Link>
           {onSettingsClick && (
             <button

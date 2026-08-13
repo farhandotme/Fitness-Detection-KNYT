@@ -66,23 +66,6 @@ const competitionSchema = new Schema(
     rounds: { type: [roundSchema], default: [] },
     finalResults: { type: [finalResultSchema], default: [] },
     completedAt: { type: Date },
-
-    // Persisted mirror of competitionEngine's in-memory phase timings.
-    // While the process is up, the engine's own Map is what's actually
-    // driving timers - these fields exist so (a) admin views can show
-    // "this room's break ends at X" without reaching into engine internals,
-    // and (b) `competitionEngine.recoverInFlight()` can re-arm a timer for
-    // the remaining time (or fire the overdue transition immediately) after
-    // a restart, instead of every in-progress room being stranded forever.
-    countdownEndAt: { type: Date },
-    roundStartAt: { type: Date },
-    roundEndAt: { type: Date },
-    breakEndAt: { type: Date },
-
-    // Set when an admin force-ends a stuck/problem room via
-    // POST /api/admin/competitions/:id/abandon.
-    abandonedAt: { type: Date },
-    abandonReason: { type: String },
   },
   { timestamps: true },
 );
@@ -91,8 +74,6 @@ competitionSchema.index({ eventId: 1, status: 1 });
 // Used to look up "does this device already have an active seat in this event"
 // so the same person can't grab multiple of a room's 5 slots (competitionService.joinEvent).
 competitionSchema.index({ eventId: 1, status: 1, "participants.deviceIdHash": 1 });
-// Admin room-monitor / event-detail listings: newest first, optionally by status.
-competitionSchema.index({ status: 1, createdAt: -1 });
 
 export type CompetitionDoc = InferSchemaType<typeof competitionSchema> & { _id: Types.ObjectId };
 export const CompetitionModel = model("Competition", competitionSchema);

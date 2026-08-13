@@ -2,14 +2,7 @@ import React, { useEffect } from "react";
 import { useRoute, useLocation, Link } from "wouter";
 import { Navbar } from "@/components/Navbar";
 import { useCompetitionRoom } from "@/hooks/useCompetitionRoom";
-import {
-  Users,
-  Wifi,
-  WifiOff,
-  LogOut,
-  AlertTriangle,
-  User as UserIcon,
-} from "lucide-react";
+import { Users, Wifi, WifiOff, LogOut, AlertTriangle, User as UserIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function WaitingRoomPage() {
@@ -17,8 +10,7 @@ export function WaitingRoomPage() {
   const [, setLocation] = useLocation();
   const competitionId = params?.competitionId;
 
-  const { room, identity, error, connected, leave } =
-    useCompetitionRoom(competitionId);
+  const { room, identity, error, cancelled, connected, leave } = useCompetitionRoom(competitionId);
 
   // No stored identity for this room means the user landed here directly
   // (e.g. a stale link or refresh after clearing storage) - send them to join properly.
@@ -41,17 +33,33 @@ export function WaitingRoomPage() {
   }, [room, setLocation]);
 
   if (!match || !competitionId) {
+    return <div className="p-8 text-center text-destructive">Room not found.</div>;
+  }
+
+  if (cancelled) {
     return (
-      <div className="p-8 text-center text-destructive">Room not found.</div>
+      <div className="min-h-dvh bg-background text-foreground">
+        <Navbar />
+        <main className="max-w-2xl mx-auto p-4 mt-6">
+          <div className="bg-card border border-card-border rounded-4xl p-6 md:p-8 shadow-sm text-center">
+            <AlertTriangle className="w-10 h-10 text-destructive mx-auto mb-4" />
+            <h1 className="text-2xl font-black tracking-tight mb-2">Event cancelled</h1>
+            <p className="text-muted-foreground mb-8">{cancelled}</p>
+            <Link
+              href="/events"
+              className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-6 py-3 rounded-2xl font-black uppercase tracking-wider hover:brightness-110 transition-all"
+            >
+              Browse other events
+            </Link>
+          </div>
+        </main>
+      </div>
     );
   }
 
   const filledSeats = room?.participants.length ?? 0;
   const totalSeats = room?.maxParticipants ?? 5;
-  const seats = Array.from(
-    { length: totalSeats },
-    (_, i) => room?.participants[i] ?? null,
-  );
+  const seats = Array.from({ length: totalSeats }, (_, i) => room?.participants[i] ?? null);
 
   return (
     <div className="min-h-dvh bg-background text-foreground">
@@ -67,11 +75,7 @@ export function WaitingRoomPage() {
 
         <div className="bg-card border border-card-border rounded-4xl p-6 md:p-8 shadow-sm text-center">
           <div className="flex items-center justify-center gap-2 text-xs font-bold uppercase tracking-[.2em] text-primary mb-3">
-            {connected ? (
-              <Wifi className="w-4 h-4" />
-            ) : (
-              <WifiOff className="w-4 h-4 text-destructive" />
-            )}
+            {connected ? <Wifi className="w-4 h-4" /> : <WifiOff className="w-4 h-4 text-destructive" />}
             {connected ? "Connected" : "Reconnecting..."}
           </div>
 
@@ -109,9 +113,7 @@ export function WaitingRoomPage() {
                 <div
                   className={cn(
                     "w-9 h-9 rounded-full flex items-center justify-center shrink-0",
-                    participant
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-secondary text-muted-foreground",
+                    participant ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground",
                   )}
                 >
                   <UserIcon className="w-4 h-4" />
@@ -128,9 +130,7 @@ export function WaitingRoomPage() {
                   {participant && (
                     <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
                       {participant.connected ? "Ready" : "Reconnecting"}
-                      {participant.participantId === identity?.participantId
-                        ? " · You"
-                        : ""}
+                      {participant.participantId === identity?.participantId ? " · You" : ""}
                     </p>
                   )}
                 </div>

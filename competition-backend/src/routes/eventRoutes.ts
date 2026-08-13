@@ -30,6 +30,21 @@ eventRoutes.get(
         breakDurationSeconds: event.breakDurationSeconds,
         maxParticipants: event.maxParticipants,
         description: event.description,
+        scheduling: event.scheduling
+          ? {
+              scheduledAt: event.scheduling.scheduledAt.toISOString(),
+              registrationOpensAt:
+                event.scheduling.registrationOpensAt.toISOString(),
+              registrationClosesAt:
+                event.scheduling.registrationClosesAt.toISOString(),
+              timezone: event.scheduling.timezone,
+              minParticipants: event.scheduling.minParticipants,
+              onInsufficientParticipants:
+                event.scheduling.onInsufficientParticipants,
+              phase: event.scheduling.phase,
+            }
+          : undefined,
+        serverNow: Date.now(),
       },
     });
   }),

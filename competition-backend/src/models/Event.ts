@@ -1,5 +1,42 @@
 import { Schema, model, type InferSchemaType } from "mongoose";
 
+// Fine-grained lifecycle for *scheduled* events only (see `scheduling`
+// below). Plain immediate-start events never touch this - they just flip
+// the top-level `status` between draft/live/closed as they always have.
+export const SCHEDULING_PHASES = [
+  "DRAFT",
+  "PUBLISHED",
+  "REGISTRATION_OPEN",
+  "REGISTRATION_CLOSED",
+  "LIVE",
+  "COMPLETED",
+  "CANCELLED",
+  "POSTPONED",
+] as const;
+
+const schedulingSchema = new Schema(
+  {
+    // All three are absolute UTC instants - the admin enters wall-clock
+    // time + an IANA zone, and the API layer (see schemas/eventSchemas.ts)
+    // converts that to UTC once, at creation time, using utils/timezone.ts.
+    scheduledAt: { type: Date, required: true },
+    registrationOpensAt: { type: Date, required: true },
+    registrationClosesAt: { type: Date, required: true },
+    // Display-only after creation (the UTC fields above are what the
+    // scheduler actually compares against) but kept so the admin UI and
+    // participant-facing pages can render times back in the zone the event
+    // was created in, e.g. "7:00 PM IST" instead of a raw UTC timestamp.
+    timezone: { type: String, required: true, default: "Asia/Kolkata" },
+    // How many participants must have joined by `scheduledAt` for the
+    // competition to actually start. Below this, the scheduler cancels
+    // (or postpones) the event instead of starting an under-filled room.
+    minParticipants: { type: Number, required: true, min: 1, max: 5, default: 2 },
+    onInsufficientParticipants: { type: String, enum: ["cancel", "postpone"], default: "cancel" },
+    phase: { type: String, enum: SCHEDULING_PHASES, default: "DRAFT" },
+  },
+  { _id: false },
+);
+
 const eventSchema = new Schema(
   {
     name: { type: String, required: true, trim: true, maxlength: 120 },
@@ -16,11 +53,21 @@ const eventSchema = new Schema(
     maxParticipants: { type: Number, required: true, min: 2, max: 5, default: 5 },
     status: { type: String, enum: ["draft", "live", "closed"], default: "live" },
     description: { type: String, default: "" },
+    // Optional cover image shown on event cards (join screen + admin
+    // dashboard). Just a URL - no upload/storage pipeline in v1, matching
+    // how lean the rest of the anonymous-participant system is kept.
+    imageUrl: { type: String, default: "" },
+    // Absent entirely for a normal "starts as soon as a room fills" event -
+    // that keeps every existing event working exactly as before. Present
+    // only for events created with a scheduled start; see
+    // services/eventScheduler.ts for the worker that drives `phase` forward.
+    scheduling: { type: schedulingSchema, required: false, default: undefined },
   },
   { timestamps: true },
 );
 
 eventSchema.index({ status: 1, createdAt: -1 });
+eventSchema.index({ "scheduling.scheduledAt": 1, "scheduling.phase": 1 });
 
 export type EventDoc = InferSchemaType<typeof eventSchema>;
 export const EventModel = model("Event", eventSchema);
