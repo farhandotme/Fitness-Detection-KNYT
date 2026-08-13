@@ -1,11 +1,25 @@
+# Local/dev convenience compose - just the detection backend. For the full
+# production stack (mongo, redis, competition-backend, frontend, with
+# healthchecks/secrets validation/etc.) see docker-compose.prod.yml and
+# PRODUCTION.md at the repo root.
 services:
-  backend:
-    build:
-      context: ./detection-backend
-    container_name: knyt-fitness-backend
-    ports:
-      - "8000:8000"
+  # backend:
+  #   build:
+  #     context: ./detection-backend
+  #   container_name: knyt-fitness-backend
+  #   ports:
+  #     - "8000:8000"
+  #   restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis_cache
     restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --requirepass YourSecurePasswordHere --appendonly yes
+    volumes:
+      - redis_data:/data
 
   # frontend:
   #   build:
@@ -22,3 +36,7 @@ services:
   #   depends_on:
   #     - backend
   #   restart: unless-stopped
+
+volumes:
+  redis_data:
+    driver: local
