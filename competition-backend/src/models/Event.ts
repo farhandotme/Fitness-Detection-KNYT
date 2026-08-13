@@ -38,11 +38,47 @@ const eventSchema = new Schema(
       default: "live",
     },
     description: { type: String, default: "" },
+    imageUrl: { type: String, default: "" },
+
+    eventType: {
+      type: String,
+      enum: ["instant", "scheduled"],
+      default: "instant",
+    },
+    timezone: { type: String, default: "Asia/Kolkata" },
+    scheduledAt: { type: Date },
+    registrationOpensAt: { type: Date },
+    registrationClosesAt: { type: Date },
+    minParticipants: { type: Number, min: 1, max: 5, default: 2 },
+    onInsufficientParticipants: {
+      type: String,
+      enum: ["cancel", "postpone"],
+      default: "cancel",
+    },
+    scheduleStatus: {
+      type: String,
+      enum: [
+        "DRAFT",
+        "PUBLISHED",
+        "REGISTRATION_OPEN",
+        "REGISTRATION_CLOSED",
+        "LIVE",
+        "COMPLETED",
+        "CANCELLED",
+        "POSTPONED",
+      ],
+      default: "DRAFT",
+    },
   },
   { timestamps: true },
 );
 
 eventSchema.index({ status: 1, createdAt: -1 });
+// Scheduler worker's core query pattern: "find scheduled events sitting in
+// scheduleStatus X whose trigger timestamp has arrived".
+eventSchema.index({ eventType: 1, scheduleStatus: 1, registrationOpensAt: 1 });
+eventSchema.index({ eventType: 1, scheduleStatus: 1, registrationClosesAt: 1 });
+eventSchema.index({ eventType: 1, scheduleStatus: 1, scheduledAt: 1 });
 
 export type EventDoc = InferSchemaType<typeof eventSchema>;
 export const EventModel = model("Event", eventSchema);
