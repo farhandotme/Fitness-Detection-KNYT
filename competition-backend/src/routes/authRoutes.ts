@@ -2,11 +2,7 @@ import { Router } from "express";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { AppError } from "../utils/errors.js";
 import { env } from "../config/env.js";
-import {
-  changePasswordSchema,
-  loginAdminSchema,
-  registerAdminSchema,
-} from "../schemas/authSchemas.js";
+import { changePasswordSchema, loginAdminSchema, registerAdminSchema } from "../schemas/authSchemas.js";
 import { AdminUserModel } from "../models/AdminUser.js";
 import { hashPassword, verifyPassword } from "../utils/password.js";
 import { signAdminToken, verifyAdminToken } from "../utils/jwt.js";
@@ -40,10 +36,7 @@ authRoutes.post(
     const passwordHash = await hashPassword(input.password);
     const admin = await AdminUserModel.create({ username, passwordHash });
 
-    const token = signAdminToken({
-      sub: String(admin._id),
-      username: admin.username,
-    });
+    const token = signAdminToken({ sub: String(admin._id), username: admin.username });
     logger.info({ username: admin.username }, "admin account registered");
     res.status(201).json({ token, username: admin.username });
   }),
@@ -61,10 +54,7 @@ authRoutes.post(
       throw AppError.unauthorized("Invalid username or password");
     }
 
-    const token = signAdminToken({
-      sub: String(admin._id),
-      username: admin.username,
-    });
+    const token = signAdminToken({ sub: String(admin._id), username: admin.username });
     res.json({ token, username: admin.username });
   }),
 );
@@ -84,19 +74,14 @@ authRoutes.post(
     try {
       claims = verifyAdminToken(token);
     } catch {
-      throw AppError.unauthorized(
-        "Invalid or expired admin session, please log in again",
-      );
+      throw AppError.unauthorized("Invalid or expired admin session, please log in again");
     }
 
     const input = changePasswordSchema.parse(req.body);
     const admin = await AdminUserModel.findById(claims.sub);
     if (!admin) throw AppError.unauthorized("Account no longer exists");
 
-    const valid = await verifyPassword(
-      input.currentPassword,
-      admin.passwordHash,
-    );
+    const valid = await verifyPassword(input.currentPassword, admin.passwordHash);
     if (!valid) throw AppError.unauthorized("Current password is incorrect");
 
     admin.passwordHash = await hashPassword(input.newPassword);
@@ -105,10 +90,7 @@ authRoutes.post(
     logger.info({ username: admin.username }, "admin password changed");
     // Issue a fresh token so the session keeps working without a re-login,
     // consistent with register/login above.
-    const newToken = signAdminToken({
-      sub: String(admin._id),
-      username: admin.username,
-    });
+    const newToken = signAdminToken({ sub: String(admin._id), username: admin.username });
     res.json({ token: newToken, username: admin.username });
   }),
 );

@@ -9,8 +9,5 @@ export const authRateLimiter = rateLimit({
   max: env.AUTH_RATE_LIMIT_MAX,
   standardHeaders: true,
   legacyHeaders: false,
-  message: {
-    code: "RATE_LIMITED",
-    message: "Too many attempts, please try again later.",
-  },
+  message: { code: "RATE_LIMITED", message: "Too many attempts, please try again later." },
 });
