@@ -20,19 +20,6 @@ interface RoomTimings {
   breakEndAt: number | null;
 }
 
-/**
- * Owns every room's lifecycle timers and is the single place that decides
- * "what time is it in this competition". Clients only ever render countdowns
- * against the timestamps this engine hands out - they never invent their own
- * start time - which is what keeps every participant's screen in sync
- * regardless of individual network latency.
- *
- * v1 scope: timers live in this process's memory. That's fine for a single
- * Node instance (as specified for the first version). Scaling to multiple
- * competition-backend instances later would move this to a shared scheduler
- * (e.g. Redis-backed job queue) keyed by competitionId so any instance can
- * pick up the next transition.
- */
 class CompetitionEngine {
   private io: Server | null = null;
   private timers = new Map<string, ReturnType<typeof setTimeout>>();

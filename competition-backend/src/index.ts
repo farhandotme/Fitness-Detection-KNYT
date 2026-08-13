@@ -34,10 +34,6 @@ async function main() {
     shuttingDown = true;
     logger.info({ signal }, "shutting down");
 
-    // Give in-flight requests/sockets a bounded window to finish instead of
-    // hanging forever if something (e.g. a stuck Mongo call) never resolves -
-    // orchestrators (Docker, k8s) send SIGKILL after their own grace period
-    // anyway, so this just makes sure we exit cleanly before that happens.
     const forceExit = setTimeout(() => {
       logger.warn("graceful shutdown timed out, forcing exit");
       process.exit(1);
