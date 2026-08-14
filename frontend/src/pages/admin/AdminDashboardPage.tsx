@@ -18,10 +18,7 @@ import {
   updateAdminEvent,
 } from "@/lib/adminApi";
 import { getScheduleStatus } from "@/utils/eventSchedule";
-import {
-  formatInTimeZone,
-  formatTimeOnlyInTimeZone,
-} from "@/utils/formatTime";
+import { formatInTimeZone, formatTimeOnlyInTimeZone } from "@/utils/formatTime";
 import {
   AlertTriangle,
   Image as ImageIcon,
@@ -514,7 +511,10 @@ function EventCard({
 
   return (
     <div className="bg-card border border-card-border rounded-3xl overflow-hidden flex flex-col">
-      <Link href={`/admin/events/${event._id}`} className="h-28 relative bg-secondary/40 overflow-hidden block group">
+      <Link
+        href={`/admin/events/${event._id}`}
+        className="h-28 relative bg-secondary/40 overflow-hidden block group"
+      >
         {event.imageUrl ? (
           <img
             src={event.imageUrl}
@@ -789,7 +789,10 @@ function CreateEventView({
 
   const existingEnd =
     existingSchedule && existingSchedule.scheduledEndAt
-      ? utcToLocalParts(existingSchedule.scheduledEndAt, existingSchedule.timezone)
+      ? utcToLocalParts(
+          existingSchedule.scheduledEndAt,
+          existingSchedule.timezone,
+        )
       : null;
 
   const [isScheduled, setIsScheduled] = useState(Boolean(existingSchedule));
@@ -1224,8 +1227,8 @@ function CreateEventView({
                   </Field>
                 </div>
                 <p className="text-[11px] text-muted-foreground">
-                  When the event is expected to wrap up - shown to
-                  participants as "{scheduleTime || "7:00 PM"} -{" "}
+                  When the event is expected to wrap up - shown to participants
+                  as "{scheduleTime || "7:00 PM"} -{" "}
                   {scheduleEndTime || "11:00 PM"}". Doesn't cut rounds off
                   early.
                 </p>
