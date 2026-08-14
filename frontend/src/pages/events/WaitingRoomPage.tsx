@@ -1,8 +1,8 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useRoute, useLocation, Link } from "wouter";
 import { Navbar } from "@/components/Navbar";
 import { useCompetitionRoom } from "@/hooks/useCompetitionRoom";
-import { Users, Wifi, WifiOff, LogOut, AlertTriangle, User as UserIcon } from "lucide-react";
+import { Users, Wifi, WifiOff, LogOut, AlertTriangle, User as UserIcon, Lock, Globe } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function WaitingRoomPage() {
@@ -10,7 +10,8 @@ export function WaitingRoomPage() {
   const [, setLocation] = useLocation();
   const competitionId = params?.competitionId;
 
-  const { room, identity, error, cancelled, connected, leave } = useCompetitionRoom(competitionId);
+  const { room, identity, error, cancelled, closed, connected, leave } = useCompetitionRoom(competitionId);
+  const [confirmingLeave, setConfirmingLeave] = useState(false);
 
   // No stored identity for this room means the user landed here directly
   // (e.g. a stale link or refresh after clearing storage) - send them to join properly.
@@ -32,6 +33,47 @@ export function WaitingRoomPage() {
     }
   }, [room, setLocation]);
 
+  // Hitting the browser back button (or swipe-back) shouldn't silently
+  // abandon the seat - the backend now frees it after a short grace period
+  // either way, but that leaves everyone else staring at a "Reconnecting..."
+  // ghost for ~20s. Intercept back navigation and ask first; if they
+  // confirm, actually leave (so the seat opens up immediately) before
+  // letting the navigation go through.
+  useEffect(() => {
+    if (!identity) return;
+    // Push a throwaway history entry so the first back-press is ours to
+    // intercept instead of immediately leaving the page.
+    window.history.pushState(null, "", window.location.href);
+    const onPopState = () => {
+      setConfirmingLeave(true);
+      window.history.pushState(null, "", window.location.href);
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [identity]);
+
+  // Closing/refreshing the tab: browsers won't run a custom dialog anymore,
+  // but the built-in "Leave site?" prompt is still worth showing while a
+  // seat is being held.
+  useEffect(() => {
+    if (!identity) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [identity]);
+
+  const confirmLeave = () => {
+    leave();
+    setConfirmingLeave(false);
+    setLocation("/events");
+  };
+
+  const myParticipant = room?.participants.find((p) => p.participantId === identity?.participantId);
+  const isHost = myParticipant?.isHost === true;
+
   if (!match || !competitionId) {
     return <div className="p-8 text-center text-destructive">Room not found.</div>;
   }
@@ -45,6 +87,29 @@ export function WaitingRoomPage() {
             <AlertTriangle className="w-10 h-10 text-destructive mx-auto mb-4" />
             <h1 className="text-2xl font-black tracking-tight mb-2">Event cancelled</h1>
             <p className="text-muted-foreground mb-8">{cancelled}</p>
+            <Link
+              href="/events"
+              className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-6 py-3 rounded-2xl font-black uppercase tracking-wider hover:brightness-110 transition-all"
+            >
+              Browse other events
+            </Link>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  // The host (whoever created this room) left or disconnected for good, so
+  // the whole room was torn down server-side - see useCompetitionRoom.ts.
+  if (closed) {
+    return (
+      <div className="min-h-dvh bg-background text-foreground">
+        <Navbar />
+        <main className="max-w-2xl mx-auto p-4 mt-6">
+          <div className="bg-card border border-card-border rounded-4xl p-6 md:p-8 shadow-sm text-center">
+            <AlertTriangle className="w-10 h-10 text-destructive mx-auto mb-4" />
+            <h1 className="text-2xl font-black tracking-tight mb-2">Room closed</h1>
+            <p className="text-muted-foreground mb-8">{closed}</p>
             <Link
               href="/events"
               className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-6 py-3 rounded-2xl font-black uppercase tracking-wider hover:brightness-110 transition-all"
@@ -80,8 +145,30 @@ export function WaitingRoomPage() {
           </div>
 
           <h1 className="text-2xl md:text-3xl font-black tracking-tight mb-1">
-            {room?.eventName ?? "Loading room..."}
+            {room?.roomName ?? "Loading room..."}
           </h1>
+          {room && (
+            <div className="flex items-center justify-center gap-2 mb-2">
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full",
+                  room.visibility === "private"
+                    ? "bg-secondary text-muted-foreground"
+                    : "bg-primary/15 text-primary",
+                )}
+              >
+                {room.visibility === "private" ? (
+                  <Lock className="w-3 h-3" />
+                ) : (
+                  <Globe className="w-3 h-3" />
+                )}
+                {room.visibility}
+              </span>
+              <span className="text-xs text-muted-foreground font-medium">
+                {room.eventName}
+              </span>
+            </div>
+          )}
           <p className="text-muted-foreground mb-8">
             Waiting for players to fill the room
           </p>
@@ -130,6 +217,7 @@ export function WaitingRoomPage() {
                   {participant && (
                     <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
                       {participant.connected ? "Ready" : "Reconnecting"}
+                      {participant.isHost ? " · Host" : ""}
                       {participant.participantId === identity?.participantId ? " · You" : ""}
                     </p>
                   )}
@@ -139,10 +227,7 @@ export function WaitingRoomPage() {
           </div>
 
           <button
-            onClick={() => {
-              leave();
-              setLocation("/events");
-            }}
+            onClick={() => setConfirmingLeave(true)}
             data-testid="button-leave-waiting-room"
             className="inline-flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-muted-foreground hover:text-destructive transition-colors"
           >
@@ -159,6 +244,39 @@ export function WaitingRoomPage() {
           .
         </p>
       </main>
+
+      {confirmingLeave && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-card border border-card-border rounded-3xl p-6 md:p-8 max-w-sm w-full shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <div className="w-11 h-11 rounded-2xl bg-destructive/15 text-destructive flex items-center justify-center mb-4">
+              <LogOut className="w-5 h-5" />
+            </div>
+            <h2 className="text-lg font-black tracking-tight mb-1.5">
+              Leave this room?
+            </h2>
+            <p className="text-sm text-muted-foreground mb-6">
+              {isHost
+                ? "You created this room, so leaving will close it for everyone still in it - not just free your seat."
+                : "Your seat will open up for someone else, and you'll need to rejoin from the event page to get back in."}
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setConfirmingLeave(false)}
+                className="flex-1 py-3 rounded-2xl text-sm font-bold uppercase tracking-wider bg-secondary text-foreground hover:bg-secondary/80 transition-colors"
+              >
+                Stay
+              </button>
+              <button
+                onClick={confirmLeave}
+                data-testid="button-confirm-leave-waiting-room"
+                className="flex-1 py-3 rounded-2xl text-sm font-black uppercase tracking-wider bg-destructive text-destructive-foreground hover:brightness-110 transition-all"
+              >
+                Leave
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
