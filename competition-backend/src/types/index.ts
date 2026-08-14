@@ -10,6 +10,7 @@ export type SchedulingPhase =
 
 export interface EventSchedulingPublic {
   scheduledAt: string; // ISO UTC
+  scheduledEndAt?: string; // ISO UTC - optional, display-only
   registrationOpensAt: string;
   registrationClosesAt: string;
   timezone: string;
@@ -43,6 +44,8 @@ export interface ParticipantPublic {
   participantId: string;
   displayName: string;
   connected: boolean;
+  // Whether this participant created the room. See models/Competition.ts.
+  isHost: boolean;
 }
 
 export interface LeaderboardEntry {
@@ -52,10 +55,14 @@ export interface LeaderboardEntry {
   rank: number;
 }
 
+export type RoomVisibility = "public" | "private";
+
 export interface RoomStateSnapshot {
   competitionId: string;
   eventId: string;
   eventName: string;
+  roomName: string;
+  visibility: RoomVisibility;
   exerciseId: string;
   exerciseMode: ExerciseMode;
   status: CompetitionStatus;
@@ -81,13 +88,38 @@ export interface FinalResultEntry {
   perRound: { round: number; score: number }[];
 }
 
+// A room in the browse/lobby list for an event - before anyone has joined
+// it. Participant names are only included for public rooms; private rooms
+// only reveal who's inside after the correct password is supplied (see
+// POST /api/events/:eventId/rooms/:competitionId/reveal).
+export interface RoomListEntry {
+  competitionId: string;
+  roomName: string;
+  visibility: RoomVisibility;
+  status: CompetitionStatus;
+  participantCount: number;
+  maxParticipants: number;
+  participantNames?: string[];
+  createdAt: string;
+}
+
 // ---- Client -> Server socket payloads ----
 
-export interface JoinCompetitionPayload {
+export interface CreateRoomPayload {
   eventId: string;
+  roomName: string;
+  visibility: RoomVisibility;
+  password?: string;
   displayName: string;
   // Stable per-browser id (see frontend src/lib/deviceId.ts) used to stop
-  // the same person from occupying multiple of a room's 5 seats.
+  // the same person from occupying multiple of a room's seats.
+  deviceId: string;
+}
+
+export interface JoinRoomPayload {
+  competitionId: string;
+  displayName: string;
+  password?: string;
   deviceId: string;
 }
 
