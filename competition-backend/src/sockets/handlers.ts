@@ -1,19 +1,20 @@
 import type { Server, Socket } from "socket.io";
 import { logger } from "../config/logger.js";
 import {
-  joinCompetitionSchema,
+  createRoomSchema,
+  joinRoomSchema,
   leaveCompetitionSchema,
   reconnectSchema,
   scoreUpdateSchema,
 } from "../schemas/socketSchemas.js";
 import {
   getRoomSnapshot,
-  joinEvent,
+  handleParticipantDisconnect,
   leaveCompetition,
-  markParticipantDisconnected,
   reconnectToCompetition,
   submitScore,
 } from "../services/competitionService.js";
+import { createRoom, joinRoom } from "../services/roomService.js";
 import { competitionEngine } from "../services/competitionEngine.js";
 import { AppError } from "../utils/errors.js";
 import { verifyAdminToken } from "../utils/jwt.js";
@@ -68,13 +69,34 @@ export function registerSocketHandlers(io: Server): void {
     sessions.set(socket, {});
     logger.debug({ socketId: socket.id }, "socket connected");
 
-    socket.on("competition:join", async (payload) => {
+    // A participant creating their own room from the event's lobby (see
+    // services/roomService.ts) - they're seated in it immediately.
+    socket.on("room:create", async (payload) => {
       try {
         if (isRateLimited(socket)) {
-          throw AppError.badRequest("Too many join attempts, please wait a moment and try again");
+          throw AppError.badRequest("Too many attempts, please wait a moment and try again");
         }
-        const input = joinCompetitionSchema.parse(payload);
-        const result = await joinEvent(input.eventId, input.displayName, input.deviceId);
+        const input = createRoomSchema.parse(payload);
+        const result = await createRoom(input);
+
+        socket.join(result.competitionId);
+        sessions.set(socket, { competitionId: result.competitionId, participantId: result.participantId });
+
+        socket.emit("competition:joined", result);
+      } catch (err) {
+        sendError(socket, err);
+      }
+    });
+
+    // A participant joining a specific room they picked from the lobby
+    // (public - no password, or private - correct password required).
+    socket.on("room:join", async (payload) => {
+      try {
+        if (isRateLimited(socket)) {
+          throw AppError.badRequest("Too many attempts, please wait a moment and try again");
+        }
+        const input = joinRoomSchema.parse(payload);
+        const result = await joinRoom(input);
 
         socket.join(result.competitionId);
         sessions.set(socket, { competitionId: result.competitionId, participantId: result.participantId });
@@ -119,11 +141,22 @@ export function registerSocketHandlers(io: Server): void {
     socket.on("competition:leave", async (payload) => {
       try {
         const input = leaveCompetitionSchema.parse(payload);
-        await leaveCompetition(input.competitionId, input.participantId, input.participantToken);
+        const result = await leaveCompetition(input.competitionId, input.participantId, input.participantToken);
         socket.leave(input.competitionId);
-        await competitionEngine.onParticipantCountChanged(input.competitionId);
-        const room = await getRoomSnapshot(input.competitionId);
-        if (room) io.to(input.competitionId).emit("room:state", room);
+
+        if (result.hostLeft) {
+          // The host owns this room - everyone still in it gets kicked out
+          // with an explicit reason instead of a generic state update.
+          io.to(input.competitionId).emit("room:closed", {
+            competitionId: input.competitionId,
+            reason: "The room was closed because the host left.",
+          });
+          io.in(input.competitionId).socketsLeave(input.competitionId);
+        } else {
+          await competitionEngine.onParticipantCountChanged(input.competitionId);
+          const room = await getRoomSnapshot(input.competitionId);
+          if (room) io.to(input.competitionId).emit("room:state", room);
+        }
         sessions.set(socket, {});
       } catch (err) {
         sendError(socket, err);
@@ -133,7 +166,7 @@ export function registerSocketHandlers(io: Server): void {
     // Admin dashboard "watch live" view - joins the same Socket.IO room as
     // participants so it receives every room:state broadcast the engine
     // already sends, but is never added to the competition's participant
-    // list (see competitionService.joinEvent) - purely read-only, doesn't
+    // list (see services/roomService.ts) - purely read-only, doesn't
     // occupy a seat and can't submit scores.
     socket.on("admin:spectate", async (payload) => {
       try {
@@ -174,10 +207,35 @@ export function registerSocketHandlers(io: Server): void {
     socket.on("disconnect", async () => {
       const session = sessions.get(socket);
       if (session?.competitionId && session.participantId) {
+        const { competitionId, participantId } = session;
         try {
-          await markParticipantDisconnected(session.competitionId, session.participantId);
-          const room = await getRoomSnapshot(session.competitionId);
-          if (room) io.to(session.competitionId).emit("room:state", room);
+          await handleParticipantDisconnect(
+            competitionId,
+            participantId,
+            async () => {
+              // Only fires if the grace period expires with no reconnect -
+              // the seat is actually freed at that point, so re-run the
+              // same "did this change the room" checks a normal leave
+              // triggers.
+              await competitionEngine.onParticipantCountChanged(competitionId);
+              const room = await getRoomSnapshot(competitionId);
+              if (room) io.to(competitionId).emit("room:state", room);
+            },
+            async () => {
+              // Only fires if the *host's* grace period expires with no
+              // reconnect - the room has just been destroyed, so kick
+              // everyone still in it out with an explicit reason.
+              io.to(competitionId).emit("room:closed", {
+                competitionId,
+                reason: "The room was closed because the host disconnected.",
+              });
+              io.in(competitionId).socketsLeave(competitionId);
+            },
+          );
+          // Broadcast the immediate "Reconnecting..." state too, so other
+          // participants see it without waiting for the grace period.
+          const room = await getRoomSnapshot(competitionId);
+          if (room) io.to(competitionId).emit("room:state", room);
         } catch (err) {
           logger.error({ err }, "error handling socket disconnect");
         }
