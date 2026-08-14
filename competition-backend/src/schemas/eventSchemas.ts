@@ -17,6 +17,10 @@ const localDateTimeString = z
 const schedulingInputSchema = z
   .object({
     scheduledAtLocal: localDateTimeString,
+    // Optional - when the event is expected to wrap up. Display-only (the
+    // scheduler doesn't force-stop rooms at this time), so it's not
+    // required the way the start time is.
+    scheduledEndAtLocal: localDateTimeString.optional(),
     registrationOpensAtLocal: localDateTimeString,
     registrationClosesAtLocal: localDateTimeString,
     timezone: z.string().trim().min(1).default(env.EVENT_TIMEZONE_DEFAULT),
@@ -27,10 +31,14 @@ const schedulingInputSchema = z
   })
   .transform((input, ctx) => {
     let scheduledAt: Date;
+    let scheduledEndAt: Date | undefined;
     let registrationOpensAt: Date;
     let registrationClosesAt: Date;
     try {
       scheduledAt = zonedTimeToUtc(input.scheduledAtLocal, input.timezone);
+      scheduledEndAt = input.scheduledEndAtLocal
+        ? zonedTimeToUtc(input.scheduledEndAtLocal, input.timezone)
+        : undefined;
       registrationOpensAt = zonedTimeToUtc(
         input.registrationOpensAtLocal,
         input.timezone,
@@ -62,9 +70,17 @@ const schedulingInputSchema = z
         path: ["registrationClosesAtLocal"],
       });
     }
+    if (scheduledEndAt && scheduledEndAt.getTime() <= scheduledAt.getTime()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "End time must be after the competition start time",
+        path: ["scheduledEndAtLocal"],
+      });
+    }
 
     return {
       scheduledAt,
+      scheduledEndAt,
       registrationOpensAt,
       registrationClosesAt,
       timezone: input.timezone,

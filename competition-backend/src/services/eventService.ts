@@ -6,6 +6,7 @@ import type { EventSchedulingPublic, SchedulingPhase } from "../types/index.js";
 
 interface SchedulingLike {
   scheduledAt: Date;
+  scheduledEndAt?: Date | null;
   registrationOpensAt: Date;
   registrationClosesAt: Date;
   timezone: string;
@@ -20,6 +21,9 @@ function toPublicScheduling(
   if (!scheduling) return undefined;
   return {
     scheduledAt: scheduling.scheduledAt.toISOString(),
+    scheduledEndAt: scheduling.scheduledEndAt
+      ? scheduling.scheduledEndAt.toISOString()
+      : undefined,
     registrationOpensAt: scheduling.registrationOpensAt.toISOString(),
     registrationClosesAt: scheduling.registrationClosesAt.toISOString(),
     timezone: scheduling.timezone,
@@ -137,8 +141,60 @@ export async function listLiveCompetitionsAdmin() {
     participantCount: r.participants.length,
     maxParticipants: r.maxParticipants,
     participantNames: r.participants.map((p) => p.displayName),
+    hostName: r.participants.find((p) => p.isHost)?.displayName ?? null,
     createdAt: r.createdAt,
   }));
+}
+
+/**
+ * Every room ever spawned under one event, oldest-first status untouched -
+ * for the admin's per-event "rooms" view (see routes/adminRoutes.ts GET
+ * /events/:id/rooms). Unlike listLiveCompetitionsAdmin this is scoped to a
+ * single event and includes finished/abandoned rooms too, since the admin
+ * wants the full history of who created what, not just what's live right
+ * now.
+ */
+export async function listRoomsForEventAdmin(eventId: string) {
+  const event = await EventModel.findById(eventId).lean();
+  if (!event) throw AppError.notFound("Event not found");
+
+  const rooms = await CompetitionModel.find({ eventId }).sort({ createdAt: -1 }).lean();
+
+  const RUNNING_STATUSES = new Set(["COUNTDOWN", "ROUND_RUNNING", "ROUND_FINISHED", "BREAK"]);
+  const OPEN_STATUSES = new Set(["WAITING", "FULL"]);
+
+  return {
+    event: {
+      id: String(event._id),
+      name: event.name,
+      exerciseName: event.exerciseName,
+      status: event.status,
+      maxParticipants: event.maxParticipants,
+    },
+    rooms: rooms.map((r) => {
+      const host = r.participants.find((p) => p.isHost);
+      let phase: "running" | "waiting" | "ended";
+      if (r.status === "COMPLETED" || r.status === "ABANDONED") phase = "ended";
+      else if (RUNNING_STATUSES.has(r.status)) phase = "running";
+      else phase = "waiting";
+
+      return {
+        competitionId: String(r._id),
+        roomName: r.roomName,
+        visibility: r.visibility,
+        status: r.status,
+        phase,
+        currentRound: r.currentRound,
+        totalRounds: r.totalRounds,
+        participantCount: r.participants.length,
+        maxParticipants: r.maxParticipants,
+        participantNames: r.participants.map((p) => p.displayName),
+        hostName: host?.displayName ?? null,
+        createdAt: r.createdAt,
+        completedAt: r.completedAt ?? null,
+      };
+    }),
+  };
 }
 
 export async function updateEventStatus(
@@ -200,22 +256,33 @@ export async function updateEvent(
 }
 
 /**
- * Permanently removes an event. Refuses while any of its competition rooms
- * are still in progress (WAITING/FULL/COUNTDOWN/... - anything short of
- * COMPLETED/ABANDONED) so an admin can't pull the rug out from under
- * players mid-match; finished rooms are untouched and keep their own copy
+ * Permanently removes an event. Refuses only while one of its competition
+ * rooms actually still has someone in it - an empty WAITING room (created
+ * the moment the first join attempt landed, then abandoned before it ever
+ * filled) isn't a competition "in progress" and shouldn't be able to block
+ * deletion forever; finished rooms are untouched and keep their own copy
  * of the event's name/settings for history (see models/Competition.ts), so
  * past results still render correctly after the event itself is gone.
  */
 export async function deleteEvent(eventId: string) {
-  const activeRooms = await CompetitionModel.countDocuments({
-    eventId,
-    status: { $nin: ["COMPLETED", "ABANDONED"] },
-  });
-  if (activeRooms > 0) {
+  const nonTerminalRooms = await CompetitionModel.find(
+    { eventId, status: { $nin: ["COMPLETED", "ABANDONED"] } },
+    { participants: 1 },
+  ).lean();
+
+  const occupiedRooms = nonTerminalRooms.filter((r) => r.participants.length > 0);
+  if (occupiedRooms.length > 0) {
     throw AppError.conflict(
       "This event has a competition in progress. Close it or wait for it to finish before deleting.",
     );
+  }
+
+  // Any empty non-terminal rooms just cleared to delete alongside the event -
+  // otherwise they'd linger as orphans pointing at a now-deleted eventId.
+  if (nonTerminalRooms.length > 0) {
+    await CompetitionModel.deleteMany({
+      _id: { $in: nonTerminalRooms.map((r) => r._id) },
+    });
   }
 
   const event = await EventModel.findByIdAndDelete(eventId);

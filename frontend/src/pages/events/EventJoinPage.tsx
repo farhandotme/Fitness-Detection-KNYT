@@ -2,7 +2,6 @@ import React, { useEffect, useState } from "react";
 import { useRoute, useLocation, Link } from "wouter";
 import { Navbar } from "@/components/Navbar";
 import { fetchEventDetail } from "@/lib/competitionApi";
-import { useJoinCompetition } from "@/hooks/useCompetitionRoom";
 import { useEventPhase } from "@/hooks/useEventPhase";
 import { getScheduleStatus } from "@/utils/eventSchedule";
 import type { EventDetail } from "@/types/competition";
@@ -15,9 +14,9 @@ import {
   Coffee,
   Sparkles,
   AlertTriangle,
-  Play,
   CalendarClock,
   Clock,
+  DoorOpen,
 } from "lucide-react";
 
 export function EventJoinPage() {
@@ -28,9 +27,8 @@ export function EventJoinPage() {
   const [event, setEvent] = useState<EventDetail | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [displayName, setDisplayName] = useState("");
+  const [imageFailed, setImageFailed] = useState(false);
 
-  const { join, joining, error: joinError } = useJoinCompetition();
   const { scheduling, now } = useEventPhase(
     eventId,
     event?.scheduling,
@@ -41,10 +39,7 @@ export function EventJoinPage() {
     if (!eventId) return;
     setLoading(true);
     fetchEventDetail(eventId)
-      .then((data) => {
-        console.log("Fetched Event Detail:", data);
-        setEvent(data);
-      })
+      .then((data) => setEvent(data))
       .catch((err) => setLoadError(err.message || "Event not found"))
       .finally(() => setLoading(false));
   }, [eventId]);
@@ -57,29 +52,10 @@ export function EventJoinPage() {
     );
   }
 
-  // Aggressive property resolvers to guarantee the image shows up
-  const resolvedEventId = event ? event.id || (event as any)._id : undefined;
-  const resolvedImageUrl = event
-    ? event.imageUrl ||
-      (event as any).image ||
-      (event as any).coverUrl ||
-      (event as any).thumbnailUrl
-    : undefined;
-
+  const hasImage = Boolean(event?.imageUrl) && !imageFailed;
   const exercise = event ? getExerciseById(event.exerciseId) : undefined;
   const schedule = scheduling ? getScheduleStatus(scheduling, now) : null;
   const canJoin = !schedule || schedule.canJoin;
-
-  const handleJoin = async () => {
-    const name = displayName.trim();
-    if (!name || !resolvedEventId) return;
-    try {
-      const ack = await join(resolvedEventId, name);
-      setLocation(`/competitions/${ack.competitionId}/waiting`);
-    } catch {
-      // Error is handled via joinError state
-    }
-  };
 
   return (
     <div className="min-h-dvh bg-background text-foreground pb-20 selection:bg-primary/30">
@@ -96,8 +72,18 @@ export function EventJoinPage() {
         </Link>
 
         {loading && (
-          <div className="bg-card/50 border border-border rounded-[2.5rem] p-8 h-[500px] animate-pulse flex flex-col justify-center items-center">
-            <Sparkles className="w-10 h-10 text-primary/20 animate-spin" />
+          <div className="bg-card border border-border rounded-[2.5rem] overflow-hidden shadow-xl animate-pulse">
+            <div className="h-72 w-full bg-linear-to-br from-secondary/60 via-card to-secondary/30" />
+            <div className="p-8 md:p-10 flex flex-col gap-6">
+              <div className="h-9 w-2/3 rounded-lg bg-secondary/60" />
+              <div className="h-4 w-full rounded bg-secondary/40" />
+              <div className="h-4 w-4/5 rounded bg-secondary/40" />
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-2">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="h-24 rounded-2xl bg-secondary/40" />
+                ))}
+              </div>
+            </div>
           </div>
         )}
 
@@ -117,18 +103,20 @@ export function EventJoinPage() {
           <div className="bg-card border border-border rounded-[2.5rem] overflow-hidden shadow-2xl shadow-black/40 ring-1 ring-white/5 relative">
             {/* Event Cover Image Banner */}
             <div className="h-72 w-full relative bg-zinc-900 overflow-hidden group">
-              {resolvedImageUrl ? (
+              {hasImage ? (
                 <img
-                  src={resolvedImageUrl}
+                  src={event.imageUrl}
                   alt={event.name}
+                  onError={() => setImageFailed(true)}
                   className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity duration-700 group-hover:scale-105"
                 />
               ) : (
-                <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-primary/10 via-card to-secondary p-6 text-center">
-                  <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center text-primary mb-3 shadow-[0_0_30px_rgba(var(--primary),0.3)]">
+                <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-primary/10 via-card to-secondary p-6 text-center relative overflow-hidden">
+                  <div className="absolute inset-0 opacity-[0.07] bg-[radial-gradient(circle_at_1px_1px,white_1px,transparent_0)] bg-size-[24px_24px]" />
+                  <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center text-primary mb-3 shadow-[0_0_30px_rgba(var(--primary),0.3)] relative">
                     <Sparkles className="w-8 h-8" />
                   </div>
-                  <p className="text-sm font-mono font-bold uppercase tracking-widest text-primary/80">
+                  <p className="text-sm font-mono font-bold uppercase tracking-widest text-primary/80 relative">
                     {event.exerciseName || exercise?.name || "Active Training"}{" "}
                     Arena
                   </p>
@@ -233,53 +221,23 @@ export function EventJoinPage() {
                 />
               </div>
 
-              {/* Registration Form */}
+              {/* Enter the lobby - rooms are created by other players, see who's inside before you join */}
               <div className="border-t border-white/5 pt-8 mt-2">
-                <label className="block text-xs font-black uppercase tracking-[.2em] text-muted-foreground mb-3">
-                  Athlete Display Name
-                </label>
-                <div className="relative group">
-                  <input
-                    value={displayName}
-                    onChange={(e) =>
-                      setDisplayName(e.target.value.slice(0, 24))
-                    }
-                    onKeyDown={(e) =>
-                      e.key === "Enter" && canJoin && handleJoin()
-                    }
-                    placeholder="Enter your gamertag..."
-                    data-testid="input-display-name"
-                    className="w-full h-16 rounded-2xl border-2 border-white/10 bg-black/40 px-6 text-xl font-bold text-foreground outline-none transition-all focus:border-primary focus:bg-black/60 focus:ring-4 focus:ring-primary/20 disabled:opacity-50 shadow-inner placeholder:text-muted-foreground/50"
-                    maxLength={24}
-                    autoFocus
-                    disabled={!canJoin}
-                  />
-                  <div className="absolute inset-0 -z-10 bg-primary/20 blur-xl opacity-0 group-focus-within:opacity-100 transition-opacity rounded-2xl" />
-                </div>
-                <p className="text-xs font-medium text-muted-foreground/70 mt-3 flex items-center gap-2">
+                <p className="text-xs font-medium text-muted-foreground/70 mb-4 flex items-center gap-2">
                   <Sparkles className="w-3 h-3 text-primary" />
-                  This name will appear on the global live leaderboard.
+                  Browse rooms other players have created - or start your
+                  own, public or password-protected - before you pick a
+                  display name.
                 </p>
 
-                {joinError && (
-                  <div className="mt-5 p-4 rounded-2xl bg-destructive/20 border border-destructive/40 text-sm text-destructive-foreground font-bold flex items-center gap-2">
-                    <AlertTriangle className="w-4 h-4" />
-                    {joinError}
-                  </div>
-                )}
-
                 <button
-                  onClick={handleJoin}
-                  disabled={!displayName.trim() || joining || !canJoin}
-                  data-testid="button-join-competition"
-                  className="mt-8 w-full bg-primary text-primary-foreground h-16 rounded-2xl font-black text-xl uppercase tracking-[0.1em] flex items-center justify-center gap-3 hover:bg-primary/90 hover:scale-[1.02] active:scale-[0.98] transition-all shadow-[0_0_40px_rgba(var(--primary),0.4)] disabled:opacity-50 disabled:pointer-events-none disabled:shadow-none border border-primary/50"
+                  onClick={() => canJoin && setLocation(`/events/${event.id}/rooms`)}
+                  disabled={!canJoin}
+                  data-testid="button-browse-rooms"
+                  className="w-full bg-primary text-primary-foreground h-16 rounded-2xl font-black text-xl uppercase tracking-[0.1em] flex items-center justify-center gap-3 hover:bg-primary/90 hover:scale-[1.02] active:scale-[0.98] transition-all shadow-[0_0_40px_rgba(var(--primary),0.4)] disabled:opacity-50 disabled:pointer-events-none disabled:shadow-none border border-primary/50"
                 >
-                  <Play className="fill-current w-6 h-6" />
-                  {joining
-                    ? "Establishing Connection..."
-                    : canJoin
-                      ? "Enter Arena Now"
-                      : "Registration Closed"}
+                  <DoorOpen className="w-6 h-6" />
+                  {canJoin ? "Browse Rooms" : "Registration Closed"}
                 </button>
               </div>
             </div>
@@ -300,14 +258,18 @@ function Stat({
   value: string;
 }) {
   return (
-    <div className="rounded-2xl border border-white/5 bg-linear-to-b from-white/5 to-transparent p-5 flex flex-col justify-between hover:bg-white/10 transition-colors">
-      <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-muted-foreground mb-3">
+    <div className="rounded-2xl border border-white/5 bg-linear-to-b from-white/5 to-transparent p-5 flex flex-col gap-3 hover:bg-white/10 hover:border-primary/20 transition-colors">
+      <div className="w-9 h-9 rounded-xl bg-primary/15 flex items-center justify-center">
         {icon}
-        {label}
       </div>
-      <p className="text-3xl font-mono font-extrabold text-foreground drop-shadow-md">
-        {value}
-      </p>
+      <div>
+        <p className="text-3xl font-mono font-extrabold text-foreground drop-shadow-md leading-none">
+          {value}
+        </p>
+        <p className="text-[11px] font-black uppercase tracking-widest text-muted-foreground mt-1.5">
+          {label}
+        </p>
+      </div>
     </div>
   );
 }

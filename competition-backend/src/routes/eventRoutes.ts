@@ -30,9 +30,13 @@ eventRoutes.get(
         breakDurationSeconds: event.breakDurationSeconds,
         maxParticipants: event.maxParticipants,
         description: event.description,
+        imageUrl: event.imageUrl,
         scheduling: event.scheduling
           ? {
               scheduledAt: event.scheduling.scheduledAt.toISOString(),
+              scheduledEndAt: event.scheduling.scheduledEndAt
+                ? event.scheduling.scheduledEndAt.toISOString()
+                : undefined,
               registrationOpensAt:
                 event.scheduling.registrationOpensAt.toISOString(),
               registrationClosesAt:

@@ -1,5 +1,9 @@
 import type { EventScheduling } from "@/types/competition";
-import { formatCountdown, formatInTimeZone } from "./formatTime";
+import {
+  formatCountdown,
+  formatInTimeZone,
+  formatTimeOnlyInTimeZone,
+} from "./formatTime";
 
 export interface ScheduleStatus {
   /** Short badge text, e.g. "Starts in 2h 10m" */
@@ -13,7 +17,9 @@ export interface ScheduleStatus {
 }
 
 export function getScheduleStatus(scheduling: EventScheduling, now: number): ScheduleStatus {
-  const startLabel = formatInTimeZone(scheduling.scheduledAt, scheduling.timezone);
+  const startLabel = scheduling.scheduledEndAt
+    ? `${formatInTimeZone(scheduling.scheduledAt, scheduling.timezone)} - ${formatTimeOnlyInTimeZone(scheduling.scheduledEndAt, scheduling.timezone)}`
+    : formatInTimeZone(scheduling.scheduledAt, scheduling.timezone);
   const opensAt = new Date(scheduling.registrationOpensAt).getTime();
   const closesAt = new Date(scheduling.registrationClosesAt).getTime();
   const startsAt = new Date(scheduling.scheduledAt).getTime();
