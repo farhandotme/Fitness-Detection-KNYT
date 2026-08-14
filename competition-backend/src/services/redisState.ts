@@ -44,6 +44,16 @@ export async function setParticipantConnected(
   await redis.hset(key, participantId, JSON.stringify(parsed));
 }
 
+export async function isParticipantConnected(
+  competitionId: string,
+  participantId: string,
+): Promise<boolean> {
+  const raw = await redis.hget(participantsKey(competitionId), participantId);
+  if (!raw) return false;
+  const parsed: StoredParticipant = JSON.parse(raw);
+  return parsed.connected;
+}
+
 export async function removeParticipant(competitionId: string, participantId: string): Promise<void> {
   await redis.hdel(participantsKey(competitionId), participantId);
 }
