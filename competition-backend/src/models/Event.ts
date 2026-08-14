@@ -20,6 +20,10 @@ const schedulingSchema = new Schema(
     // time + an IANA zone, and the API layer (see schemas/eventSchemas.ts)
     // converts that to UTC once, at creation time, using utils/timezone.ts.
     scheduledAt: { type: Date, required: true },
+    // Optional - when the event is expected to wrap up (e.g. "7 PM - 11
+    // PM"). Display-only: nothing force-stops a room at this time, rounds
+    // still just run to completion via competitionEngine.
+    scheduledEndAt: { type: Date, required: false },
     registrationOpensAt: { type: Date, required: true },
     registrationClosesAt: { type: Date, required: true },
     // Display-only after creation (the UTC fields above are what the
@@ -30,8 +34,18 @@ const schedulingSchema = new Schema(
     // How many participants must have joined by `scheduledAt` for the
     // competition to actually start. Below this, the scheduler cancels
     // (or postpones) the event instead of starting an under-filled room.
-    minParticipants: { type: Number, required: true, min: 1, max: 5, default: 2 },
-    onInsufficientParticipants: { type: String, enum: ["cancel", "postpone"], default: "cancel" },
+    minParticipants: {
+      type: Number,
+      required: true,
+      min: 1,
+      max: 5,
+      default: 2,
+    },
+    onInsufficientParticipants: {
+      type: String,
+      enum: ["cancel", "postpone"],
+      default: "cancel",
+    },
     phase: { type: String, enum: SCHEDULING_PHASES, default: "DRAFT" },
   },
   { _id: false },
@@ -48,10 +62,32 @@ const eventSchema = new Schema(
     exerciseName: { type: String, required: true, trim: true },
     exerciseMode: { type: String, enum: ["reps", "hold"], required: true },
     rounds: { type: Number, required: true, min: 1, max: 10, default: 2 },
-    roundDurationSeconds: { type: Number, required: true, min: 10, max: 600, default: 60 },
-    breakDurationSeconds: { type: Number, required: true, min: 5, max: 300, default: 15 },
-    maxParticipants: { type: Number, required: true, min: 2, max: 5, default: 5 },
-    status: { type: String, enum: ["draft", "live", "closed"], default: "live" },
+    roundDurationSeconds: {
+      type: Number,
+      required: true,
+      min: 10,
+      max: 600,
+      default: 60,
+    },
+    breakDurationSeconds: {
+      type: Number,
+      required: true,
+      min: 5,
+      max: 300,
+      default: 15,
+    },
+    maxParticipants: {
+      type: Number,
+      required: true,
+      min: 2,
+      max: 5,
+      default: 5,
+    },
+    status: {
+      type: String,
+      enum: ["draft", "live", "closed"],
+      default: "live",
+    },
     description: { type: String, default: "" },
     // Optional cover image shown on event cards (join screen + admin
     // dashboard). Just a URL - no upload/storage pipeline in v1, matching
