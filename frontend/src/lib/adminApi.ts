@@ -87,7 +87,35 @@ export interface LiveRoomSummary {
   participantCount: number;
   maxParticipants: number;
   participantNames: string[];
+  hostName: string | null;
   createdAt: string;
+}
+
+export interface AdminEventRoomSummary {
+  competitionId: string;
+  roomName: string;
+  visibility: "public" | "private";
+  status: string;
+  phase: "running" | "waiting" | "ended";
+  currentRound: number;
+  totalRounds: number;
+  participantCount: number;
+  maxParticipants: number;
+  participantNames: string[];
+  hostName: string | null;
+  createdAt: string;
+  completedAt: string | null;
+}
+
+export interface AdminEventRoomsResponse {
+  event: {
+    id: string;
+    name: string;
+    exerciseName: string;
+    status: "draft" | "live" | "closed";
+    maxParticipants: number;
+  };
+  rooms: AdminEventRoomSummary[];
 }
 
 export interface CreateEventSchedulingInput {
@@ -217,6 +245,11 @@ export async function fetchAdminStats(): Promise<AdminStats> {
 export async function fetchLiveRooms(): Promise<LiveRoomSummary[]> {
   const data = await adminFetch<{ rooms: LiveRoomSummary[] }>("/api/admin/competitions/live");
   return data.rooms;
+}
+
+/** Every room ever created under one event (any status), for the admin's per-event drill-down. */
+export async function fetchEventRooms(eventId: string): Promise<AdminEventRoomsResponse> {
+  return adminFetch<AdminEventRoomsResponse>(`/api/admin/events/${eventId}/rooms`);
 }
 
 export async function fetchRoomSnapshot(competitionId: string): Promise<RoomStateSnapshot> {

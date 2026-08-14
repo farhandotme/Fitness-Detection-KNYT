@@ -12,6 +12,7 @@ import {
   getAdminStats,
   listAllEventsAdmin,
   listLiveCompetitionsAdmin,
+  listRoomsForEventAdmin,
   setEventSchedulingPhase,
   updateEvent,
   updateEventStatus,
@@ -106,6 +107,17 @@ adminRoutes.post(
     }
     const event = await setEventSchedulingPhase(requireParam(req, "id"), phase);
     res.json({ event });
+  }),
+);
+
+// Every room ever created under one event (any status), each with who
+// created it and whether it's currently running - the admin's "open this
+// event" drill-down instead of one giant cross-event page.
+adminRoutes.get(
+  "/events/:id/rooms",
+  asyncHandler(async (req, res) => {
+    const data = await listRoomsForEventAdmin(requireParam(req, "id"));
+    res.json(data);
   }),
 );
 

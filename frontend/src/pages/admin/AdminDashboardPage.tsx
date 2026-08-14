@@ -18,7 +18,10 @@ import {
   updateAdminEvent,
 } from "@/lib/adminApi";
 import { getScheduleStatus } from "@/utils/eventSchedule";
-import { formatInTimeZone } from "@/utils/formatTime";
+import {
+  formatInTimeZone,
+  formatTimeOnlyInTimeZone,
+} from "@/utils/formatTime";
 import {
   AlertTriangle,
   Image as ImageIcon,
@@ -37,6 +40,8 @@ import {
   Pencil,
   Trash2,
   ArrowLeft,
+  ArrowUpRight,
+  Crown,
   Check,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -453,6 +458,12 @@ function LiveRoomTile({ room }: { room: LiveRoomSummary }) {
         </h3>
         <p className="text-xs text-muted-foreground mt-1">{statusLabel}</p>
       </div>
+      {room.hostName && (
+        <p className="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground -mt-2">
+          <Crown className="w-3 h-3 text-primary" />
+          Created by {room.hostName}
+        </p>
+      )}
       <div className="flex items-center gap-1.5 flex-wrap">
         {room.participantNames.slice(0, 5).map((name) => (
           <span
@@ -503,7 +514,7 @@ function EventCard({
 
   return (
     <div className="bg-card border border-card-border rounded-3xl overflow-hidden flex flex-col">
-      <div className="h-28 relative bg-secondary/40 overflow-hidden">
+      <Link href={`/admin/events/${event._id}`} className="h-28 relative bg-secondary/40 overflow-hidden block group">
         {event.imageUrl ? (
           <img
             src={event.imageUrl}
@@ -525,21 +536,29 @@ function EventCard({
         </span>
         <div className="absolute top-3 left-3 flex items-center gap-1.5">
           <button
-            onClick={onEdit}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onEdit();
+            }}
             title="Edit event"
             className="w-7 h-7 rounded-full bg-background/80 backdrop-blur flex items-center justify-center hover:bg-background transition-colors"
           >
             <Pencil className="w-3.5 h-3.5 text-foreground" />
           </button>
           <button
-            onClick={onRequestDelete}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onRequestDelete();
+            }}
             title="Delete event"
             className="w-7 h-7 rounded-full bg-background/80 backdrop-blur flex items-center justify-center hover:bg-destructive/20 transition-colors"
           >
             <Trash2 className="w-3.5 h-3.5 text-destructive" />
           </button>
         </div>
-      </div>
+      </Link>
 
       <div className="p-5 flex flex-col gap-3 flex-1">
         {confirmingDelete ? (
@@ -618,14 +637,23 @@ function EventCard({
           </div>
         ) : (
           <>
-            <div>
-              <h3 className="text-lg font-bold tracking-tight truncate">
-                {event.name}
-              </h3>
-              <p className="text-xs text-muted-foreground mt-0.5 font-mono">
-                {event.exerciseName} · {event.rounds}×
-                {event.roundDurationSeconds}s · max {event.maxParticipants}
-              </p>
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <h3 className="text-lg font-bold tracking-tight truncate">
+                  {event.name}
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5 font-mono">
+                  {event.exerciseName} · {event.rounds}×
+                  {event.roundDurationSeconds}s · max {event.maxParticipants}
+                </p>
+              </div>
+              <Link
+                href={`/admin/events/${event._id}`}
+                className="shrink-0 flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-primary hover:underline whitespace-nowrap"
+              >
+                Rooms
+                <ArrowUpRight className="w-3 h-3" />
+              </Link>
             </div>
             {event.description && (
               <p className="text-sm text-muted-foreground line-clamp-2">
@@ -640,7 +668,12 @@ function EventCard({
                     {formatInTimeZone(
                       event.scheduling.scheduledAt,
                       event.scheduling.timezone,
-                    )}{" "}
+                    )}
+                    {event.scheduling.scheduledEndAt &&
+                      ` - ${formatTimeOnlyInTimeZone(
+                        event.scheduling.scheduledEndAt,
+                        event.scheduling.timezone,
+                      )}`}{" "}
                     · {event.scheduling.phase.replace(/_/g, " ").toLowerCase()}
                   </span>
                 </div>
@@ -754,10 +787,18 @@ function CreateEventView({
       (new Date(toIso).getTime() - new Date(fromIso).getTime()) / 60000,
     );
 
+  const existingEnd =
+    existingSchedule && existingSchedule.scheduledEndAt
+      ? utcToLocalParts(existingSchedule.scheduledEndAt, existingSchedule.timezone)
+      : null;
+
   const [isScheduled, setIsScheduled] = useState(Boolean(existingSchedule));
   const [scheduleDate, setScheduleDate] = useState(existingStart?.date ?? "");
   const [scheduleTime, setScheduleTime] = useState(
     existingStart?.time ?? "19:00",
+  );
+  const [scheduleEndTime, setScheduleEndTime] = useState(
+    existingEnd?.time ?? "23:00",
   );
   const [registrationOpensBeforeMin, setRegistrationOpensBeforeMin] = useState(
     existingSchedule
@@ -810,17 +851,22 @@ function CreateEventView({
         month: "short",
         day: "numeric",
       });
+    const scheduledEndAtLocal = scheduleEndTime
+      ? `${scheduleDate}T${scheduleEndTime}:00`
+      : null;
     return {
       opensTime: fmt(opensLocal),
       opensDate: fmtDate(opensLocal),
       closesTime: fmt(closesLocal),
       startsTime: fmt(scheduledAtLocal),
       startsDate: fmtDate(scheduledAtLocal),
+      endsTime: scheduledEndAtLocal ? fmt(scheduledEndAtLocal) : null,
     };
   }, [
     isScheduled,
     scheduleDate,
     scheduleTime,
+    scheduleEndTime,
     registrationOpensBeforeMin,
     registrationClosesBeforeMin,
   ]);
@@ -853,6 +899,9 @@ function CreateEventView({
           isScheduled && scheduledAtLocal
             ? {
                 scheduledAtLocal,
+                scheduledEndAtLocal: scheduleEndTime
+                  ? `${scheduleDate}T${scheduleEndTime}:00`
+                  : undefined,
                 registrationOpensAtLocal: minusMinutesLocal(
                   scheduledAtLocal,
                   registrationOpensBeforeMin,
@@ -1146,7 +1195,7 @@ function CreateEventView({
                     Timezone: Asia/Kolkata
                   </span>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <Field label="Start date">
                     <input
                       type="date"
@@ -1165,7 +1214,21 @@ function CreateEventView({
                       className="w-full h-13 rounded-2xl border border-input bg-background px-4 font-semibold text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
                     />
                   </Field>
+                  <Field label="End time">
+                    <input
+                      type="time"
+                      value={scheduleEndTime}
+                      onChange={(e) => setScheduleEndTime(e.target.value)}
+                      className="w-full h-13 rounded-2xl border border-input bg-background px-4 font-semibold text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                    />
+                  </Field>
                 </div>
+                <p className="text-[11px] text-muted-foreground">
+                  When the event is expected to wrap up - shown to
+                  participants as "{scheduleTime || "7:00 PM"} -{" "}
+                  {scheduleEndTime || "11:00 PM"}". Doesn't cut rounds off
+                  early.
+                </p>
               </div>
 
               {/* Part B: Registration Window with instant clock calculations */}
@@ -1276,7 +1339,12 @@ function CreateEventView({
                       Participant Timeline Preview
                     </p>
                   </div>
-                  <div className="grid grid-cols-3 gap-2 text-center pt-2 border-t border-border/60">
+                  <div
+                    className={cn(
+                      "grid gap-2 text-center pt-2 border-t border-border/60",
+                      schedulePreview.endsTime ? "grid-cols-4" : "grid-cols-3",
+                    )}
+                  >
                     <div className="flex flex-col items-center p-2 rounded-xl bg-secondary/30">
                       <span className="text-[10px] font-bold uppercase text-muted-foreground mb-1">
                         Registration Opens
@@ -1301,6 +1369,16 @@ function CreateEventView({
                         {schedulePreview.startsTime}
                       </span>
                     </div>
+                    {schedulePreview.endsTime && (
+                      <div className="flex flex-col items-center p-2 rounded-xl bg-primary/15">
+                        <span className="text-[10px] font-bold uppercase text-primary mb-1 flex items-center gap-1">
+                          <Clock className="w-3 h-3" /> Event Ends
+                        </span>
+                        <span className="font-mono font-black text-xs text-primary">
+                          {schedulePreview.endsTime}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
