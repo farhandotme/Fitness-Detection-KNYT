@@ -1,4 +1,4 @@
-import type { EventDetail, LiveEventSummary } from "@/types/competition";
+import type { EventDetail, LiveEventSummary, RoomListEntry, RoomPreview } from "@/types/competition";
 
 function getApiBase(): string {
   return (
@@ -8,8 +8,8 @@ function getApiBase(): string {
   ).replace(/\/+$/, "");
 }
 
-async function apiFetch<T>(path: string): Promise<T> {
-  const res = await fetch(`${getApiBase()}${path}`);
+async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${getApiBase()}${path}`, init);
   if (!res.ok) {
     const body = await res.json().catch(() => ({ message: res.statusText }));
     throw new Error(body.message || `Request failed (${res.status})`);
@@ -25,4 +25,20 @@ export async function fetchLiveEvents(): Promise<LiveEventSummary[]> {
 export async function fetchEventDetail(eventId: string): Promise<EventDetail> {
   const data = await apiFetch<{ event: EventDetail }>(`/api/events/${eventId}`);
   return data.event;
+}
+
+/** Every open room under an event, for the lobby list shown before anyone types a name. */
+export async function fetchEventRooms(eventId: string): Promise<RoomListEntry[]> {
+  const data = await apiFetch<{ rooms: RoomListEntry[] }>(`/api/events/${eventId}/rooms`);
+  return data.rooms;
+}
+
+/** Preview a room's occupants before joining - password required only for private rooms. */
+export async function revealRoom(eventId: string, competitionId: string, password?: string): Promise<RoomPreview> {
+  const data = await apiFetch<{ room: RoomPreview }>(`/api/events/${eventId}/rooms/${competitionId}/reveal`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password }),
+  });
+  return data.room;
 }

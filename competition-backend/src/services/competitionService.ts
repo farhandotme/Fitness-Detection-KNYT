@@ -1,14 +1,13 @@
-import { Types } from "mongoose";
 import { CompetitionModel, type CompetitionDoc } from "../models/Competition.js";
-import { EventModel } from "../models/Event.js";
 import { AppError } from "../utils/errors.js";
-import { generateParticipantToken, generateRoomCode, hashToken, verifyToken } from "../utils/token.js";
+import { verifyToken } from "../utils/token.js";
 import {
   buildLeaderboard,
+  clearRoomState,
   getCumulativeScores,
-  getParticipantCount,
   getParticipants,
   hasParticipant,
+  isParticipantConnected,
   joinRoomAtomic,
   removeParticipant,
   setParticipantConnected,
@@ -16,174 +15,18 @@ import {
 } from "./redisState.js";
 import { logger } from "../config/logger.js";
 import type { RoomStateSnapshot } from "../types/index.js";
-import { nanoid } from "nanoid";
 import { competitionEngine } from "./competitionEngine.js";
 
-const MAX_JOIN_ATTEMPTS = 5;
-
-async function findOpenRoom(eventId: string, maxParticipants: number): Promise<CompetitionDoc | null> {
-  const room = await CompetitionModel.findOne({
-    eventId,
-    status: "WAITING",
-  })
-    .sort({ createdAt: 1 })
-    .lean<CompetitionDoc | null>();
-  if (!room) return null;
-  const liveCount = await getParticipantCount(String(room._id));
-  if (liveCount >= maxParticipants) return null;
-  return room;
-}
-
-async function createRoom(eventDoc: {
-  _id: Types.ObjectId;
-  name: string;
-  exerciseId: string;
-  exerciseMode: "reps" | "hold";
-  rounds: number;
-  roundDurationSeconds: number;
-  breakDurationSeconds: number;
-  maxParticipants: number;
-}): Promise<CompetitionDoc> {
-  const doc = await CompetitionModel.create({
-    eventId: eventDoc._id,
-    eventName: eventDoc.name,
-    exerciseId: eventDoc.exerciseId,
-    exerciseMode: eventDoc.exerciseMode,
-    roomCode: generateRoomCode(),
-    status: "WAITING",
-    maxParticipants: eventDoc.maxParticipants,
-    totalRounds: eventDoc.rounds,
-    roundDurationSeconds: eventDoc.roundDurationSeconds,
-    breakDurationSeconds: eventDoc.breakDurationSeconds,
-    currentRound: 0,
-    participants: [],
-    rounds: [],
-  });
-  return doc.toObject() as unknown as CompetitionDoc;
-}
-
+// Room creation/joining now lives in services/roomService.ts - participants
+// pick or create a specific room from the event's lobby rather than being
+// auto-matched into one. This file keeps everything that operates on a
+// room *after* someone is already seated in it (reconnect, leave, score,
+// snapshot) plus the disconnect-grace-period bookkeeping shared by both.
 export interface JoinResult {
   competitionId: string;
   participantId: string;
   participantToken: string;
   room: RoomStateSnapshot;
-}
-
-export async function joinEvent(eventId: string, displayName: string, deviceId: string): Promise<JoinResult> {
-  const event = await EventModel.findById(eventId).lean().catch(() => null);
-  if (!event || event.status !== "live") {
-    throw AppError.notFound("This event is not currently live");
-  }
-
-  // Scheduled events only accept joins during their registration window -
-  // see services/eventScheduler.ts, which drives `scheduling.phase`
-  // forward automatically based on the stored timestamps. Events with no
-  // `scheduling` block at all are unaffected (unchanged v1 behaviour).
-  if (event.scheduling) {
-    const phase = event.scheduling.phase;
-    if (phase === "DRAFT" || phase === "PUBLISHED") {
-      throw AppError.badRequest("Registration for this event hasn't opened yet");
-    }
-    if (phase === "REGISTRATION_CLOSED" || phase === "LIVE") {
-      throw AppError.badRequest("Registration for this event has closed");
-    }
-    if (phase === "CANCELLED" || phase === "POSTPONED" || phase === "COMPLETED") {
-      throw AppError.notFound("This event is no longer accepting participants");
-    }
-    // phase === "REGISTRATION_OPEN" falls through to the normal join flow.
-  }
-
-  const deviceIdHash = hashToken(deviceId);
-
-  // Enforce "no re-enrolling" server-side: if this device already holds an
-  // active seat somewhere in this event (any room that hasn't finished or
-  // been abandoned), reattach them to that exact seat instead of minting a
-  // new participant. This is what stops one person from occupying multiple
-  // of a room's 5 slots by re-opening the join page, and it doubles as a
-  // recovery path if their browser storage (participantToken) was cleared.
-  const existingRoom = await CompetitionModel.findOne({
-    eventId,
-    status: { $nin: ["COMPLETED", "ABANDONED"] },
-    "participants.deviceIdHash": deviceIdHash,
-  });
-
-  if (existingRoom) {
-    const participant = existingRoom.participants.find((p) => p.deviceIdHash === deviceIdHash);
-    if (!participant) throw new AppError("INTERNAL", "Failed to locate existing seat", 500);
-
-    // Rotate the credential - we only ever store a one-way hash of the
-    // participant token, so we can't hand back the original. This also
-    // safely invalidates whatever session this device previously had.
-    const participantToken = generateParticipantToken();
-    participant.tokenHash = hashToken(participantToken);
-    participant.connected = true;
-    await existingRoom.save();
-
-    const competitionId = String(existingRoom._id);
-    await setParticipantConnected(competitionId, participant.participantId, true);
-    // Restore Redis membership too, in case its TTL had already expired.
-    await joinRoomAtomic(
-      competitionId,
-      existingRoom.maxParticipants,
-      participant.participantId,
-      participant.displayName,
-    );
-
-    const snapshot = await getRoomSnapshot(competitionId);
-    if (!snapshot) throw new AppError("INTERNAL", "Failed to build room snapshot after rejoin", 500);
-
-    logger.info(
-      { competitionId, participantId: participant.participantId, eventId },
-      "device reattached to its existing competition seat (duplicate join blocked)",
-    );
-
-    return { competitionId, participantId: participant.participantId, participantToken, room: snapshot };
-  }
-
-  const participantId = nanoid(12);
-  const participantToken = generateParticipantToken();
-
-  for (let attempt = 0; attempt < MAX_JOIN_ATTEMPTS; attempt += 1) {
-    let room = await findOpenRoom(String(event._id), event.maxParticipants);
-    if (!room) {
-      room = await createRoom({ ...event, _id: event._id });
-    }
-    const competitionId = String(room._id);
-
-    const outcome = await joinRoomAtomic(competitionId, event.maxParticipants, participantId, displayName);
-    if (outcome === "full") {
-      // Someone else took the last slot between our read and our write - retry.
-      continue;
-    }
-
-    await CompetitionModel.updateOne(
-      { _id: competitionId },
-      {
-        $push: {
-          participants: {
-            participantId,
-            displayName,
-            tokenHash: hashToken(participantToken),
-            deviceIdHash,
-            joinedAt: new Date(),
-            connected: true,
-          },
-        },
-      },
-    );
-
-    const snapshot = await getRoomSnapshot(competitionId);
-    if (!snapshot) throw new AppError("INTERNAL", "Failed to build room snapshot after join", 500);
-
-    // If this join filled the room, kick off the countdown -> round lifecycle.
-    await competitionEngine.onParticipantCountChanged(competitionId);
-
-    logger.info({ competitionId, participantId, eventId }, "participant joined competition room");
-
-    return { competitionId, participantId, participantToken, room: snapshot };
-  }
-
-  throw AppError.conflict("Could not secure a room slot, please try again");
 }
 
 export async function reconnectToCompetition(
@@ -207,26 +50,155 @@ export async function reconnectToCompetition(
     await joinRoomAtomic(competitionId, room.maxParticipants, participantId, participant.displayName);
   }
   await setParticipantConnected(competitionId, participantId, true);
+  cancelPendingRemoval(competitionId, participantId);
 
   const snapshot = await getRoomSnapshot(competitionId);
   if (!snapshot) throw AppError.notFound("Competition not found");
   return snapshot;
 }
 
-export async function markParticipantDisconnected(competitionId: string, participantId: string): Promise<void> {
+// How long a dropped connection gets before we treat it as an actual
+// departure. Covers the "closed the tab / hit back / phone locked" case
+// without punishing a normal refresh or a few seconds of flaky wifi - both
+// of those reconnect (via socket "connect" -> competition:reconnect) well
+// inside this window, which calls cancelPendingRemoval below.
+const DISCONNECT_GRACE_MS = 20_000;
+
+// In-memory only (single process) - if the server restarts mid-grace-period
+// the timer is simply lost, which just means that one participant lingers
+// as "disconnected" a little longer than usual; nothing is corrupted.
+const pendingRemovals = new Map<string, ReturnType<typeof setTimeout>>();
+const pendingKey = (competitionId: string, participantId: string) => `${competitionId}:${participantId}`;
+
+export function cancelPendingRemoval(competitionId: string, participantId: string): void {
+  const key = pendingKey(competitionId, participantId);
+  const timer = pendingRemovals.get(key);
+  if (timer) {
+    clearTimeout(timer);
+    pendingRemovals.delete(key);
+  }
+}
+
+/**
+ * The room's host (whoever created it - see models/Competition.ts) is gone
+ * for good, so the room itself is torn down rather than just freeing their
+ * seat: mark it ABANDONED, stop any pending lifecycle timer
+ * (countdown/round/break), and drop its live Redis state. Safe to call more
+ * than once - a room that's already finished or already torn down is left
+ * alone.
+ */
+export async function destroyRoomAsHostLeft(competitionId: string): Promise<boolean> {
+  const room = await CompetitionModel.findById(competitionId);
+  if (!room) return false;
+  if (room.status === "COMPLETED" || room.status === "ABANDONED") return false;
+
+  room.status = "ABANDONED";
+  await room.save();
+
+  competitionEngine.cancelRoom(competitionId);
+  await clearRoomState(competitionId);
+
+  logger.info({ competitionId }, "room destroyed - host left");
+  return true;
+}
+
+/**
+ * Called when a participant's socket disconnects.
+ *
+ * For an ordinary participant: if the room hasn't started yet
+ * (WAITING/FULL), a still-empty seat left behind by a closed tab is worse
+ * than a freed one - it blocks the room from filling and can stall a
+ * scheduled event's minimum-participant check. So: mark them disconnected
+ * immediately (existing "Reconnecting..." UI for everyone else), then
+ * actually free the seat if they haven't come back within
+ * DISCONNECT_GRACE_MS. Once the room is live, the old "just mark
+ * disconnected, keep the seat for scoring" behavior is unchanged.
+ *
+ * For the room's host (see models/Competition.ts): the same grace period
+ * applies, but at *any* room status short of COMPLETED - if they don't
+ * reconnect, the whole room is destroyed (onHostLeft) rather than just
+ * freeing their seat, since the room only exists because they made it.
+ */
+export async function handleParticipantDisconnect(
+  competitionId: string,
+  participantId: string,
+  onRemoved: () => void | Promise<void>,
+  onHostLeft: () => void | Promise<void>,
+): Promise<void> {
   await setParticipantConnected(competitionId, participantId, false);
+
+  const room = await CompetitionModel.findById(competitionId).lean<CompetitionDoc | null>();
+  if (!room || room.status === "COMPLETED" || room.status === "ABANDONED") return;
+
+  const participant = room.participants.find((p) => p.participantId === participantId);
+  const isHost = participant?.isHost === true;
+
+  // Non-host seats are only ever freed pre-start, same as before.
+  if (!isHost && room.status !== "WAITING" && room.status !== "FULL") return;
+
+  const key = pendingKey(competitionId, participantId);
+  cancelPendingRemoval(competitionId, participantId);
+
+  const timer = setTimeout(async () => {
+    pendingRemovals.delete(key);
+    try {
+      const backOnline = await isParticipantConnected(competitionId, participantId);
+      if (backOnline) return;
+
+      const current = await CompetitionModel.findById(competitionId).lean<CompetitionDoc | null>();
+      if (!current || current.status === "COMPLETED" || current.status === "ABANDONED") return;
+      const stillSeated = current.participants.some((p) => p.participantId === participantId);
+      if (!stillSeated) return;
+
+      if (isHost) {
+        const destroyed = await destroyRoomAsHostLeft(competitionId);
+        if (destroyed) await onHostLeft();
+        return;
+      }
+
+      if (current.status !== "WAITING" && current.status !== "FULL") return;
+
+      await removeParticipant(competitionId, participantId);
+      await CompetitionModel.updateOne({ _id: competitionId }, { $pull: { participants: { participantId } } });
+      logger.info(
+        { competitionId, participantId },
+        "removed participant who never reconnected after leaving the waiting room",
+      );
+      await onRemoved();
+    } catch (err) {
+      logger.error({ err }, "error cleaning up disconnected waiting-room participant");
+    }
+  }, DISCONNECT_GRACE_MS);
+
+  pendingRemovals.set(key, timer);
+}
+
+export interface LeaveResult {
+  // True when leaving destroyed the room outright because the leaver was
+  // its host - see destroyRoomAsHostLeft. Callers (sockets/handlers.ts)
+  // use this to tell everyone else the room is gone instead of just
+  // broadcasting an updated room:state.
+  hostLeft: boolean;
 }
 
 export async function leaveCompetition(
   competitionId: string,
   participantId: string,
   participantToken: string,
-): Promise<void> {
+): Promise<LeaveResult> {
   const room = await CompetitionModel.findById(competitionId).lean<CompetitionDoc | null>();
-  if (!room) return;
+  if (!room) return { hostLeft: false };
   const participant = room.participants.find((p) => p.participantId === participantId);
   if (!participant || !verifyToken(participantToken, participant.tokenHash)) {
     throw AppError.forbidden("Invalid participant credentials");
+  }
+  cancelPendingRemoval(competitionId, participantId);
+
+  // The host owns the room - if they leave, the room closes for everyone
+  // rather than just freeing their seat, regardless of what phase it's in.
+  if (participant.isHost) {
+    const destroyed = await destroyRoomAsHostLeft(competitionId);
+    return { hostLeft: destroyed };
   }
 
   // Only allow leaving outright before the competition has started; once
@@ -238,6 +210,7 @@ export async function leaveCompetition(
   } else {
     await setParticipantConnected(competitionId, participantId, false);
   }
+  return { hostLeft: false };
 }
 
 export async function submitScore(
@@ -278,6 +251,7 @@ export async function getRoomSnapshot(competitionId: string): Promise<RoomStateS
       participantId: p.participantId,
       displayName: p.displayName,
       connected: live?.connected ?? false,
+      isHost: p.isHost === true,
     };
   });
 
@@ -290,6 +264,8 @@ export async function getRoomSnapshot(competitionId: string): Promise<RoomStateS
     competitionId,
     eventId: String(room.eventId),
     eventName: room.eventName,
+    roomName: room.roomName,
+    visibility: room.visibility as RoomStateSnapshot["visibility"],
     exerciseId: room.exerciseId,
     exerciseMode: room.exerciseMode as "reps" | "hold",
     status: room.status as RoomStateSnapshot["status"],

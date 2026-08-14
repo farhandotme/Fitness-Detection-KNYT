@@ -12,6 +12,7 @@ export type SchedulingPhase =
 
 export interface EventScheduling {
   scheduledAt: string; // ISO UTC
+  scheduledEndAt?: string; // ISO UTC - optional, display-only
   registrationOpensAt: string;
   registrationClosesAt: string;
   timezone: string;
@@ -39,6 +40,30 @@ export type CompetitionStatus =
   | "COMPLETED"
   | "ABANDONED";
 
+export type RoomVisibility = "public" | "private";
+
+// A room in the browse/lobby list for an event - before anyone has joined
+// it. participantNames is only present for public rooms; private rooms
+// only reveal occupants after the correct password is supplied (see
+// revealRoom in lib/competitionApi.ts).
+export interface RoomListEntry {
+  competitionId: string;
+  roomName: string;
+  visibility: RoomVisibility;
+  status: CompetitionStatus;
+  participantCount: number;
+  maxParticipants: number;
+  participantNames?: string[];
+  createdAt: string;
+}
+
+export interface RoomPreview {
+  roomName: string;
+  visibility: RoomVisibility;
+  participantNames: string[];
+  maxParticipants: number;
+}
+
 export interface LiveEventSummary {
   id: string;
   name: string;
@@ -56,8 +81,6 @@ export interface LiveEventSummary {
 }
 
 export interface EventDetail {
-  imageUrl: string | undefined;
-  imageUrl: any;
   id: string;
   name: string;
   exerciseId: string;
@@ -68,6 +91,7 @@ export interface EventDetail {
   breakDurationSeconds: number;
   maxParticipants: number;
   description?: string;
+  imageUrl?: string;
   scheduling?: EventScheduling;
   serverNow?: number;
 }
@@ -76,6 +100,8 @@ export interface ParticipantPublic {
   participantId: string;
   displayName: string;
   connected: boolean;
+  // True for whoever created this room. See useCompetitionRoom.ts.
+  isHost: boolean;
 }
 
 export interface LeaderboardEntry {
@@ -89,6 +115,8 @@ export interface RoomStateSnapshot {
   competitionId: string;
   eventId: string;
   eventName: string;
+  roomName: string;
+  visibility: RoomVisibility;
   exerciseId: string;
   exerciseMode: ExerciseMode;
   status: CompetitionStatus;

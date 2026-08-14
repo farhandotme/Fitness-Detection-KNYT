@@ -64,6 +64,18 @@ class CompetitionEngine {
     this.timers.delete(competitionId);
   }
 
+  /**
+   * Public teardown for a room that's being destroyed outright (host left
+   * for good - see destroyRoomAsHostLeft in competitionService.ts). Stops
+   * whatever lifecycle timer was pending (countdown/round/break) so it
+   * can't fire against a room that's now ABANDONED, and drops the cached
+   * timings so a stale countdown/round clock never gets served again.
+   */
+  cancelRoom(competitionId: string): void {
+    this.clearTimer(competitionId);
+    this.timings.delete(competitionId);
+  }
+
   private schedule(competitionId: string, delayMs: number, fn: () => void) {
     this.clearTimer(competitionId);
     const timer = setTimeout(fn, Math.max(0, delayMs));

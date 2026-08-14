@@ -49,7 +49,7 @@ export function CompetitionPlayPage() {
   const [, setLocation] = useLocation();
   const competitionId = params?.competitionId;
 
-  const { room, identity, error, connected, submitScore } = useCompetitionRoom(competitionId);
+  const { room, identity, error, closed, connected, submitScore } = useCompetitionRoom(competitionId);
   const offsetRef = useServerClockOffset(room?.serverNow);
 
   const exercise = room ? getExerciseById(room.exerciseId) : undefined;
@@ -100,6 +100,19 @@ export function CompetitionPlayPage() {
       setLocation(`/competitions/${room.competitionId}/results`);
     }
   }, [room?.status, room?.competitionId, setLocation]);
+
+  // The host left/disconnected for good and the room was torn down
+  // server-side (see useCompetitionRoom.ts "room:closed") - stop everything
+  // and send this participant back to browse other events.
+  useEffect(() => {
+    if (!closed) return;
+    stop();
+    stopCamera();
+    stopSendingFrames();
+    const t = setTimeout(() => setLocation("/events"), 2500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [closed, setLocation]);
 
   // Drive the camera + exercise engine strictly off the server-authoritative round state.
   useEffect(() => {
@@ -172,6 +185,18 @@ export function CompetitionPlayPage() {
 
   if (!match || !competitionId) {
     return <div className="p-8 text-center text-destructive">Room not found.</div>;
+  }
+
+  if (closed) {
+    return (
+      <div className="min-h-dvh flex items-center justify-center bg-[#11110f] text-slate-300">
+        <div className="flex flex-col items-center gap-3 text-center px-6">
+          <AlertTriangle className="w-8 h-8 text-destructive" />
+          <p className="font-bold text-lg text-white">Room closed</p>
+          <p className="text-sm text-slate-400 max-w-sm">{closed}</p>
+        </div>
+      </div>
+    );
   }
 
   if (!room || !exercise) {
