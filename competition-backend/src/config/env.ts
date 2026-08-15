@@ -3,10 +3,14 @@ import { z } from "zod";
 
 const envSchema = z.object({
   PORT: z.coerce.number().default(4000),
-  NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
+  NODE_ENV: z
+    .enum(["development", "production", "test"])
+    .default("development"),
   LOG_LEVEL: z.string().default("info"),
   CORS_ORIGIN: z.string().default("http://localhost:5173"),
-  MONGODB_URI: z.string().default("mongodb://localhost:27017/exercise_competition"),
+  MONGODB_URI: z
+    .string()
+    .default("mongodb://localhost:27017/exercise_competition"),
   REDIS_URL: z.string().default("redis://localhost:6379"),
   // Legacy shared-secret admin auth. Superseded by real admin accounts
   // (register/login below) but left here in case it's still referenced.
@@ -52,13 +56,32 @@ const envSchema = z.object({
   // Default IANA zone applied to a scheduled event when the admin doesn't
   // pick one explicitly - matches this deployment's primary audience.
   EVENT_TIMEZONE_DEFAULT: z.string().default("Asia/Kolkata"),
+
+  // Player avatar photos (see services/avatarService.ts) are stored in
+  // Cloudinary, never on this server or in MongoDB - we only ever persist
+  // the resulting URL/publicId. All three are optional: with any of them
+  // unset, POST /api/avatars/signature responds 503 and the frontend falls
+  // back to generated cartoon avatars for everyone (see config/cloudinary.ts).
+  CLOUDINARY_CLOUD_NAME: z.string().optional(),
+  CLOUDINARY_API_KEY: z.string().optional(),
+  CLOUDINARY_API_SECRET: z.string().optional(),
+  // Every avatar upload is signed into this folder, and deletion requests
+  // are only ever honored for publicIds under it - see avatarRoutes.ts -
+  // so a compromised/guessed publicId from elsewhere in the account can't
+  // be used to delete unrelated assets.
+  CLOUDINARY_AVATAR_FOLDER: z.string().default("fitness-competition/avatars"),
+  AVATAR_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(20),
+  AVATAR_RATE_LIMIT_WINDOW_MINUTES: z.coerce.number().int().min(1).default(10),
 });
 
 const parsed = envSchema.safeParse(process.env);
 
 if (!parsed.success) {
   // eslint-disable-next-line no-console
-  console.error("Invalid environment configuration:", parsed.error.flatten().fieldErrors);
+  console.error(
+    "Invalid environment configuration:",
+    parsed.error.flatten().fieldErrors,
+  );
   process.exit(1);
 }
 
@@ -74,33 +97,61 @@ if (data.NODE_ENV === "production") {
     ADMIN_SIGNUP_CODE: "change-me-signup-code",
     ADMIN_API_KEY: "change-me-admin-key",
   };
-  const offenders = Object.entries(weakDefaults).filter(([key, placeholder]) => {
-    const value = (data as Record<string, unknown>)[key];
-    return typeof value === "string" && value === placeholder;
-  });
+  const offenders = Object.entries(weakDefaults).filter(
+    ([key, placeholder]) => {
+      const value = (data as Record<string, unknown>)[key];
+      return typeof value === "string" && value === placeholder;
+    },
+  );
   if (offenders.length > 0) {
     // eslint-disable-next-line no-console
     console.error(
       `Refusing to start in production with placeholder value(s) for: ${offenders
         .map(([key]) => key)
-        .join(", ")}. Set real secrets in your environment (e.g. \`openssl rand -hex 32\` for JWT_SECRET).`,
+        .join(
+          ", ",
+        )}. Set real secrets in your environment (e.g. \`openssl rand -hex 32\` for JWT_SECRET).`,
     );
     process.exit(1);
   }
   if (data.JWT_SECRET.length < 32) {
     // eslint-disable-next-line no-console
-    console.error("JWT_SECRET is too short for production - use at least 32 random characters.");
+    console.error(
+      "JWT_SECRET is too short for production - use at least 32 random characters.",
+    );
     process.exit(1);
   }
   if (data.CORS_ORIGIN.includes("localhost")) {
     // eslint-disable-next-line no-console
-    console.error("CORS_ORIGIN still points at localhost in production - set it to your real frontend origin(s).");
+    console.error(
+      "CORS_ORIGIN still points at localhost in production - set it to your real frontend origin(s).",
+    );
     process.exit(1);
   }
+}
+
+// Cloudinary is all-or-nothing: a partially set trio is almost always a
+// typo'd/half-pasted .env rather than an intentional "disabled" state, so
+// fail loudly instead of quietly running with avatar uploads half-broken.
+const cloudinaryVars = [
+  data.CLOUDINARY_CLOUD_NAME,
+  data.CLOUDINARY_API_KEY,
+  data.CLOUDINARY_API_SECRET,
+];
+const cloudinaryConfigured = cloudinaryVars.every(Boolean);
+if (!cloudinaryConfigured && cloudinaryVars.some(Boolean)) {
+  // eslint-disable-next-line no-console
+  console.error(
+    "Incomplete Cloudinary configuration - CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET must all be set together (or all left unset to disable photo avatars).",
+  );
+  process.exit(1);
 }
 
 export const env = {
   ...data,
   // Allow a comma-separated list of origins.
-  corsOrigins: data.CORS_ORIGIN.split(",").map((o) => o.trim()).filter(Boolean),
+  corsOrigins: data.CORS_ORIGIN.split(",")
+    .map((o) => o.trim())
+    .filter(Boolean),
+  cloudinaryConfigured,
 };
