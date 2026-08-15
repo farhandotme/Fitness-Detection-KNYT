@@ -61,6 +61,9 @@ export interface AdminEvent {
   roundDurationSeconds: number;
   breakDurationSeconds: number;
   maxParticipants: number;
+  // How many players a room needs before its host can start it early - see
+  // models/Event.ts.
+  minParticipants: number;
   status: "draft" | "live" | "closed";
   description?: string;
   imageUrl?: string;
@@ -180,7 +183,9 @@ export async function fetchAdminEvents(): Promise<AdminEvent[]> {
   return data.events;
 }
 
-export async function createAdminEvent(input: CreateEventInput): Promise<AdminEvent> {
+export async function createAdminEvent(
+  input: CreateEventInput,
+): Promise<AdminEvent> {
   const data = await adminFetch<{ event: AdminEvent }>("/api/admin/events", {
     method: "POST",
     body: JSON.stringify(input),
@@ -189,11 +194,17 @@ export async function createAdminEvent(input: CreateEventInput): Promise<AdminEv
 }
 
 /** Partial edit of an existing event - only the fields you pass are changed. */
-export async function updateAdminEvent(id: string, input: Partial<CreateEventInput>): Promise<AdminEvent> {
-  const data = await adminFetch<{ event: AdminEvent }>(`/api/admin/events/${id}`, {
-    method: "PATCH",
-    body: JSON.stringify(input),
-  });
+export async function updateAdminEvent(
+  id: string,
+  input: Partial<CreateEventInput>,
+): Promise<AdminEvent> {
+  const data = await adminFetch<{ event: AdminEvent }>(
+    `/api/admin/events/${id}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    },
+  );
   return data.event;
 }
 
@@ -218,10 +229,13 @@ export async function setAdminEventStatus(
   id: string,
   status: "draft" | "live" | "closed",
 ): Promise<AdminEvent> {
-  const data = await adminFetch<{ event: AdminEvent }>(`/api/admin/events/${id}/status`, {
-    method: "POST",
-    body: JSON.stringify({ status }),
-  });
+  const data = await adminFetch<{ event: AdminEvent }>(
+    `/api/admin/events/${id}/status`,
+    {
+      method: "POST",
+      body: JSON.stringify({ status }),
+    },
+  );
   return data.event;
 }
 
@@ -230,10 +244,13 @@ export async function setAdminEventSchedulingPhase(
   id: string,
   phase: "CANCELLED" | "POSTPONED",
 ): Promise<AdminEvent> {
-  const data = await adminFetch<{ event: AdminEvent }>(`/api/admin/events/${id}/scheduling/phase`, {
-    method: "POST",
-    body: JSON.stringify({ phase }),
-  });
+  const data = await adminFetch<{ event: AdminEvent }>(
+    `/api/admin/events/${id}/scheduling/phase`,
+    {
+      method: "POST",
+      body: JSON.stringify({ phase }),
+    },
+  );
   return data.event;
 }
 
@@ -243,16 +260,26 @@ export async function fetchAdminStats(): Promise<AdminStats> {
 }
 
 export async function fetchLiveRooms(): Promise<LiveRoomSummary[]> {
-  const data = await adminFetch<{ rooms: LiveRoomSummary[] }>("/api/admin/competitions/live");
+  const data = await adminFetch<{ rooms: LiveRoomSummary[] }>(
+    "/api/admin/competitions/live",
+  );
   return data.rooms;
 }
 
 /** Every room ever created under one event (any status), for the admin's per-event drill-down. */
-export async function fetchEventRooms(eventId: string): Promise<AdminEventRoomsResponse> {
-  return adminFetch<AdminEventRoomsResponse>(`/api/admin/events/${eventId}/rooms`);
+export async function fetchEventRooms(
+  eventId: string,
+): Promise<AdminEventRoomsResponse> {
+  return adminFetch<AdminEventRoomsResponse>(
+    `/api/admin/events/${eventId}/rooms`,
+  );
 }
 
-export async function fetchRoomSnapshot(competitionId: string): Promise<RoomStateSnapshot> {
-  const data = await adminFetch<{ room: RoomStateSnapshot }>(`/api/admin/competitions/${competitionId}`);
+export async function fetchRoomSnapshot(
+  competitionId: string,
+): Promise<RoomStateSnapshot> {
+  const data = await adminFetch<{ room: RoomStateSnapshot }>(
+    `/api/admin/competitions/${competitionId}`,
+  );
   return data.room;
 }

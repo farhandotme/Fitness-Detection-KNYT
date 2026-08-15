@@ -34,7 +34,12 @@ export const createRoomSchema = z
     eventId: z.string().trim().min(1),
     roomName: z.string().trim().min(1, "Room name is required").max(60),
     visibility: z.enum(["public", "private"]),
-    password: z.string().trim().min(4, "Password must be at least 4 characters").max(50).optional(),
+    password: z
+      .string()
+      .trim()
+      .min(4, "Password must be at least 4 characters")
+      .max(50)
+      .optional(),
     displayName: displayNameField,
     deviceId: deviceIdField,
     avatarUrl: avatarUrlField,
@@ -75,6 +80,15 @@ export const scoreUpdateSchema = z.object({
 });
 
 export const leaveCompetitionSchema = z.object({
+  competitionId: z.string().trim().min(1),
+  participantId: z.string().trim().min(1),
+  participantToken: z.string().trim().min(1),
+});
+
+// Host-only "start now" for a room that hasn't filled to maxParticipants
+// yet, gated server-side on room.minParticipants - see
+// services/competitionService.ts startRoomEarly.
+export const startRoomSchema = z.object({
   competitionId: z.string().trim().min(1),
   participantId: z.string().trim().min(1),
   participantToken: z.string().trim().min(1),

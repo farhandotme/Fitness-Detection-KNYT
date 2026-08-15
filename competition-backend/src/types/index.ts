@@ -73,6 +73,10 @@ export interface RoomStateSnapshot {
   exerciseMode: ExerciseMode;
   status: CompetitionStatus;
   maxParticipants: number;
+  // Snapshot of the event's minParticipants at room-creation time - the
+  // room's host can call room:start once this many seats are filled,
+  // instead of waiting for maxParticipants. See models/Competition.ts.
+  minParticipants: number;
   totalRounds: number;
   currentRound: number;
   roundDurationSeconds: number;

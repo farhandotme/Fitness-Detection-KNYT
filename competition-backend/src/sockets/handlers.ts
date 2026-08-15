@@ -6,12 +6,14 @@ import {
   leaveCompetitionSchema,
   reconnectSchema,
   scoreUpdateSchema,
+  startRoomSchema,
 } from "../schemas/socketSchemas.js";
 import {
   getRoomSnapshot,
   handleParticipantDisconnect,
   leaveCompetition,
   reconnectToCompetition,
+  startRoomEarly,
   submitScore,
 } from "../services/competitionService.js";
 import { createRoom, joinRoom } from "../services/roomService.js";
@@ -38,7 +40,9 @@ const joinAttempts = new WeakMap<Socket, number[]>();
 
 function isRateLimited(socket: Socket): boolean {
   const now = Date.now();
-  const attempts = (joinAttempts.get(socket) ?? []).filter((t) => now - t < JOIN_WINDOW_MS);
+  const attempts = (joinAttempts.get(socket) ?? []).filter(
+    (t) => now - t < JOIN_WINDOW_MS,
+  );
   attempts.push(now);
   joinAttempts.set(socket, attempts);
   return attempts.length > JOIN_MAX_ATTEMPTS;
@@ -49,7 +53,10 @@ function sendError(socket: Socket, err: unknown) {
     socket.emit("error", { code: err.code, message: err.message });
   } else {
     logger.error({ err }, "unexpected socket error");
-    socket.emit("error", { code: "INTERNAL", message: "Something went wrong. Please try again." });
+    socket.emit("error", {
+      code: "INTERNAL",
+      message: "Something went wrong. Please try again.",
+    });
   }
 }
 
@@ -74,13 +81,18 @@ export function registerSocketHandlers(io: Server): void {
     socket.on("room:create", async (payload) => {
       try {
         if (isRateLimited(socket)) {
-          throw AppError.badRequest("Too many attempts, please wait a moment and try again");
+          throw AppError.badRequest(
+            "Too many attempts, please wait a moment and try again",
+          );
         }
         const input = createRoomSchema.parse(payload);
         const result = await createRoom(input);
 
         socket.join(result.competitionId);
-        sessions.set(socket, { competitionId: result.competitionId, participantId: result.participantId });
+        sessions.set(socket, {
+          competitionId: result.competitionId,
+          participantId: result.participantId,
+        });
 
         socket.emit("competition:joined", result);
       } catch (err) {
@@ -93,13 +105,18 @@ export function registerSocketHandlers(io: Server): void {
     socket.on("room:join", async (payload) => {
       try {
         if (isRateLimited(socket)) {
-          throw AppError.badRequest("Too many attempts, please wait a moment and try again");
+          throw AppError.badRequest(
+            "Too many attempts, please wait a moment and try again",
+          );
         }
         const input = joinRoomSchema.parse(payload);
         const result = await joinRoom(input);
 
         socket.join(result.competitionId);
-        sessions.set(socket, { competitionId: result.competitionId, participantId: result.participantId });
+        sessions.set(socket, {
+          competitionId: result.competitionId,
+          participantId: result.participantId,
+        });
 
         socket.emit("competition:joined", result);
       } catch (err) {
@@ -110,13 +127,22 @@ export function registerSocketHandlers(io: Server): void {
     socket.on("competition:reconnect", async (payload) => {
       try {
         if (isRateLimited(socket)) {
-          throw AppError.badRequest("Too many reconnect attempts, please wait a moment and try again");
+          throw AppError.badRequest(
+            "Too many reconnect attempts, please wait a moment and try again",
+          );
         }
         const input = reconnectSchema.parse(payload);
-        const room = await reconnectToCompetition(input.competitionId, input.participantId, input.participantToken);
+        const room = await reconnectToCompetition(
+          input.competitionId,
+          input.participantId,
+          input.participantToken,
+        );
 
         socket.join(input.competitionId);
-        sessions.set(socket, { competitionId: input.competitionId, participantId: input.participantId });
+        sessions.set(socket, {
+          competitionId: input.competitionId,
+          participantId: input.participantId,
+        });
 
         socket.emit("competition:reconnected", { room });
         socket.to(input.competitionId).emit("room:state", room);
@@ -129,10 +155,20 @@ export function registerSocketHandlers(io: Server): void {
       try {
         const input = scoreUpdateSchema.parse(payload);
         const session = sessions.get(socket);
-        if (!session || session.competitionId !== input.competitionId || session.participantId !== input.participantId) {
+        if (
+          !session ||
+          session.competitionId !== input.competitionId ||
+          session.participantId !== input.participantId
+        ) {
           throw AppError.forbidden("Not a member of this competition room");
         }
-        await submitScore(input.competitionId, input.participantId, input.participantToken, input.round, input.score);
+        await submitScore(
+          input.competitionId,
+          input.participantId,
+          input.participantToken,
+          input.round,
+          input.score,
+        );
       } catch (err) {
         sendError(socket, err);
       }
@@ -141,7 +177,11 @@ export function registerSocketHandlers(io: Server): void {
     socket.on("competition:leave", async (payload) => {
       try {
         const input = leaveCompetitionSchema.parse(payload);
-        const result = await leaveCompetition(input.competitionId, input.participantId, input.participantToken);
+        const result = await leaveCompetition(
+          input.competitionId,
+          input.participantId,
+          input.participantToken,
+        );
         socket.leave(input.competitionId);
 
         if (result.hostLeft) {
@@ -153,11 +193,40 @@ export function registerSocketHandlers(io: Server): void {
           });
           io.in(input.competitionId).socketsLeave(input.competitionId);
         } else {
-          await competitionEngine.onParticipantCountChanged(input.competitionId);
+          await competitionEngine.onParticipantCountChanged(
+            input.competitionId,
+          );
           const room = await getRoomSnapshot(input.competitionId);
           if (room) io.to(input.competitionId).emit("room:state", room);
         }
         sessions.set(socket, {});
+      } catch (err) {
+        sendError(socket, err);
+      }
+    });
+
+    // Host-only: start the room now instead of waiting for it to fill,
+    // once at least minParticipants have joined - see
+    // services/competitionService.ts startRoomEarly.
+    socket.on("room:start", async (payload) => {
+      try {
+        const input = startRoomSchema.parse(payload);
+        const session = sessions.get(socket);
+        if (
+          !session ||
+          session.competitionId !== input.competitionId ||
+          session.participantId !== input.participantId
+        ) {
+          throw AppError.forbidden("Not a member of this competition room");
+        }
+        await startRoomEarly(
+          input.competitionId,
+          input.participantId,
+          input.participantToken,
+        );
+        // startRoomEarly already moved the room into its countdown and the
+        // engine broadcast room:state from inside triggerScheduledStart -
+        // nothing further to emit here.
       } catch (err) {
         sendError(socket, err);
       }
@@ -174,7 +243,9 @@ export function registerSocketHandlers(io: Server): void {
         try {
           verifyAdminToken(input.adminToken);
         } catch {
-          throw AppError.unauthorized("Invalid or expired admin session, please log in again");
+          throw AppError.unauthorized(
+            "Invalid or expired admin session, please log in again",
+          );
         }
 
         const room = await getRoomSnapshot(input.competitionId);

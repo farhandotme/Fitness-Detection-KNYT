@@ -95,6 +95,7 @@ export interface EventDetail {
   roundDurationSeconds: number;
   breakDurationSeconds: number;
   maxParticipants: number;
+  minParticipants: number;
   description?: string;
   imageUrl?: string;
   scheduling?: EventScheduling;
@@ -131,6 +132,9 @@ export interface RoomStateSnapshot {
   exerciseMode: ExerciseMode;
   status: CompetitionStatus;
   maxParticipants: number;
+  // Host can call room:start once at least this many are in - see
+  // hooks/useCompetitionRoom.ts startRoom.
+  minParticipants: number;
   totalRounds: number;
   currentRound: number;
   roundDurationSeconds: number;
