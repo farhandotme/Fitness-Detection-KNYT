@@ -19,6 +19,14 @@ const participantSchema = new Schema(
     // just freeing their seat - see destroyRoomAsHostLeft in
     // services/competitionService.ts.
     isHost: { type: Boolean, default: false },
+    // Optional profile photo for this session only - uploaded straight to
+    // Cloudinary by the frontend (see services/avatarService.ts), we only
+    // ever store the resulting URL/publicId here. avatarPublicId is what
+    // lets the server delete the actual image once the seat is freed
+    // (competitionService.ts) - never exposed to other participants,
+    // avatarUrl is the only one broadcast in room:state.
+    avatarUrl: { type: String, required: false, maxlength: 500 },
+    avatarPublicId: { type: String, required: false, maxlength: 300 },
   },
   { _id: false },
 );

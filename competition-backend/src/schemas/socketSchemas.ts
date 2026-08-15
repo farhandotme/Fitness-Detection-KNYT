@@ -11,6 +11,24 @@ const displayNameField = z
 // event's active rooms - see services/roomService.ts.
 const deviceIdField = z.string().trim().min(1).max(100);
 
+// Only ever a URL this server itself handed out via POST /api/avatars/signature
+// (see services/avatarService.ts) - restricting the host prevents someone
+// pointing avatarUrl at an arbitrary/tracking/oversized image that would
+// then get broadcast to every other participant in the room.
+const avatarUrlField = z
+  .string()
+  .trim()
+  .max(500)
+  .refine((url) => {
+    try {
+      return new URL(url).hostname === "res.cloudinary.com";
+    } catch {
+      return false;
+    }
+  }, "avatarUrl must be a res.cloudinary.com URL")
+  .optional();
+const avatarPublicIdField = z.string().trim().min(1).max(300).optional();
+
 export const createRoomSchema = z
   .object({
     eventId: z.string().trim().min(1),
@@ -19,6 +37,8 @@ export const createRoomSchema = z
     password: z.string().trim().min(4, "Password must be at least 4 characters").max(50).optional(),
     displayName: displayNameField,
     deviceId: deviceIdField,
+    avatarUrl: avatarUrlField,
+    avatarPublicId: avatarPublicIdField,
   })
   .superRefine((input, ctx) => {
     if (input.visibility === "private" && !input.password) {
@@ -35,6 +55,8 @@ export const joinRoomSchema = z.object({
   displayName: displayNameField,
   password: z.string().trim().max(50).optional(),
   deviceId: deviceIdField,
+  avatarUrl: avatarUrlField,
+  avatarPublicId: avatarPublicIdField,
 });
 
 export const reconnectSchema = z.object({
