@@ -54,7 +54,7 @@ export function EventsPage() {
 
       <main className="max-w-6xl mx-auto p-4 md:p-6 mt-4 flex flex-col gap-10">
         {/* Hero Section */}
-        <section className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-[#1b2014] via-[#12160e] to-black p-8 md:p-14 text-[#f4f7f2] shadow-[0_20px_50px_rgba(0,0,0,0.5)] border border-primary/20">
+        <section className="relative overflow-hidden rounded-[2.5rem] bg-linear-to-br from-[#1b2014] via-[#12160e] to-black p-8 md:p-14 text-[#f4f7f2] shadow-[0_20px_50px_rgba(0,0,0,0.5)] border border-primary/20">
           <div className="absolute -right-16 -top-24 h-96 w-96 rounded-full bg-primary/20 blur-[100px] pointer-events-none" />
           <div className="absolute right-20 -bottom-20 h-64 w-64 rounded-full bg-accent/20 blur-[80px] pointer-events-none" />
 
@@ -64,7 +64,7 @@ export function EventsPage() {
             </div>
             <h1 className="font-display text-5xl md:text-7xl font-black tracking-tighter leading-[1.05]">
               Compete live. <br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-accent to-white drop-shadow-sm">
+              <span className="text-transparent bg-clip-text bg-linear-to-r from-primary via-accent to-white drop-shadow-sm">
                 Claim the podium.
               </span>
             </h1>
@@ -119,7 +119,7 @@ export function EventsPage() {
             {[1, 2, 3].map((i) => (
               <div
                 key={i}
-                className="bg-card/50 border border-border/50 rounded-[2rem] p-5 h-[450px] animate-pulse"
+                className="bg-card/50 border border-border/50 rounded-4xl p-5 h-112.5 animate-pulse"
               />
             ))}
           </div>
@@ -150,7 +150,7 @@ export function EventsPage() {
                 >
                   <div
                     data-testid={`card-event-${event.id}`}
-                    className="bg-card border border-white/5 rounded-[2rem] overflow-hidden h-full flex flex-col transition-all duration-500 hover:border-primary/50 hover:-translate-y-2 hover:shadow-[0_20px_40px_rgba(var(--primary),0.15)] relative"
+                    className="bg-card border border-white/5 rounded-4xl overflow-hidden h-full flex flex-col transition-all duration-500 hover:border-primary/50 hover:-translate-y-2 hover:shadow-[0_20px_40px_rgba(var(--primary),0.15)] relative"
                   >
                     {/* Event Banner Image */}
                     <div className="h-56 w-full relative bg-zinc-900 overflow-hidden">
@@ -161,7 +161,7 @@ export function EventsPage() {
                           imgClassName="opacity-80 group-hover:opacity-100 group-hover:scale-110 transition-all duration-700 ease-out"
                         />
                       ) : (
-                        <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-primary/10 via-card to-black">
+                        <div className="w-full h-full flex flex-col items-center justify-center bg-linear-to-br from-primary/10 via-card to-black">
                           <Trophy className="w-12 h-12 text-primary/30 mb-2" />
                           <span className="text-xs font-mono font-bold uppercase tracking-widest text-primary/40">
                             Arena
@@ -169,7 +169,7 @@ export function EventsPage() {
                         </div>
                       )}
 
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
+                      <div className="absolute inset-0 bg-linear-to-t from-black/90 via-black/30 to-transparent" />
 
                       {/* Noticeable, normal-sized red border badge */}
                       {schedule ? (
