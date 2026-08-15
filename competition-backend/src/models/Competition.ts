@@ -70,15 +70,34 @@ const competitionSchema = new Schema(
     // see services/roomService.ts. roomName is what they called it, e.g.
     // "Me & Rahul"; visibility/passwordHash control who can join it.
     roomName: { type: String, required: true, trim: true, maxlength: 60 },
-    visibility: { type: String, enum: ["public", "private"], default: "public" },
+    visibility: {
+      type: String,
+      enum: ["public", "private"],
+      default: "public",
+    },
     // Only set for private rooms - bcrypt hash, never the raw password.
     passwordHash: { type: String, required: false },
     status: {
       type: String,
-      enum: ["WAITING", "FULL", "COUNTDOWN", "ROUND_RUNNING", "ROUND_FINISHED", "BREAK", "COMPLETED", "ABANDONED"],
+      enum: [
+        "WAITING",
+        "FULL",
+        "COUNTDOWN",
+        "ROUND_RUNNING",
+        "ROUND_FINISHED",
+        "BREAK",
+        "COMPLETED",
+        "ABANDONED",
+      ],
       default: "WAITING",
     },
     maxParticipants: { type: Number, required: true },
+    // Snapshot of the event's minParticipants at room-creation time (see
+    // models/Event.ts) - how many seats this specific room needs filled
+    // before its host can start it early via room:start. Copied rather
+    // than looked up live so a later admin edit to the event doesn't
+    // retroactively change the rules for a room that's already mid-fill.
+    minParticipants: { type: Number, required: true, default: 2 },
     totalRounds: { type: Number, required: true },
     roundDurationSeconds: { type: Number, required: true },
     breakDurationSeconds: { type: Number, required: true },
@@ -94,7 +113,13 @@ const competitionSchema = new Schema(
 competitionSchema.index({ eventId: 1, status: 1 });
 // Used to look up "does this device already have an active seat in this event"
 // so the same person can't grab multiple of a room's 5 slots (services/roomService.ts).
-competitionSchema.index({ eventId: 1, status: 1, "participants.deviceIdHash": 1 });
+competitionSchema.index({
+  eventId: 1,
+  status: 1,
+  "participants.deviceIdHash": 1,
+});
 
-export type CompetitionDoc = InferSchemaType<typeof competitionSchema> & { _id: Types.ObjectId };
+export type CompetitionDoc = InferSchemaType<typeof competitionSchema> & {
+  _id: Types.ObjectId;
+};
 export const CompetitionModel = model("Competition", competitionSchema);
