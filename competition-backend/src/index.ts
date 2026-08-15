@@ -26,7 +26,9 @@ async function main() {
   eventScheduler.start();
 
   httpServer.listen(env.PORT, () => {
-    logger.info(`competition-backend listening on :${env.PORT} (${env.NODE_ENV})`);
+    logger.info(
+      `competition-backend listening on :${env.PORT} (${env.NODE_ENV})`,
+    );
   });
 
   let shuttingDown = false;

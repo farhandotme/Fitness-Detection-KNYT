@@ -14,6 +14,7 @@ const roundSetKey = (competitionId: string) => `comp:${competitionId}:rounds`; /
 interface StoredParticipant {
   displayName: string;
   connected: boolean;
+  avatarUrl?: string | null;
 }
 
 export async function joinRoomAtomic(
@@ -21,9 +22,10 @@ export async function joinRoomAtomic(
   maxParticipants: number,
   participantId: string,
   displayName: string,
+  avatarUrl?: string | null,
 ): Promise<"joined" | "full" | "already_member"> {
   const key = participantsKey(competitionId);
-  const payload: StoredParticipant = { displayName, connected: true };
+  const payload: StoredParticipant = { displayName, connected: true, avatarUrl: avatarUrl ?? null };
   const result = await redis.joinRoom(key, maxParticipants, participantId, JSON.stringify(payload));
   await redis.expire(key, ROOM_TTL_SECONDS);
   if (result === 0) return "full";
@@ -64,11 +66,16 @@ export async function getParticipantCount(competitionId: string): Promise<number
 
 export async function getParticipants(
   competitionId: string,
-): Promise<{ participantId: string; displayName: string; connected: boolean }[]> {
+): Promise<{ participantId: string; displayName: string; connected: boolean; avatarUrl: string | null }[]> {
   const all = await redis.hgetall(participantsKey(competitionId));
   return Object.entries(all).map(([participantId, raw]) => {
     const parsed: StoredParticipant = JSON.parse(raw);
-    return { participantId, displayName: parsed.displayName, connected: parsed.connected };
+    return {
+      participantId,
+      displayName: parsed.displayName,
+      connected: parsed.connected,
+      avatarUrl: parsed.avatarUrl ?? null,
+    };
   });
 }
 
@@ -106,12 +113,13 @@ export async function getCumulativeScores(competitionId: string, uptoRound: numb
 }
 
 export function buildLeaderboard(
-  participants: { participantId: string; displayName: string }[],
+  participants: { participantId: string; displayName: string; avatarUrl?: string | null }[],
   scores: Record<string, number>,
 ): LeaderboardEntry[] {
   const entries = participants.map((p) => ({
     participantId: p.participantId,
     displayName: p.displayName,
+    avatarUrl: p.avatarUrl ?? null,
     score: scores[p.participantId] ?? 0,
   }));
   entries.sort((a, b) => b.score - a.score);

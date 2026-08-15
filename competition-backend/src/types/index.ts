@@ -46,6 +46,11 @@ export interface ParticipantPublic {
   connected: boolean;
   // Whether this participant created the room. See models/Competition.ts.
   isHost: boolean;
+  // Cloudinary URL if this player uploaded a photo this session, otherwise
+  // null - every other participant sees this same URL (see
+  // services/avatarService.ts). Never the Cloudinary publicId, only the
+  // owning client keeps that (needed to delete it later).
+  avatarUrl: string | null;
 }
 
 export interface LeaderboardEntry {
@@ -53,6 +58,7 @@ export interface LeaderboardEntry {
   displayName: string;
   score: number;
   rank: number;
+  avatarUrl: string | null;
 }
 
 export type RoomVisibility = "public" | "private";
@@ -86,6 +92,7 @@ export interface FinalResultEntry {
   totalScore: number;
   rank: number;
   perRound: { round: number; score: number }[];
+  avatarUrl: string | null;
 }
 
 // A room in the browse/lobby list for an event - before anyone has joined
@@ -100,6 +107,10 @@ export interface RoomListEntry {
   participantCount: number;
   maxParticipants: number;
   participantNames?: string[];
+  // Parallel to participantNames (same index = same person) - null entries
+  // mean that participant hasn't uploaded a photo, so the frontend shows a
+  // generated avatar for them instead. Public rooms only, same as names.
+  participantAvatars?: (string | null)[];
   createdAt: string;
 }
 
@@ -114,6 +125,11 @@ export interface CreateRoomPayload {
   // Stable per-browser id (see frontend src/lib/deviceId.ts) used to stop
   // the same person from occupying multiple of a room's seats.
   deviceId: string;
+  // Cloudinary URL/publicId from a completed signed upload (see
+  // POST /api/avatars/signature) - both optional, a player can always skip
+  // uploading and get a generated avatar instead.
+  avatarUrl?: string;
+  avatarPublicId?: string;
 }
 
 export interface JoinRoomPayload {
@@ -121,6 +137,8 @@ export interface JoinRoomPayload {
   displayName: string;
   password?: string;
   deviceId: string;
+  avatarUrl?: string;
+  avatarPublicId?: string;
 }
 
 export interface ReconnectPayload {
