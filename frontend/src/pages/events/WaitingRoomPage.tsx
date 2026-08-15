@@ -2,8 +2,9 @@ import React, { useEffect, useState } from "react";
 import { useRoute, useLocation, Link } from "wouter";
 import { Navbar } from "@/components/Navbar";
 import { useCompetitionRoom } from "@/hooks/useCompetitionRoom";
-import { Users, Wifi, WifiOff, LogOut, AlertTriangle, User as UserIcon, Lock, Globe } from "lucide-react";
+import { Users, Wifi, WifiOff, LogOut, AlertTriangle, Lock, Globe } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { PlayerAvatar } from "@/components/PlayerAvatar";
 
 export function WaitingRoomPage() {
   const [match, params] = useRoute("/competitions/:competitionId/waiting");
@@ -197,14 +198,16 @@ export function WaitingRoomPage() {
                     : "border-dashed border-border bg-background/40",
                 )}
               >
-                <div
-                  className={cn(
-                    "w-9 h-9 rounded-full flex items-center justify-center shrink-0",
-                    participant ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground",
-                  )}
-                >
-                  <UserIcon className="w-4 h-4" />
-                </div>
+                {participant ? (
+                  <PlayerAvatar
+                    name={participant.displayName}
+                    src={participant.avatarUrl}
+                    seed={participant.participantId}
+                    isSelf={participant.participantId === identity?.participantId}
+                  />
+                ) : (
+                  <div className="w-9 h-9 rounded-full border border-dashed border-border shrink-0" />
+                )}
                 <div className="min-w-0">
                   <p
                     className={cn(

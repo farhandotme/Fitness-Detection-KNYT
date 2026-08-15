@@ -93,10 +93,10 @@ export function AdminLoginPage() {
       `}</style>
 
       {/* Minimalist Ambient Glows */}
-      <div className="pointer-events-none absolute -top-32 left-1/2 -translate-x-1/2 w-150 h-150 bg-primary/5 blur-[100px] rounded-full opacity-50" />
+      <div className="pointer-events-none absolute -top-32 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-primary/5 blur-[100px] rounded-full opacity-50" />
 
       {/* Background Subtle Dot Pattern */}
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(var(--border)_1px,transparent_1px)] bg-size-[24px_24px] opacity-[0.15]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(var(--border)_1px,transparent_1px)] [background-size:24px_24px] opacity-[0.15]" />
 
       {/* Header */}
       <header className="relative z-10 px-6 py-6 max-w-7xl w-full mx-auto flex items-center justify-between">
@@ -129,7 +129,7 @@ export function AdminLoginPage() {
       </header>
 
       {/* Main Container - Sharper, Professional Apple-like Card */}
-      <main className="relative z-10 max-w-115 w-full mx-auto p-4 md:p-6 my-auto flex flex-col justify-center">
+      <main className="relative z-10 max-w-[460px] w-full mx-auto p-4 md:p-6 my-auto flex flex-col justify-center">
         <div className="relative bg-card border border-border/60 rounded-2xl p-7 md:p-8 shadow-xl shadow-black/5 overflow-hidden transition-all duration-300">
           {/* Subtle Top Badges */}
           <div className="flex items-center justify-between mb-8">

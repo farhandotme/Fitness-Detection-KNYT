@@ -3,6 +3,9 @@ import { useRoute, useLocation, Link } from "wouter";
 import { Navbar } from "@/components/Navbar";
 import { fetchEventDetail, fetchEventRooms, revealRoom } from "@/lib/competitionApi";
 import { useJoinCompetition } from "@/hooks/useCompetitionRoom";
+import { AvatarPicker } from "@/components/AvatarPicker";
+import { PlayerAvatar } from "@/components/PlayerAvatar";
+import { getMyAvatar, type StoredAvatar } from "@/lib/avatarStore";
 import type { EventDetail, RoomListEntry, RoomVisibility } from "@/types/competition";
 import {
   ArrowLeft,
@@ -143,8 +146,8 @@ export function RoomsLobbyPage() {
             setShowCreate(false);
             setActionError(null);
           }}
-          onCreate={async (roomName, visibility, displayName, password) => {
-            const ack = await createRoom(eventId, roomName, visibility, displayName, password);
+          onCreate={async (roomName, visibility, displayName, password, avatar) => {
+            const ack = await createRoom(eventId, roomName, visibility, displayName, password, avatar?.url, avatar?.publicId);
             handleCreated(ack.competitionId);
           }}
           joining={joining}
@@ -160,8 +163,8 @@ export function RoomsLobbyPage() {
             setActiveRoom(null);
             setActionError(null);
           }}
-          onJoin={async (displayName, password) => {
-            const ack = await joinRoom(activeRoom.competitionId, displayName, password);
+          onJoin={async (displayName, password, avatar) => {
+            const ack = await joinRoom(activeRoom.competitionId, displayName, password, avatar?.url, avatar?.publicId);
             handleJoined(ack.competitionId);
           }}
           joining={joining}
@@ -204,9 +207,23 @@ function RoomRow({ room, onSelect }: { room: RoomListEntry; onSelect: () => void
           </span>
         </div>
         {room.visibility === "public" && room.participantNames && room.participantNames.length > 0 ? (
-          <p className="text-xs text-muted-foreground truncate mt-1">
-            {room.participantNames.join(", ")}
-          </p>
+          <div className="flex items-center gap-1.5 mt-1.5">
+            <div className="flex -space-x-2">
+              {room.participantNames.slice(0, 5).map((name, i) => (
+                <PlayerAvatar
+                  key={`${name}-${i}`}
+                  name={name}
+                  seed={`${name}-${i}`}
+                  src={room.participantAvatars?.[i]}
+                  size="sm"
+                  className="ring-2 ring-card"
+                />
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground truncate">
+              {room.participantNames.join(", ")}
+            </p>
+          </div>
         ) : (
           <p className="text-xs text-muted-foreground mt-1">
             {room.visibility === "private" ? "Password required to view players" : "No one here yet"}
@@ -231,7 +248,13 @@ function CreateRoomModal({
   error,
 }: {
   onClose: () => void;
-  onCreate: (roomName: string, visibility: RoomVisibility, displayName: string, password?: string) => Promise<void>;
+  onCreate: (
+    roomName: string,
+    visibility: RoomVisibility,
+    displayName: string,
+    password: string | undefined,
+    avatar: StoredAvatar | null,
+  ) => Promise<void>;
   joining: boolean;
   error: string | null;
 }) {
@@ -239,6 +262,7 @@ function CreateRoomModal({
   const [visibility, setVisibility] = useState<RoomVisibility>("public");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const [avatar, setAvatar] = useState<StoredAvatar | null>(() => getMyAvatar());
 
   const canSubmit =
     roomName.trim().length > 0 &&
@@ -249,7 +273,7 @@ function CreateRoomModal({
     e.preventDefault();
     if (!canSubmit || joining) return;
     try {
-      await onCreate(roomName.trim(), visibility, displayName.trim(), visibility === "private" ? password.trim() : undefined);
+      await onCreate(roomName.trim(), visibility, displayName.trim(), visibility === "private" ? password.trim() : undefined, avatar);
     } catch {
       // error surfaced via `error` prop
     }
@@ -258,6 +282,8 @@ function CreateRoomModal({
   return (
     <ModalShell onClose={onClose} title="Create a Room">
       <form onSubmit={handleSubmit} className="space-y-5">
+        <AvatarPicker name={displayName} value={avatar} onChange={setAvatar} />
+
         <Field label="Room name">
           <input
             value={roomName}
@@ -353,7 +379,7 @@ function JoinRoomModal({
   eventId: string;
   room: RoomListEntry;
   onClose: () => void;
-  onJoin: (displayName: string, password?: string) => Promise<void>;
+  onJoin: (displayName: string, password: string | undefined, avatar: StoredAvatar | null) => Promise<void>;
   joining: boolean;
   error: string | null;
 }) {
@@ -362,7 +388,9 @@ function JoinRoomModal({
   const [unlockError, setUnlockError] = useState<string | null>(null);
   const [unlocking, setUnlocking] = useState(false);
   const [participantNames, setParticipantNames] = useState<string[] | undefined>(room.participantNames);
+  const [participantAvatars, setParticipantAvatars] = useState<(string | null)[] | undefined>(room.participantAvatars);
   const [displayName, setDisplayName] = useState("");
+  const [avatar, setAvatar] = useState<StoredAvatar | null>(() => getMyAvatar());
 
   const handleUnlock = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -372,6 +400,7 @@ function JoinRoomModal({
     try {
       const preview = await revealRoom(eventId, room.competitionId, password.trim());
       setParticipantNames(preview.participantNames);
+      setParticipantAvatars(preview.participantAvatars);
       setUnlocked(true);
     } catch (err: any) {
       setUnlockError(err.message || "Incorrect password");
@@ -384,7 +413,7 @@ function JoinRoomModal({
     e.preventDefault();
     if (!displayName.trim() || joining) return;
     try {
-      await onJoin(displayName.trim(), room.visibility === "private" ? password.trim() : undefined);
+      await onJoin(displayName.trim(), room.visibility === "private" ? password.trim() : undefined, avatar);
     } catch {
       // error surfaced via `error` prop
     }
@@ -438,8 +467,9 @@ function JoinRoomModal({
                 {participantNames.map((name, i) => (
                   <span
                     key={`${name}-${i}`}
-                    className="text-xs font-bold px-3 py-1.5 rounded-full bg-secondary text-foreground"
+                    className="inline-flex items-center gap-1.5 text-xs font-bold pl-1 pr-3 py-1 rounded-full bg-secondary text-foreground"
                   >
+                    <PlayerAvatar name={name} seed={`${name}-${i}`} src={participantAvatars?.[i]} size="sm" />
                     {name}
                   </span>
                 ))}
@@ -448,6 +478,8 @@ function JoinRoomModal({
               <p className="text-sm text-muted-foreground">No one here yet - be the first to join.</p>
             )}
           </div>
+
+          <AvatarPicker name={displayName} value={avatar} onChange={setAvatar} />
 
           <Field label="Your display name">
             <input
