@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useRoute, useLocation, Link } from "wouter";
 import { Navbar } from "@/components/Navbar";
+import { CoverImageCarousel } from "@/components/CoverImageCarousel";
 import { fetchEventDetail } from "@/lib/competitionApi";
 import { useEventPhase } from "@/hooks/useEventPhase";
 import { getScheduleStatus } from "@/utils/eventSchedule";
@@ -27,7 +28,6 @@ export function EventJoinPage() {
   const [event, setEvent] = useState<EventDetail | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [imageFailed, setImageFailed] = useState(false);
 
   const { scheduling, now } = useEventPhase(
     eventId,
@@ -44,6 +44,8 @@ export function EventJoinPage() {
       .finally(() => setLoading(false));
   }, [eventId]);
 
+  const images = event?.imageUrls ?? [];
+
   if (!match || !eventId) {
     return (
       <div className="p-8 text-center font-bold text-destructive flex items-center justify-center min-h-[50vh]">
@@ -52,7 +54,7 @@ export function EventJoinPage() {
     );
   }
 
-  const hasImage = Boolean(event?.imageUrl) && !imageFailed;
+  const hasImage = images.length > 0;
   const exercise = event ? getExerciseById(event.exerciseId) : undefined;
   const schedule = scheduling ? getScheduleStatus(scheduling, now) : null;
   const canJoin = !schedule || schedule.canJoin;
@@ -104,12 +106,14 @@ export function EventJoinPage() {
             {/* Event Cover Image Banner */}
             <div className="h-72 w-full relative bg-zinc-900 overflow-hidden group">
               {hasImage ? (
-                <img
-                  src={event.imageUrl}
-                  alt={event.name}
-                  onError={() => setImageFailed(true)}
-                  className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity duration-700 group-hover:scale-105"
-                />
+                <div className="w-full h-full opacity-80 group-hover:opacity-100 transition-opacity duration-700">
+                  <CoverImageCarousel
+                    images={images}
+                    alt={event.name}
+                    imgClassName="group-hover:scale-105 transition-transform duration-700"
+                    dotsClassName="absolute bottom-16 left-8 z-10 flex items-center gap-1.5"
+                  />
+                </div>
               ) : (
                 <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-primary/10 via-card to-secondary p-6 text-center relative overflow-hidden">
                   <div className="absolute inset-0 opacity-[0.07] bg-[radial-gradient(circle_at_1px_1px,white_1px,transparent_0)] bg-size-[24px_24px]" />
@@ -225,13 +229,14 @@ export function EventJoinPage() {
               <div className="border-t border-white/5 pt-8 mt-2">
                 <p className="text-xs font-medium text-muted-foreground/70 mb-4 flex items-center gap-2">
                   <Sparkles className="w-3 h-3 text-primary" />
-                  Browse rooms other players have created - or start your
-                  own, public or password-protected - before you pick a
-                  display name.
+                  Browse rooms other players have created - or start your own,
+                  public or password-protected - before you pick a display name.
                 </p>
 
                 <button
-                  onClick={() => canJoin && setLocation(`/events/${event.id}/rooms`)}
+                  onClick={() =>
+                    canJoin && setLocation(`/events/${event.id}/rooms`)
+                  }
                   disabled={!canJoin}
                   data-testid="button-browse-rooms"
                   className="w-full bg-primary text-primary-foreground h-16 rounded-2xl font-black text-xl uppercase tracking-[0.1em] flex items-center justify-center gap-3 hover:bg-primary/90 hover:scale-[1.02] active:scale-[0.98] transition-all shadow-[0_0_40px_rgba(var(--primary),0.4)] disabled:opacity-50 disabled:pointer-events-none disabled:shadow-none border border-primary/50"

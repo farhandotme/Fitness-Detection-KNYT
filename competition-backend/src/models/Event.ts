@@ -102,10 +102,19 @@ const eventSchema = new Schema(
       default: "live",
     },
     description: { type: String, default: "" },
-    // Optional cover image shown on event cards (join screen + admin
-    // dashboard). Just a URL - no upload/storage pipeline in v1, matching
-    // how lean the rest of the anonymous-participant system is kept.
-    imageUrl: { type: String, default: "" },
+    // Optional cover / advertising images shown on event cards (join screen
+    // + admin dashboard). Uploaded straight to Cloudinary from the admin
+    // dashboard (see services/eventImageService.ts) - only the resulting
+    // secure URLs are stored here. Up to MAX_EVENT_IMAGES (3) so an event
+    // can rotate a small banner carousel instead of a single static image.
+    imageUrls: {
+      type: [String],
+      default: [],
+      validate: {
+        validator: (arr: string[]) => arr.length <= 3,
+        message: "An event can have at most 3 cover images",
+      },
+    },
     // Absent entirely for a normal "starts as soon as a room fills" event -
     // that keeps every existing event working exactly as before. Present
     // only for events created with a scheduled start; see

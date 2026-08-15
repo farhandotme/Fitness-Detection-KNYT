@@ -59,7 +59,7 @@ export async function listLiveEvents() {
     maxParticipants: e.maxParticipants,
     minParticipants: e.minParticipants,
     description: e.description,
-    imageUrl: e.imageUrl,
+    imageUrls: e.imageUrls ?? [],
     activeRooms: countsByEvent.get(String(e._id)) ?? 0,
     scheduling: toPublicScheduling(e.scheduling),
     serverNow: Date.now(),

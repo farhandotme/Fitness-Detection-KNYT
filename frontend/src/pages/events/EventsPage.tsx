@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { Navbar } from "@/components/Navbar";
+import { CoverImageCarousel } from "@/components/CoverImageCarousel";
 import { fetchLiveEvents } from "@/lib/competitionApi";
 import type { LiveEventSummary } from "@/types/competition";
 import { getExerciseById } from "@/config/exercises";
@@ -133,11 +134,13 @@ export function EventsPage() {
                 ? getScheduleStatus(event.scheduling, now)
                 : null;
 
-              const displayImage =
-                event.imageUrl ||
-                (event as any).image ||
-                (event as any).coverUrl ||
-                (event as any).thumbnailUrl;
+              const displayImages: string[] = event.imageUrls?.length
+                ? event.imageUrls
+                : [
+                    (event as any).image,
+                    (event as any).coverUrl,
+                    (event as any).thumbnailUrl,
+                  ].filter(Boolean);
 
               return (
                 <Link
@@ -151,11 +154,11 @@ export function EventsPage() {
                   >
                     {/* Event Banner Image */}
                     <div className="h-56 w-full relative bg-zinc-900 overflow-hidden">
-                      {displayImage ? (
-                        <img
-                          src={displayImage}
+                      {displayImages.length > 0 ? (
+                        <CoverImageCarousel
+                          images={displayImages}
                           alt={event.name}
-                          className="w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-110 transition-all duration-700 ease-out"
+                          imgClassName="opacity-80 group-hover:opacity-100 group-hover:scale-110 transition-all duration-700 ease-out"
                         />
                       ) : (
                         <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-primary/10 via-card to-black">

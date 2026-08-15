@@ -106,13 +106,15 @@ const eventBaseSchema = z.object({
   // models/Event.ts. Distinct from scheduling.minParticipants.
   minParticipants: z.number().int().min(1).max(5).default(2),
   description: z.string().max(500).optional(),
-  imageUrl: z
-    .string()
-    .trim()
-    .url("Must be a valid URL")
-    .max(500)
+  // Up to 3 cover / advertising images, uploaded to Cloudinary from the
+  // admin dashboard - see services/eventImageService.ts. The frontend
+  // always sends the full resulting array (never a single string), even
+  // when there's just one image.
+  imageUrls: z
+    .array(z.string().trim().url("Must be a valid URL").max(500))
+    .max(3, "At most 3 cover images allowed")
     .optional()
-    .or(z.literal("")),
+    .default([]),
   status: z.enum(["draft", "live", "closed"]).default("live"),
   // Omit entirely for an immediate-start event (unchanged v1 behaviour).
   // Present only when the admin picks "schedule for later".

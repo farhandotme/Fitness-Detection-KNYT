@@ -31,7 +31,7 @@ eventRoutes.get(
         maxParticipants: event.maxParticipants,
         minParticipants: event.minParticipants,
         description: event.description,
-        imageUrl: event.imageUrl,
+        imageUrls: event.imageUrls ?? [],
         scheduling: event.scheduling
           ? {
               scheduledAt: event.scheduling.scheduledAt.toISOString(),
