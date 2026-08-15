@@ -108,11 +108,13 @@ async function seatNewParticipant(
   displayName: string,
   deviceIdHash: string,
   isHost: boolean,
+  avatarUrl?: string,
+  avatarPublicId?: string,
 ): Promise<JoinResult> {
   const participantId = nanoid(12);
   const participantToken = generateParticipantToken();
 
-  const outcome = await joinRoomAtomic(competitionId, maxParticipants, participantId, displayName);
+  const outcome = await joinRoomAtomic(competitionId, maxParticipants, participantId, displayName, avatarUrl);
   if (outcome === "full") {
     throw AppError.conflict("This room just filled up, please pick another one.");
   }
@@ -129,6 +131,8 @@ async function seatNewParticipant(
           joinedAt: new Date(),
           connected: true,
           isHost,
+          avatarUrl,
+          avatarPublicId,
         },
       },
     },
@@ -172,6 +176,7 @@ export async function listRoomsForEvent(eventId: string): Promise<RoomListEntry[
       };
       if (room.visibility === "public") {
         entry.participantNames = participants.map((p) => p.displayName);
+        entry.participantAvatars = participants.map((p) => p.avatarUrl);
       }
       return entry;
     }),
@@ -184,7 +189,7 @@ export async function listRoomsForEvent(eventId: string): Promise<RoomListEntry[
  * frontend checks a password is correct before showing the "enter your
  * name" step.
  */
-export async function revealRoom(competitionId: string, password: string | undefined): Promise<{ roomName: string; visibility: RoomVisibility; participantNames: string[]; maxParticipants: number }> {
+export async function revealRoom(competitionId: string, password: string | undefined): Promise<{ roomName: string; visibility: RoomVisibility; participantNames: string[]; participantAvatars: (string | null)[]; maxParticipants: number }> {
   const room = await CompetitionModel.findById(competitionId).lean<CompetitionDoc | null>();
   if (!room || !["WAITING", "FULL"].includes(room.status)) {
     throw AppError.notFound("Room not found or no longer open");
@@ -199,6 +204,7 @@ export async function revealRoom(competitionId: string, password: string | undef
     roomName: room.roomName,
     visibility: room.visibility as RoomVisibility,
     participantNames: participants.map((p) => p.displayName),
+    participantAvatars: participants.map((p) => p.avatarUrl),
     maxParticipants: room.maxParticipants,
   };
 }
@@ -210,6 +216,8 @@ export interface CreateRoomInput {
   password?: string;
   displayName: string;
   deviceId: string;
+  avatarUrl?: string;
+  avatarPublicId?: string;
 }
 
 /** A participant creates a brand-new room and is immediately seated in it. */
@@ -251,7 +259,15 @@ export async function createRoom(input: CreateRoomInput): Promise<JoinResult> {
 
     // The participant who creates the room is its host - see
     // models/Competition.ts and destroyRoomAsHostLeft in competitionService.ts.
-    const result = await seatNewParticipant(competitionId, event.maxParticipants, input.displayName, deviceIdHash, true);
+    const result = await seatNewParticipant(
+      competitionId,
+      event.maxParticipants,
+      input.displayName,
+      deviceIdHash,
+      true,
+      input.avatarUrl,
+      input.avatarPublicId,
+    );
     logger.info({ competitionId, eventId: input.eventId, visibility: input.visibility }, "room created");
     return result;
   } finally {
@@ -264,6 +280,8 @@ export interface JoinRoomInput {
   displayName: string;
   password?: string;
   deviceId: string;
+  avatarUrl?: string;
+  avatarPublicId?: string;
 }
 
 /** A participant joins a specific, already-existing room they picked from the lobby. */
@@ -299,7 +317,15 @@ export async function joinRoom(input: JoinRoomInput): Promise<JoinResult> {
       throw AppError.conflict("This room is already full");
     }
 
-    return await seatNewParticipant(input.competitionId, room.maxParticipants, input.displayName, deviceIdHash, false);
+    return await seatNewParticipant(
+      input.competitionId,
+      room.maxParticipants,
+      input.displayName,
+      deviceIdHash,
+      false,
+      input.avatarUrl,
+      input.avatarPublicId,
+    );
   } finally {
     await redis.del(lockKey);
   }
