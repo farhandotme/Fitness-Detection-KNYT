@@ -2,7 +2,16 @@ import React, { useEffect, useState } from "react";
 import { useRoute, useLocation, Link } from "wouter";
 import { Navbar } from "@/components/Navbar";
 import { useCompetitionRoom } from "@/hooks/useCompetitionRoom";
-import { Users, Wifi, WifiOff, LogOut, AlertTriangle, Lock, Globe } from "lucide-react";
+import {
+  Users,
+  Wifi,
+  WifiOff,
+  LogOut,
+  AlertTriangle,
+  Lock,
+  Globe,
+  Rocket,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 
@@ -11,8 +20,18 @@ export function WaitingRoomPage() {
   const [, setLocation] = useLocation();
   const competitionId = params?.competitionId;
 
-  const { room, identity, error, cancelled, closed, connected, leave } = useCompetitionRoom(competitionId);
+  const {
+    room,
+    identity,
+    error,
+    cancelled,
+    closed,
+    connected,
+    leave,
+    startRoom,
+  } = useCompetitionRoom(competitionId);
   const [confirmingLeave, setConfirmingLeave] = useState(false);
+  const [starting, setStarting] = useState(false);
 
   // No stored identity for this room means the user landed here directly
   // (e.g. a stale link or refresh after clearing storage) - send them to join properly.
@@ -66,17 +85,33 @@ export function WaitingRoomPage() {
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [identity]);
 
+  // If starting failed (e.g. someone left right as the host clicked,
+  // dropping the room back below minParticipants), the shared socket
+  // "error" channel surfaces it here - un-stick the button so they can retry.
+  useEffect(() => {
+    if (error) setStarting(false);
+  }, [error]);
+
   const confirmLeave = () => {
     leave();
     setConfirmingLeave(false);
     setLocation("/events");
   };
 
-  const myParticipant = room?.participants.find((p) => p.participantId === identity?.participantId);
+  const myParticipant = room?.participants.find(
+    (p) => p.participantId === identity?.participantId,
+  );
   const isHost = myParticipant?.isHost === true;
 
+  const handleStart = () => {
+    setStarting(true);
+    startRoom();
+  };
+
   if (!match || !competitionId) {
-    return <div className="p-8 text-center text-destructive">Room not found.</div>;
+    return (
+      <div className="p-8 text-center text-destructive">Room not found.</div>
+    );
   }
 
   if (cancelled) {
@@ -86,7 +121,9 @@ export function WaitingRoomPage() {
         <main className="max-w-2xl mx-auto p-4 mt-6">
           <div className="bg-card border border-card-border rounded-4xl p-6 md:p-8 shadow-sm text-center">
             <AlertTriangle className="w-10 h-10 text-destructive mx-auto mb-4" />
-            <h1 className="text-2xl font-black tracking-tight mb-2">Event cancelled</h1>
+            <h1 className="text-2xl font-black tracking-tight mb-2">
+              Event cancelled
+            </h1>
             <p className="text-muted-foreground mb-8">{cancelled}</p>
             <Link
               href="/events"
@@ -109,7 +146,9 @@ export function WaitingRoomPage() {
         <main className="max-w-2xl mx-auto p-4 mt-6">
           <div className="bg-card border border-card-border rounded-4xl p-6 md:p-8 shadow-sm text-center">
             <AlertTriangle className="w-10 h-10 text-destructive mx-auto mb-4" />
-            <h1 className="text-2xl font-black tracking-tight mb-2">Room closed</h1>
+            <h1 className="text-2xl font-black tracking-tight mb-2">
+              Room closed
+            </h1>
             <p className="text-muted-foreground mb-8">{closed}</p>
             <Link
               href="/events"
@@ -125,7 +164,16 @@ export function WaitingRoomPage() {
 
   const filledSeats = room?.participants.length ?? 0;
   const totalSeats = room?.maxParticipants ?? 5;
-  const seats = Array.from({ length: totalSeats }, (_, i) => room?.participants[i] ?? null);
+  const seats = Array.from(
+    { length: totalSeats },
+    (_, i) => room?.participants[i] ?? null,
+  );
+  const canStartEarly =
+    isHost &&
+    room?.status === "WAITING" &&
+    room.minParticipants > 0 &&
+    filledSeats >= room.minParticipants &&
+    filledSeats < room.maxParticipants;
 
   return (
     <div className="min-h-dvh bg-background text-foreground">
@@ -141,7 +189,11 @@ export function WaitingRoomPage() {
 
         <div className="bg-card border border-card-border rounded-4xl p-6 md:p-8 shadow-sm text-center">
           <div className="flex items-center justify-center gap-2 text-xs font-bold uppercase tracking-[.2em] text-primary mb-3">
-            {connected ? <Wifi className="w-4 h-4" /> : <WifiOff className="w-4 h-4 text-destructive" />}
+            {connected ? (
+              <Wifi className="w-4 h-4" />
+            ) : (
+              <WifiOff className="w-4 h-4 text-destructive" />
+            )}
             {connected ? "Connected" : "Reconnecting..."}
           </div>
 
@@ -171,7 +223,13 @@ export function WaitingRoomPage() {
             </div>
           )}
           <p className="text-muted-foreground mb-8">
-            Waiting for players to fill the room
+            {canStartEarly
+              ? `You can start now, or wait for up to ${totalSeats} players`
+              : isHost &&
+                  room?.status === "WAITING" &&
+                  room.minParticipants > filledSeats
+                ? `Need ${room.minParticipants - filledSeats} more to be able to start early`
+                : "Waiting for players to fill the room"}
           </p>
 
           <div className="flex items-center justify-center gap-2 mb-8">
@@ -203,7 +261,9 @@ export function WaitingRoomPage() {
                     name={participant.displayName}
                     src={participant.avatarUrl}
                     seed={participant.participantId}
-                    isSelf={participant.participantId === identity?.participantId}
+                    isSelf={
+                      participant.participantId === identity?.participantId
+                    }
                   />
                 ) : (
                   <div className="w-9 h-9 rounded-full border border-dashed border-border shrink-0" />
@@ -221,13 +281,29 @@ export function WaitingRoomPage() {
                     <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
                       {participant.connected ? "Ready" : "Reconnecting"}
                       {participant.isHost ? " · Host" : ""}
-                      {participant.participantId === identity?.participantId ? " · You" : ""}
+                      {participant.participantId === identity?.participantId
+                        ? " · You"
+                        : ""}
                     </p>
                   )}
                 </div>
               </div>
             ))}
           </div>
+
+          {canStartEarly && (
+            <button
+              onClick={handleStart}
+              disabled={starting}
+              data-testid="button-start-room-early"
+              className="w-full h-13 mb-4 rounded-2xl bg-primary text-primary-foreground font-black uppercase tracking-wider text-sm hover:brightness-110 active:scale-[0.98] transition-all disabled:opacity-60 flex items-center justify-center gap-2"
+            >
+              <Rocket className="w-4 h-4" />
+              {starting
+                ? "Starting..."
+                : `Start Now (${filledSeats}/${totalSeats})`}
+            </button>
+          )}
 
           <button
             onClick={() => setConfirmingLeave(true)}

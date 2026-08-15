@@ -770,6 +770,13 @@ function CreateEventView({
   const [maxParticipants, setMaxParticipants] = useState(
     event?.maxParticipants ?? 5,
   );
+  // How many players a room needs before its host can start it early
+  // (room:start) instead of waiting for it to fill to maxParticipants.
+  // Distinct from scheduling's own minParticipants below, which governs a
+  // *scheduled* event's auto-cancel/postpone check, not room start-early.
+  const [roomMinParticipants, setRoomMinParticipants] = useState(
+    event?.minParticipants ?? 2,
+  );
   const [description, setDescription] = useState(event?.description ?? "");
   const [imageUrl, setImageUrl] = useState(event?.imageUrl ?? "");
   const [status, setStatus] = useState<"draft" | "live">(
@@ -879,6 +886,8 @@ function CreateEventView({
     if (!selectedExercise) return setError("Pick an exercise");
     if (isScheduled && !scheduleDate)
       return setError("Pick a date for the scheduled start");
+    if (roomMinParticipants > maxParticipants)
+      return setError("Minimum players can't exceed max player capacity");
 
     setSubmitting(true);
     setError(null);
@@ -895,6 +904,7 @@ function CreateEventView({
         roundDurationSeconds,
         breakDurationSeconds,
         maxParticipants,
+        minParticipants: roomMinParticipants,
         description: description.trim() || undefined,
         imageUrl: imageUrl.trim() || undefined,
         status,
@@ -1065,6 +1075,20 @@ function CreateEventView({
                 onChange={(e) => setMaxParticipants(Number(e.target.value))}
                 className="w-full h-13 rounded-2xl border border-input bg-background px-4 font-semibold text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15 transition-all"
               />
+            </Field>
+            <Field label="Min players to start early">
+              <input
+                type="number"
+                min={1}
+                max={maxParticipants}
+                value={roomMinParticipants}
+                onChange={(e) => setRoomMinParticipants(Number(e.target.value))}
+                className="w-full h-13 rounded-2xl border border-input bg-background px-4 font-semibold text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15 transition-all"
+              />
+              <p className="text-[11px] text-muted-foreground mt-1.5">
+                A room's host can start once this many players have joined,
+                instead of waiting for all {maxParticipants}.
+              </p>
             </Field>
             <Field label="Round duration (seconds)">
               <input
