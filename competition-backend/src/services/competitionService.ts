@@ -1,10 +1,14 @@
-import { CompetitionModel, type CompetitionDoc } from "../models/Competition.js";
+import {
+  CompetitionModel,
+  type CompetitionDoc,
+} from "../models/Competition.js";
 import { AppError } from "../utils/errors.js";
 import { verifyToken } from "../utils/token.js";
 import {
   buildLeaderboard,
   clearRoomState,
   getCumulativeScores,
+  getParticipantCount,
   getParticipants,
   hasParticipant,
   isParticipantConnected,
@@ -35,10 +39,14 @@ export async function reconnectToCompetition(
   participantId: string,
   participantToken: string,
 ): Promise<RoomStateSnapshot> {
-  const room = await CompetitionModel.findById(competitionId).lean<CompetitionDoc | null>();
+  const room = await CompetitionModel.findById(
+    competitionId,
+  ).lean<CompetitionDoc | null>();
   if (!room) throw AppError.notFound("Competition not found");
 
-  const participant = room.participants.find((p) => p.participantId === participantId);
+  const participant = room.participants.find(
+    (p) => p.participantId === participantId,
+  );
   if (!participant || !verifyToken(participantToken, participant.tokenHash)) {
     throw AppError.forbidden("Invalid participant credentials");
   }
@@ -48,7 +56,12 @@ export async function reconnectToCompetition(
     // Room state expired in Redis (e.g. server restart) but the match is
     // still ongoing in Mongo - restore live membership so the leaderboard
     // and round logic keep working.
-    await joinRoomAtomic(competitionId, room.maxParticipants, participantId, participant.displayName);
+    await joinRoomAtomic(
+      competitionId,
+      room.maxParticipants,
+      participantId,
+      participant.displayName,
+    );
   }
   await setParticipantConnected(competitionId, participantId, true);
   cancelPendingRemoval(competitionId, participantId);
@@ -69,9 +82,13 @@ const DISCONNECT_GRACE_MS = 20_000;
 // the timer is simply lost, which just means that one participant lingers
 // as "disconnected" a little longer than usual; nothing is corrupted.
 const pendingRemovals = new Map<string, ReturnType<typeof setTimeout>>();
-const pendingKey = (competitionId: string, participantId: string) => `${competitionId}:${participantId}`;
+const pendingKey = (competitionId: string, participantId: string) =>
+  `${competitionId}:${participantId}`;
 
-export function cancelPendingRemoval(competitionId: string, participantId: string): void {
+export function cancelPendingRemoval(
+  competitionId: string,
+  participantId: string,
+): void {
   const key = pendingKey(competitionId, participantId);
   const timer = pendingRemovals.get(key);
   if (timer) {
@@ -88,7 +105,9 @@ export function cancelPendingRemoval(competitionId: string, participantId: strin
  * than once - a room that's already finished or already torn down is left
  * alone.
  */
-export async function destroyRoomAsHostLeft(competitionId: string): Promise<boolean> {
+export async function destroyRoomAsHostLeft(
+  competitionId: string,
+): Promise<boolean> {
   const room = await CompetitionModel.findById(competitionId);
   if (!room) return false;
   if (room.status === "COMPLETED" || room.status === "ABANDONED") return false;
@@ -134,10 +153,15 @@ export async function handleParticipantDisconnect(
 ): Promise<void> {
   await setParticipantConnected(competitionId, participantId, false);
 
-  const room = await CompetitionModel.findById(competitionId).lean<CompetitionDoc | null>();
-  if (!room || room.status === "COMPLETED" || room.status === "ABANDONED") return;
+  const room = await CompetitionModel.findById(
+    competitionId,
+  ).lean<CompetitionDoc | null>();
+  if (!room || room.status === "COMPLETED" || room.status === "ABANDONED")
+    return;
 
-  const participant = room.participants.find((p) => p.participantId === participantId);
+  const participant = room.participants.find(
+    (p) => p.participantId === participantId,
+  );
   const isHost = participant?.isHost === true;
 
   // Non-host seats are only ever freed pre-start, same as before.
@@ -149,12 +173,24 @@ export async function handleParticipantDisconnect(
   const timer = setTimeout(async () => {
     pendingRemovals.delete(key);
     try {
-      const backOnline = await isParticipantConnected(competitionId, participantId);
+      const backOnline = await isParticipantConnected(
+        competitionId,
+        participantId,
+      );
       if (backOnline) return;
 
-      const current = await CompetitionModel.findById(competitionId).lean<CompetitionDoc | null>();
-      if (!current || current.status === "COMPLETED" || current.status === "ABANDONED") return;
-      const stillSeated = current.participants.some((p) => p.participantId === participantId);
+      const current = await CompetitionModel.findById(
+        competitionId,
+      ).lean<CompetitionDoc | null>();
+      if (
+        !current ||
+        current.status === "COMPLETED" ||
+        current.status === "ABANDONED"
+      )
+        return;
+      const stillSeated = current.participants.some(
+        (p) => p.participantId === participantId,
+      );
       if (!stillSeated) return;
 
       if (isHost) {
@@ -165,9 +201,14 @@ export async function handleParticipantDisconnect(
 
       if (current.status !== "WAITING" && current.status !== "FULL") return;
 
-      const leaving = current.participants.find((p) => p.participantId === participantId);
+      const leaving = current.participants.find(
+        (p) => p.participantId === participantId,
+      );
       await removeParticipant(competitionId, participantId);
-      await CompetitionModel.updateOne({ _id: competitionId }, { $pull: { participants: { participantId } } });
+      await CompetitionModel.updateOne(
+        { _id: competitionId },
+        { $pull: { participants: { participantId } } },
+      );
       deleteAvatarBestEffort(leaving?.avatarPublicId);
       logger.info(
         { competitionId, participantId },
@@ -175,7 +216,10 @@ export async function handleParticipantDisconnect(
       );
       await onRemoved();
     } catch (err) {
-      logger.error({ err }, "error cleaning up disconnected waiting-room participant");
+      logger.error(
+        { err },
+        "error cleaning up disconnected waiting-room participant",
+      );
     }
   }, DISCONNECT_GRACE_MS);
 
@@ -195,9 +239,13 @@ export async function leaveCompetition(
   participantId: string,
   participantToken: string,
 ): Promise<LeaveResult> {
-  const room = await CompetitionModel.findById(competitionId).lean<CompetitionDoc | null>();
+  const room = await CompetitionModel.findById(
+    competitionId,
+  ).lean<CompetitionDoc | null>();
   if (!room) return { hostLeft: false };
-  const participant = room.participants.find((p) => p.participantId === participantId);
+  const participant = room.participants.find(
+    (p) => p.participantId === participantId,
+  );
   if (!participant || !verifyToken(participantToken, participant.tokenHash)) {
     throw AppError.forbidden("Invalid participant credentials");
   }
@@ -215,7 +263,10 @@ export async function leaveCompetition(
   // for the round remains consistent, matching the reconnection design.
   if (room.status === "WAITING" || room.status === "FULL") {
     await removeParticipant(competitionId, participantId);
-    await CompetitionModel.updateOne({ _id: competitionId }, { $pull: { participants: { participantId } } });
+    await CompetitionModel.updateOne(
+      { _id: competitionId },
+      { $pull: { participants: { participantId } } },
+    );
     // Seat's actually gone (not just marked disconnected), so the photo
     // that went with it can go too.
     deleteAvatarBestEffort(participant.avatarPublicId);
@@ -225,6 +276,47 @@ export async function leaveCompetition(
   return { hostLeft: false };
 }
 
+/**
+ * The room's host chooses to start early - once at least minParticipants
+ * have joined, they don't have to wait for the room to fill all the way to
+ * maxParticipants. Reuses the exact same "lock the room and kick off the
+ * countdown" path the scheduler uses to force-start a scheduled event's
+ * rooms (competitionEngine.triggerScheduledStart), so the two "start
+ * before naturally full" mechanisms behave identically from here on.
+ */
+export async function startRoomEarly(
+  competitionId: string,
+  participantId: string,
+  participantToken: string,
+): Promise<void> {
+  const room = await CompetitionModel.findById(
+    competitionId,
+  ).lean<CompetitionDoc | null>();
+  if (!room) throw AppError.notFound("Room not found");
+
+  const participant = room.participants.find(
+    (p) => p.participantId === participantId,
+  );
+  if (!participant || !verifyToken(participantToken, participant.tokenHash)) {
+    throw AppError.forbidden("Invalid participant credentials");
+  }
+  if (!participant.isHost) {
+    throw AppError.forbidden("Only the room's host can start it early");
+  }
+  if (room.status !== "WAITING" && room.status !== "FULL") {
+    throw AppError.conflict("This room has already started or ended");
+  }
+
+  const liveCount = await getParticipantCount(competitionId);
+  if (liveCount < room.minParticipants) {
+    throw AppError.conflict(
+      `Need at least ${room.minParticipants} player${room.minParticipants === 1 ? "" : "s"} to start - ${liveCount} here so far.`,
+    );
+  }
+
+  await competitionEngine.triggerScheduledStart(competitionId);
+}
+
 export async function submitScore(
   competitionId: string,
   participantId: string,
@@ -232,10 +324,14 @@ export async function submitScore(
   round: number,
   score: number,
 ): Promise<void> {
-  const room = await CompetitionModel.findById(competitionId).lean<CompetitionDoc | null>();
+  const room = await CompetitionModel.findById(
+    competitionId,
+  ).lean<CompetitionDoc | null>();
   if (!room) throw AppError.notFound("Competition not found");
 
-  const participant = room.participants.find((p) => p.participantId === participantId);
+  const participant = room.participants.find(
+    (p) => p.participantId === participantId,
+  );
   if (!participant || !verifyToken(participantToken, participant.tokenHash)) {
     throw AppError.forbidden("Invalid participant credentials");
   }
@@ -247,18 +343,29 @@ export async function submitScore(
     return;
   }
 
-  await setScore(competitionId, round, participantId, Math.max(0, Math.floor(score)));
+  await setScore(
+    competitionId,
+    round,
+    participantId,
+    Math.max(0, Math.floor(score)),
+  );
   await competitionEngine.broadcastLeaderboard(competitionId);
 }
 
-export async function getRoomSnapshot(competitionId: string): Promise<RoomStateSnapshot | null> {
-  const room = await CompetitionModel.findById(competitionId).lean<CompetitionDoc | null>();
+export async function getRoomSnapshot(
+  competitionId: string,
+): Promise<RoomStateSnapshot | null> {
+  const room = await CompetitionModel.findById(
+    competitionId,
+  ).lean<CompetitionDoc | null>();
   if (!room) return null;
 
   const liveParticipants = await getParticipants(competitionId);
   // Merge Mongo (authoritative identity/history) with Redis (live connection state).
   const participants = room.participants.map((p) => {
-    const live = liveParticipants.find((lp) => lp.participantId === p.participantId);
+    const live = liveParticipants.find(
+      (lp) => lp.participantId === p.participantId,
+    );
     return {
       participantId: p.participantId,
       displayName: p.displayName,
@@ -271,7 +378,10 @@ export async function getRoomSnapshot(competitionId: string): Promise<RoomStateS
     };
   });
 
-  const cumulative = await getCumulativeScores(competitionId, room.currentRound || 0);
+  const cumulative = await getCumulativeScores(
+    competitionId,
+    room.currentRound || 0,
+  );
   const leaderboard = buildLeaderboard(participants, cumulative);
 
   const engineState = competitionEngine.getTimings(competitionId);
@@ -286,6 +396,7 @@ export async function getRoomSnapshot(competitionId: string): Promise<RoomStateS
     exerciseMode: room.exerciseMode as "reps" | "hold",
     status: room.status as RoomStateSnapshot["status"],
     maxParticipants: room.maxParticipants,
+    minParticipants: room.minParticipants,
     totalRounds: room.totalRounds,
     currentRound: room.currentRound,
     roundDurationSeconds: room.roundDurationSeconds,
