@@ -72,6 +72,12 @@ const envSchema = z.object({
   CLOUDINARY_AVATAR_FOLDER: z.string().default("fitness-competition/avatars"),
   AVATAR_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(20),
   AVATAR_RATE_LIMIT_WINDOW_MINUTES: z.coerce.number().int().min(1).default(10),
+  // Event cover/advertising images (see services/eventImageService.ts) live in
+  // their own Cloudinary folder, separate from avatars, so deletion requests
+  // for one can never be aimed at the other.
+  CLOUDINARY_EVENT_IMAGE_FOLDER: z
+    .string()
+    .default("fitness-competition/events"),
 });
 
 const parsed = envSchema.safeParse(process.env);

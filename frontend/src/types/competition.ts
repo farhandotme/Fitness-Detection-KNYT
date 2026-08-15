@@ -80,6 +80,9 @@ export interface LiveEventSummary {
   breakDurationSeconds: number;
   maxParticipants: number;
   description?: string;
+  // Up to 3 cover / advertising images, in display order. First is the
+  // primary cover shown on event cards.
+  imageUrls?: string[];
   activeRooms: number;
   scheduling?: EventScheduling;
   serverNow?: number;
@@ -97,7 +100,8 @@ export interface EventDetail {
   maxParticipants: number;
   minParticipants: number;
   description?: string;
-  imageUrl?: string;
+  // Up to 3 cover / advertising images, in display order.
+  imageUrls?: string[];
   scheduling?: EventScheduling;
   serverNow?: number;
 }
