@@ -7,6 +7,8 @@ import type { FinalResultEntry } from "@/types/competition";
 import { Trophy, Medal, ArrowRight, Home } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
+import { PlayerAvatar } from "@/components/PlayerAvatar";
+import { deleteMyAvatar } from "@/lib/avatarStore";
 
 export function CompetitionResultsPage() {
   const [match, params] = useRoute("/competitions/:competitionId/results");
@@ -86,16 +88,24 @@ export function CompetitionResultsPage() {
                     className={cn(
                       "flex flex-col items-center justify-end rounded-3xl border p-4 text-center",
                       isFirst
-                        ? "bg-accent/15 border-accent/40 h-48"
-                        : "bg-card border-card-border h-36",
+                        ? "bg-accent/15 border-accent/40 h-56"
+                        : "bg-card border-card-border h-44",
                       isMe && "ring-2 ring-primary",
                     )}
                   >
                     <Medal
                       className={cn(
-                        "w-6 h-6 mb-2",
+                        "w-5 h-5 mb-1",
                         isFirst ? "text-accent" : "text-muted-foreground",
                       )}
+                    />
+                    <PlayerAvatar
+                      name={entry.displayName}
+                      src={entry.avatarUrl}
+                      seed={entry.participantId}
+                      isSelf={isMe}
+                      size={isFirst ? "lg" : "md"}
+                      className="mb-2"
                     />
                     <p className="font-black text-lg leading-tight truncate w-full">
                       {entry.displayName}
@@ -126,9 +136,16 @@ export function CompetitionResultsPage() {
                           : "border-card-border bg-card",
                       )}
                     >
-                      <span className="w-7 h-7 rounded-full bg-secondary flex items-center justify-center text-xs font-black text-muted-foreground shrink-0">
+                      <span className="w-6 h-6 rounded-full bg-secondary flex items-center justify-center text-[10px] font-black text-muted-foreground shrink-0">
                         {entry.rank}
                       </span>
+                      <PlayerAvatar
+                        name={entry.displayName}
+                        src={entry.avatarUrl}
+                        seed={entry.participantId}
+                        isSelf={isMe}
+                        size="sm"
+                      />
                       <span className="flex-1 font-bold truncate">
                         {entry.displayName}
                         {isMe && <span className="text-primary"> (You)</span>}
@@ -144,6 +161,7 @@ export function CompetitionResultsPage() {
               <Link
                 href="/events"
                 data-testid="link-back-to-events"
+                onClick={() => deleteMyAvatar()}
                 className="flex-1 flex items-center justify-center gap-2 bg-primary text-primary-foreground py-4 rounded-2xl font-black uppercase tracking-wider hover:brightness-110 transition-all"
               >
                 Find another event
@@ -152,6 +170,7 @@ export function CompetitionResultsPage() {
               <Link
                 href="/"
                 data-testid="link-home"
+                onClick={() => deleteMyAvatar()}
                 className="flex items-center justify-center gap-2 bg-secondary text-foreground py-4 px-6 rounded-2xl font-black uppercase tracking-wider hover:bg-secondary/80 transition-all"
               >
                 <Home className="w-4 h-4" />

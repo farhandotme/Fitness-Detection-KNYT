@@ -54,6 +54,10 @@ export interface RoomListEntry {
   participantCount: number;
   maxParticipants: number;
   participantNames?: string[];
+  // Parallel to participantNames - null where that participant hasn't
+  // uploaded a photo (see PlayerAvatar, which generates a cartoon face
+  // for those).
+  participantAvatars?: (string | null)[];
   createdAt: string;
 }
 
@@ -61,6 +65,7 @@ export interface RoomPreview {
   roomName: string;
   visibility: RoomVisibility;
   participantNames: string[];
+  participantAvatars: (string | null)[];
   maxParticipants: number;
 }
 
@@ -102,6 +107,10 @@ export interface ParticipantPublic {
   connected: boolean;
   // True for whoever created this room. See useCompetitionRoom.ts.
   isHost: boolean;
+  // Cloudinary photo URL if this player uploaded one this session -
+  // broadcast to every participant in the room, not just themselves. Null
+  // means PlayerAvatar renders a generated cartoon face instead.
+  avatarUrl: string | null;
 }
 
 export interface LeaderboardEntry {
@@ -109,6 +118,7 @@ export interface LeaderboardEntry {
   displayName: string;
   score: number;
   rank: number;
+  avatarUrl: string | null;
 }
 
 export interface RoomStateSnapshot {
@@ -140,6 +150,7 @@ export interface FinalResultEntry {
   totalScore: number;
   rank: number;
   perRound: { round: number; score: number }[];
+  avatarUrl: string | null;
 }
 
 export interface JoinedAckPayload {

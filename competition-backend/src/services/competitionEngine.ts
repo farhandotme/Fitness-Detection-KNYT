@@ -210,7 +210,11 @@ class CompetitionEngine {
     const participants = await getParticipants(competitionId);
     const cumulative = await getCumulativeScores(competitionId, room.totalRounds);
     const leaderboard = buildLeaderboard(
-      room.participants.map((p) => ({ participantId: p.participantId, displayName: p.displayName })),
+      room.participants.map((p) => ({
+        participantId: p.participantId,
+        displayName: p.displayName,
+        avatarUrl: p.avatarUrl ?? null,
+      })),
       cumulative,
     );
 
@@ -220,6 +224,7 @@ class CompetitionEngine {
         displayName: entry.displayName,
         totalScore: entry.score,
         rank: entry.rank,
+        avatarUrl: entry.avatarUrl,
         perRound: await this.perRoundScores(competitionId, entry.participantId, room.totalRounds),
       })),
     );

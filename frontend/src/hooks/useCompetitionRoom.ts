@@ -6,6 +6,7 @@ import {
   saveParticipantIdentity,
 } from "@/lib/competitionSocket";
 import { getDeviceId } from "@/lib/deviceId";
+import { deleteMyAvatar } from "@/lib/avatarStore";
 import type {
   JoinedAckPayload,
   ParticipantIdentity,
@@ -42,6 +43,7 @@ export function useCompetitionRoom(competitionId: string | undefined) {
       if (payload.competitionId === competitionId) {
         setCancelled(payload.reason);
         clearParticipantIdentity(competitionId);
+        deleteMyAvatar();
       }
     };
     // The room's host left/disconnected for good - the whole room was torn
@@ -51,6 +53,7 @@ export function useCompetitionRoom(competitionId: string | undefined) {
       if (payload.competitionId === competitionId) {
         setClosed(payload.reason);
         clearParticipantIdentity(competitionId);
+        deleteMyAvatar();
       }
     };
     const onConnect = () => {
@@ -109,6 +112,9 @@ export function useCompetitionRoom(competitionId: string | undefined) {
       participantToken: identity.participantToken,
     });
     clearParticipantIdentity(competitionId);
+    // Ends the "for the time being" avatar's lifetime along with the seat -
+    // see lib/avatarStore.ts.
+    deleteMyAvatar();
   }, [competitionId, identity]);
 
   return { room, identity, error, cancelled, closed, connected, submitScore, leave, setError };
@@ -167,14 +173,38 @@ export function useJoinCompetition() {
   // and reattach to the existing seat instead of creating a duplicate
   // participant - see lib/deviceId.ts.
   const createRoom = useCallback(
-    (eventId: string, roomName: string, visibility: RoomVisibility, displayName: string, password?: string) =>
-      runJoin("room:create", { eventId, roomName, visibility, password, displayName, deviceId: getDeviceId() }),
+    (
+      eventId: string,
+      roomName: string,
+      visibility: RoomVisibility,
+      displayName: string,
+      password?: string,
+      avatarUrl?: string,
+      avatarPublicId?: string,
+    ) =>
+      runJoin("room:create", {
+        eventId,
+        roomName,
+        visibility,
+        password,
+        displayName,
+        deviceId: getDeviceId(),
+        avatarUrl,
+        avatarPublicId,
+      }),
     [runJoin],
   );
 
   const joinRoom = useCallback(
-    (competitionId: string, displayName: string, password?: string) =>
-      runJoin("room:join", { competitionId, displayName, password, deviceId: getDeviceId() }),
+    (competitionId: string, displayName: string, password?: string, avatarUrl?: string, avatarPublicId?: string) =>
+      runJoin("room:join", {
+        competitionId,
+        displayName,
+        password,
+        deviceId: getDeviceId(),
+        avatarUrl,
+        avatarPublicId,
+      }),
     [runJoin],
   );
 

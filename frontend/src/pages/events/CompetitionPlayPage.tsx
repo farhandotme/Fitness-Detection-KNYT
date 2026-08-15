@@ -19,6 +19,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { PlayerAvatar } from "@/components/PlayerAvatar";
 
 /** How the competition-server clock relates to this browser's clock. */
 function useServerClockOffset(serverNow: number | undefined) {
@@ -393,7 +394,7 @@ export function CompetitionPlayPage() {
                     >
                       <span
                         className={cn(
-                          "w-7 h-7 rounded-full flex items-center justify-center text-xs font-black shrink-0",
+                          "w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black shrink-0",
                           entry.rank === 1
                             ? "bg-accent text-[#171714]"
                             : "bg-white/10 text-slate-300",
@@ -401,6 +402,13 @@ export function CompetitionPlayPage() {
                       >
                         {entry.rank}
                       </span>
+                      <PlayerAvatar
+                        name={entry.displayName}
+                        src={entry.avatarUrl}
+                        seed={entry.participantId}
+                        isSelf={isMe}
+                        size="sm"
+                      />
                       <span className="flex-1 truncate text-sm font-bold text-white">
                         {entry.displayName}
                         {isMe && <span className="text-primary"> (You)</span>}
@@ -422,25 +430,23 @@ export function CompetitionPlayPage() {
                 </h3>
               </div>
               <div className="flex flex-wrap gap-2">
-                {room.participants.map((p) => (
-                  <span
-                    key={p.participantId}
-                    className={cn(
-                      "text-xs font-semibold px-2.5 py-1 rounded-full border flex items-center gap-1.5",
-                      p.connected
-                        ? "border-white/15 text-slate-300"
-                        : "border-destructive/30 text-destructive",
-                    )}
-                  >
+                {room.participants.map((p) => {
+                  const isMe = p.participantId === identity?.participantId;
+                  return (
                     <span
+                      key={p.participantId}
                       className={cn(
-                        "h-1.5 w-1.5 rounded-full",
-                        p.connected ? "bg-primary" : "bg-destructive",
+                        "text-xs font-semibold pl-1 pr-2.5 py-1 rounded-full border flex items-center gap-1.5",
+                        p.connected
+                          ? "border-white/15 text-slate-300"
+                          : "border-destructive/30 text-destructive",
                       )}
-                    />
-                    {p.displayName}
-                  </span>
-                ))}
+                    >
+                      <PlayerAvatar name={p.displayName} src={p.avatarUrl} seed={p.participantId} isSelf={isMe} size="sm" />
+                      {p.displayName}
+                    </span>
+                  );
+                })}
               </div>
             </div>
 

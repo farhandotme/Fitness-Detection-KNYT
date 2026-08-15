@@ -16,6 +16,7 @@ import {
 import { logger } from "../config/logger.js";
 import type { RoomStateSnapshot } from "../types/index.js";
 import { competitionEngine } from "./competitionEngine.js";
+import { deleteAvatarBestEffort } from "./avatarService.js";
 
 // Room creation/joining now lives in services/roomService.ts - participants
 // pick or create a specific room from the event's lobby rather than being
@@ -98,6 +99,12 @@ export async function destroyRoomAsHostLeft(competitionId: string): Promise<bool
   competitionEngine.cancelRoom(competitionId);
   await clearRoomState(competitionId);
 
+  // The room is gone for good, so every photo anyone in it uploaded goes
+  // with it - nobody left to show it to (see services/avatarService.ts).
+  for (const participant of room.participants) {
+    deleteAvatarBestEffort(participant.avatarPublicId);
+  }
+
   logger.info({ competitionId }, "room destroyed - host left");
   return true;
 }
@@ -158,8 +165,10 @@ export async function handleParticipantDisconnect(
 
       if (current.status !== "WAITING" && current.status !== "FULL") return;
 
+      const leaving = current.participants.find((p) => p.participantId === participantId);
       await removeParticipant(competitionId, participantId);
       await CompetitionModel.updateOne({ _id: competitionId }, { $pull: { participants: { participantId } } });
+      deleteAvatarBestEffort(leaving?.avatarPublicId);
       logger.info(
         { competitionId, participantId },
         "removed participant who never reconnected after leaving the waiting room",
@@ -207,6 +216,9 @@ export async function leaveCompetition(
   if (room.status === "WAITING" || room.status === "FULL") {
     await removeParticipant(competitionId, participantId);
     await CompetitionModel.updateOne({ _id: competitionId }, { $pull: { participants: { participantId } } });
+    // Seat's actually gone (not just marked disconnected), so the photo
+    // that went with it can go too.
+    deleteAvatarBestEffort(participant.avatarPublicId);
   } else {
     await setParticipantConnected(competitionId, participantId, false);
   }
@@ -252,6 +264,10 @@ export async function getRoomSnapshot(competitionId: string): Promise<RoomStateS
       displayName: p.displayName,
       connected: live?.connected ?? false,
       isHost: p.isHost === true,
+      // Mongo is authoritative for identity/history (see file header
+      // comment) so avatarUrl comes from there too, not the Redis copy -
+      // it just needs to be broadcast, not merged with anything live.
+      avatarUrl: p.avatarUrl ?? null,
     };
   });
 
