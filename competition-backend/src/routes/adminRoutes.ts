@@ -19,6 +19,11 @@ import {
 } from "../services/eventService.js";
 import { getRoomSnapshot } from "../services/competitionService.js";
 import { verifyAdminToken, type AdminTokenPayload } from "../utils/jwt.js";
+import {
+  createEventImageUploadSignature,
+  deleteEventImage,
+} from "../services/eventImageService.js";
+import { z } from "zod";
 
 export const adminRoutes = Router();
 
@@ -74,6 +79,44 @@ adminRoutes.patch(
     const input = updateEventSchema.parse(req.body);
     const event = await updateEvent(requireParam(req, "id"), input);
     res.json({ event });
+  }),
+);
+
+// POST /api/admin/events/image-signature - authorizes exactly one
+// direct-to-Cloudinary upload for an event cover/advertising image. The
+// admin dashboard then POSTs the file straight to Cloudinary with this
+// payload (see frontend src/lib/eventImageStore.ts) - the image itself
+// never passes through this server. Called once per image the admin adds
+// (up to 3 - see services/eventImageService.ts MAX_EVENT_IMAGES). Returns
+// 503 with EVENT_IMAGE_UPLOADS_DISABLED if Cloudinary isn't configured for
+// this deployment.
+adminRoutes.post(
+  "/events/image-signature",
+  asyncHandler(async (_req, res) => {
+    const signature = createEventImageUploadSignature();
+    res.json(signature);
+  }),
+);
+
+const eventImagePublicIdSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(300)
+  .regex(/^[A-Za-z0-9_\-/]+$/, "Invalid image id");
+
+// POST /api/admin/events/image-delete - removes a previously uploaded cover
+// image from Cloudinary. Takes { publicId } rather than a URL segment since
+// Cloudinary publicIds contain slashes (folder/id). Called from the admin
+// dashboard when an admin removes an image from the form, whether or not
+// the event itself has been saved yet.
+adminRoutes.post(
+  "/events/image-delete",
+  asyncHandler(async (req, res) => {
+    const parsed = eventImagePublicIdSchema.safeParse(req.body?.publicId);
+    if (!parsed.success) throw AppError.badRequest("Invalid image id");
+    await deleteEventImage(parsed.data);
+    res.status(204).end();
   }),
 );
 

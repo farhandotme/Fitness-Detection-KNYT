@@ -66,7 +66,8 @@ export interface AdminEvent {
   minParticipants: number;
   status: "draft" | "live" | "closed";
   description?: string;
-  imageUrl?: string;
+  // Up to 3 cover / advertising images, in display order.
+  imageUrls?: string[];
   scheduling?: EventScheduling;
   createdAt: string;
 }
@@ -140,7 +141,8 @@ export interface CreateEventInput {
   breakDurationSeconds: number;
   maxParticipants: number;
   description?: string;
-  imageUrl?: string;
+  // Up to 3 cover / advertising images, in display order.
+  imageUrls?: string[];
   status: "draft" | "live" | "closed";
   scheduling?: CreateEventSchedulingInput;
 }

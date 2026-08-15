@@ -17,11 +17,15 @@ import {
   setAdminEventSchedulingPhase,
   updateAdminEvent,
 } from "@/lib/adminApi";
+import {
+  uploadEventImage,
+  deleteEventImage,
+  EventImageUploadsDisabledError,
+} from "@/lib/eventImageStore";
 import { getScheduleStatus } from "@/utils/eventSchedule";
 import { formatInTimeZone, formatTimeOnlyInTimeZone } from "@/utils/formatTime";
 import {
   AlertTriangle,
-  Image as ImageIcon,
   Plus,
   RefreshCw,
   Trophy,
@@ -40,6 +44,9 @@ import {
   ArrowUpRight,
   Crown,
   Check,
+  X,
+  Loader2,
+  Upload,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -515,9 +522,9 @@ function EventCard({
         href={`/admin/events/${event._id}`}
         className="h-28 relative bg-secondary/40 overflow-hidden block group"
       >
-        {event.imageUrl ? (
+        {event.imageUrls?.[0] ? (
           <img
-            src={event.imageUrl}
+            src={event.imageUrls[0]}
             alt=""
             className="w-full h-full object-cover"
           />
@@ -778,7 +785,7 @@ function CreateEventView({
     event?.minParticipants ?? 2,
   );
   const [description, setDescription] = useState(event?.description ?? "");
-  const [imageUrl, setImageUrl] = useState(event?.imageUrl ?? "");
+  const [imageUrls, setImageUrls] = useState<string[]>(event?.imageUrls ?? []);
   const [status, setStatus] = useState<"draft" | "live">(
     event?.status === "draft" ? "draft" : "live",
   );
@@ -906,7 +913,7 @@ function CreateEventView({
         maxParticipants,
         minParticipants: roomMinParticipants,
         description: description.trim() || undefined,
-        imageUrl: imageUrl.trim() || undefined,
+        imageUrls,
         status,
         scheduling:
           isScheduled && scheduledAtLocal
@@ -1008,28 +1015,8 @@ function CreateEventView({
             </select>
           </Field>
 
-          <Field label="Cover image URL (optional)">
-            <div className="relative">
-              <ImageIcon className="w-4 h-4 text-muted-foreground absolute left-4 top-1/2 -translate-y-1/2" />
-              <input
-                value={imageUrl}
-                onChange={(e) => setImageUrl(e.target.value)}
-                placeholder="https://example.com/banner.jpg"
-                className="w-full h-13 rounded-2xl border border-input bg-background pl-11 pr-4 font-medium text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15 transition-all"
-              />
-            </div>
-            {imageUrl.trim() && (
-              <div className="mt-3 h-32 rounded-2xl overflow-hidden bg-secondary/40 border border-card-border shadow-inner">
-                <img
-                  src={imageUrl.trim()}
-                  alt="Banner Preview"
-                  className="w-full h-full object-cover"
-                  onError={(e) =>
-                    ((e.target as HTMLImageElement).style.display = "none")
-                  }
-                />
-              </div>
-            )}
+          <Field label="Cover images (optional, up to 3)">
+            <CoverImagesUploader images={imageUrls} onChange={setImageUrls} />
           </Field>
 
           <Field label="Description (optional)">
@@ -1440,6 +1427,132 @@ function CreateEventView({
           </button>
         </div>
       </form>
+    </div>
+  );
+}
+
+const MAX_EVENT_IMAGES = 3;
+
+/**
+ * Up to MAX_EVENT_IMAGES cover / advertising images for an event. Each pick
+ * uploads straight to Cloudinary via a signed request (see
+ * lib/eventImageStore.ts) - the file never round-trips through this app's
+ * own state, only the resulting secure URL does. Images the admin removes
+ * before saving are best-effort deleted from Cloudinary right away so
+ * nothing orphaned piles up from abandoned uploads.
+ */
+function CoverImagesUploader({
+  images,
+  onChange,
+}: {
+  images: string[];
+  onChange: (urls: string[]) => void;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // Tracks the Cloudinary publicId for images uploaded *this session* so a
+  // "remove" click can also clean them up server-side. Pre-existing images
+  // loaded from a saved event aren't in here - we only ever persisted their
+  // URL, so removing one just drops it from the array.
+  const [publicIds, setPublicIds] = useState<Record<string, string>>({});
+  const inputRef = React.useRef<HTMLInputElement>(null);
+
+  const handleFiles = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const remaining = MAX_EVENT_IMAGES - images.length;
+    const toUpload = Array.from(files).slice(0, remaining);
+    if (toUpload.length === 0) return;
+
+    setUploading(true);
+    setError(null);
+    try {
+      let current = images;
+      for (const file of toUpload) {
+        const uploaded = await uploadEventImage(file);
+        setPublicIds((prev) => ({
+          ...prev,
+          [uploaded.url]: uploaded.publicId,
+        }));
+        current = [...current, uploaded.url];
+        onChange(current);
+      }
+    } catch (err: any) {
+      if (err instanceof EventImageUploadsDisabledError) {
+        setError("Cover image uploads aren't configured on this server.");
+      } else {
+        setError(err.message || "Upload failed - please try again");
+      }
+    } finally {
+      setUploading(false);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  };
+
+  const handleRemove = (url: string) => {
+    const publicId = publicIds[url];
+    if (publicId) deleteEventImage(publicId);
+    onChange(images.filter((u) => u !== url));
+  };
+
+  return (
+    <div>
+      <div className="grid grid-cols-3 gap-3">
+        {images.map((url) => (
+          <div
+            key={url}
+            className="relative h-24 rounded-2xl overflow-hidden bg-secondary/40 border border-card-border shadow-inner group"
+          >
+            <img src={url} alt="Cover" className="w-full h-full object-cover" />
+            <button
+              type="button"
+              onClick={() => handleRemove(url)}
+              className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+              aria-label="Remove image"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        ))}
+
+        {images.length < MAX_EVENT_IMAGES && (
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            disabled={uploading}
+            className="h-24 rounded-2xl border-2 border-dashed border-input flex flex-col items-center justify-center gap-1 text-muted-foreground hover:border-primary hover:text-primary transition-colors disabled:opacity-60"
+          >
+            {uploading ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <>
+                <Upload className="w-4 h-4" />
+                <span className="text-[10px] font-bold uppercase tracking-wider">
+                  Add image
+                </span>
+              </>
+            )}
+          </button>
+        )}
+      </div>
+
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        className="hidden"
+        onChange={(e) => handleFiles(e.target.files)}
+      />
+
+      <p className="mt-2 text-[11px] text-muted-foreground">
+        {images.length}/{MAX_EVENT_IMAGES} images - used for the event banner
+        and advertising.
+      </p>
+      {error && (
+        <p className="mt-1 text-[11px] font-semibold text-destructive">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

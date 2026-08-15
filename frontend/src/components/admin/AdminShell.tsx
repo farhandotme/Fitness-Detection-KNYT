@@ -15,7 +15,12 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   };
 
   const navItems = [
-    { href: "/admin", label: "Dashboard", icon: LayoutDashboard, active: location === "/admin" },
+    {
+      href: "/admin",
+      label: "Dashboard",
+      icon: LayoutDashboard,
+      active: location === "/admin",
+    },
   ];
 
   return (
@@ -28,7 +33,9 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               <Radio className="w-4 h-4 text-primary-foreground" />
             </div>
             <div>
-              <p className="font-display font-extrabold tracking-tight text-sm leading-none">KNYT Ops</p>
+              <p className="font-display font-extrabold tracking-tight text-sm leading-none">
+                KNYT Ops
+              </p>
               <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-muted-foreground mt-1">
                 Control Console
               </p>
@@ -66,7 +73,9 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
         <div className="px-3 pb-5 pt-3 border-t border-card-border/60">
           <div className="px-3 py-2.5 mb-1">
-            <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-muted-foreground">Signed in</p>
+            <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-muted-foreground">
+              Signed in
+            </p>
             <p className="text-sm font-bold truncate">{username ?? "Admin"}</p>
           </div>
           <button
@@ -86,7 +95,9 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center">
             <Radio className="w-3.5 h-3.5 text-primary-foreground" />
           </div>
-          <span className="font-display font-extrabold text-sm tracking-tight">KNYT Ops</span>
+          <span className="font-display font-extrabold text-sm tracking-tight">
+            KNYT Ops
+          </span>
         </div>
         <button
           onClick={handleLogout}
