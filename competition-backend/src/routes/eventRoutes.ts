@@ -29,6 +29,7 @@ eventRoutes.get(
         roundDurationSeconds: event.roundDurationSeconds,
         breakDurationSeconds: event.breakDurationSeconds,
         maxParticipants: event.maxParticipants,
+        minParticipants: event.minParticipants,
         description: event.description,
         imageUrl: event.imageUrl,
         scheduling: event.scheduling

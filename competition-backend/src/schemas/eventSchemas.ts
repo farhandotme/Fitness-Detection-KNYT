@@ -102,6 +102,9 @@ const eventBaseSchema = z.object({
   roundDurationSeconds: z.number().int().min(10).max(600).default(60),
   breakDurationSeconds: z.number().int().min(5).max(300).default(15),
   maxParticipants: z.number().int().min(2).max(5).default(5),
+  // How many players a room needs before its host can start it early - see
+  // models/Event.ts. Distinct from scheduling.minParticipants.
+  minParticipants: z.number().int().min(1).max(5).default(2),
   description: z.string().max(500).optional(),
   imageUrl: z
     .string()
@@ -119,10 +122,22 @@ const eventBaseSchema = z.object({
 function checkMinParticipants(
   input: {
     scheduling?: { minParticipants: number } | null;
+    minParticipants?: number;
     maxParticipants?: number;
   },
   ctx: z.RefinementCtx,
 ) {
+  if (
+    input.minParticipants !== undefined &&
+    input.maxParticipants !== undefined &&
+    input.minParticipants > input.maxParticipants
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Minimum players can't exceed the maximum players",
+      path: ["minParticipants"],
+    });
+  }
   if (
     input.scheduling &&
     input.maxParticipants !== undefined &&

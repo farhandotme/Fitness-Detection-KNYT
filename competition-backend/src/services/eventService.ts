@@ -57,6 +57,7 @@ export async function listLiveEvents() {
     roundDurationSeconds: e.roundDurationSeconds,
     breakDurationSeconds: e.breakDurationSeconds,
     maxParticipants: e.maxParticipants,
+    minParticipants: e.minParticipants,
     description: e.description,
     imageUrl: e.imageUrl,
     activeRooms: countsByEvent.get(String(e._id)) ?? 0,
@@ -158,9 +159,16 @@ export async function listRoomsForEventAdmin(eventId: string) {
   const event = await EventModel.findById(eventId).lean();
   if (!event) throw AppError.notFound("Event not found");
 
-  const rooms = await CompetitionModel.find({ eventId }).sort({ createdAt: -1 }).lean();
+  const rooms = await CompetitionModel.find({ eventId })
+    .sort({ createdAt: -1 })
+    .lean();
 
-  const RUNNING_STATUSES = new Set(["COUNTDOWN", "ROUND_RUNNING", "ROUND_FINISHED", "BREAK"]);
+  const RUNNING_STATUSES = new Set([
+    "COUNTDOWN",
+    "ROUND_RUNNING",
+    "ROUND_FINISHED",
+    "BREAK",
+  ]);
   const OPEN_STATUSES = new Set(["WAITING", "FULL"]);
 
   return {
@@ -270,7 +278,9 @@ export async function deleteEvent(eventId: string) {
     { participants: 1 },
   ).lean();
 
-  const occupiedRooms = nonTerminalRooms.filter((r) => r.participants.length > 0);
+  const occupiedRooms = nonTerminalRooms.filter(
+    (r) => r.participants.length > 0,
+  );
   if (occupiedRooms.length > 0) {
     throw AppError.conflict(
       "This event has a competition in progress. Close it or wait for it to finish before deleting.",
