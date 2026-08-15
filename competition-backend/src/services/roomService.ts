@@ -1,15 +1,30 @@
-import { CompetitionModel, type CompetitionDoc } from "../models/Competition.js";
+import {
+  CompetitionModel,
+  type CompetitionDoc,
+} from "../models/Competition.js";
 import { EventModel } from "../models/Event.js";
 import { AppError } from "../utils/errors.js";
-import { generateParticipantToken, generateRoomCode, hashToken } from "../utils/token.js";
+import {
+  generateParticipantToken,
+  generateRoomCode,
+  hashToken,
+} from "../utils/token.js";
 import { hashPassword, verifyPassword } from "../utils/password.js";
 import { redis } from "../config/redis.js";
-import { getParticipantCount, getParticipants, joinRoomAtomic } from "./redisState.js";
+import {
+  getParticipantCount,
+  getParticipants,
+  joinRoomAtomic,
+} from "./redisState.js";
 import { logger } from "../config/logger.js";
 import type { RoomListEntry, RoomVisibility } from "../types/index.js";
 import { nanoid } from "nanoid";
 import { competitionEngine } from "./competitionEngine.js";
-import { cancelPendingRemoval, getRoomSnapshot, type JoinResult } from "./competitionService.js";
+import {
+  cancelPendingRemoval,
+  getRoomSnapshot,
+  type JoinResult,
+} from "./competitionService.js";
 
 // Guards the "does this device already have a seat? if not, create one"
 // check-then-act sequence below. Without this, two requests from the same
@@ -21,15 +36,26 @@ const JOIN_LOCK_TTL_MS = 8_000;
 const JOIN_LOCK_RETRY_MS = 150;
 const JOIN_LOCK_MAX_WAIT_MS = 5_000;
 
-async function acquireJoinLock(eventId: string, deviceIdHash: string): Promise<string> {
+async function acquireJoinLock(
+  eventId: string,
+  deviceIdHash: string,
+): Promise<string> {
   const lockKey = `join:lock:${eventId}:${deviceIdHash}`;
   const deadline = Date.now() + JOIN_LOCK_MAX_WAIT_MS;
   do {
-    const acquired = await redis.set(lockKey, "1", "PX", JOIN_LOCK_TTL_MS, "NX");
+    const acquired = await redis.set(
+      lockKey,
+      "1",
+      "PX",
+      JOIN_LOCK_TTL_MS,
+      "NX",
+    );
     if (acquired === "OK") return lockKey;
     await new Promise((resolve) => setTimeout(resolve, JOIN_LOCK_RETRY_MS));
   } while (Date.now() < deadline);
-  throw AppError.conflict("Still processing your previous request, please wait a moment and try again.");
+  throw AppError.conflict(
+    "Still processing your previous request, please wait a moment and try again.",
+  );
 }
 
 /**
@@ -40,19 +66,28 @@ async function acquireJoinLock(eventId: string, deviceIdHash: string): Promise<s
  * is unchanged logic, just lifted out so both createRoom and joinRoom
  * enforce it the same way.
  */
-function assertEventAcceptingParticipants(event: { status: string; scheduling?: { phase: string } | null }): void {
+function assertEventAcceptingParticipants(event: {
+  status: string;
+  scheduling?: { phase: string } | null;
+}): void {
   if (event.status !== "live") {
     throw AppError.notFound("This event is not currently live");
   }
   if (event.scheduling) {
     const phase = event.scheduling.phase;
     if (phase === "DRAFT" || phase === "PUBLISHED") {
-      throw AppError.badRequest("Registration for this event hasn't opened yet");
+      throw AppError.badRequest(
+        "Registration for this event hasn't opened yet",
+      );
     }
     if (phase === "REGISTRATION_CLOSED" || phase === "LIVE") {
       throw AppError.badRequest("Registration for this event has closed");
     }
-    if (phase === "CANCELLED" || phase === "POSTPONED" || phase === "COMPLETED") {
+    if (
+      phase === "CANCELLED" ||
+      phase === "POSTPONED" ||
+      phase === "COMPLETED"
+    ) {
       throw AppError.notFound("This event is no longer accepting participants");
     }
     // phase === "REGISTRATION_OPEN" falls through.
@@ -77,8 +112,11 @@ async function reattachToExistingSeat(
   existingRoom: InstanceType<typeof CompetitionModel>,
   deviceIdHash: string,
 ): Promise<JoinResult> {
-  const participant = existingRoom.participants.find((p) => p.deviceIdHash === deviceIdHash);
-  if (!participant) throw new AppError("INTERNAL", "Failed to locate existing seat", 500);
+  const participant = existingRoom.participants.find(
+    (p) => p.deviceIdHash === deviceIdHash,
+  );
+  if (!participant)
+    throw new AppError("INTERNAL", "Failed to locate existing seat", 500);
 
   // Rotate the credential - we only ever store a one-way hash of the
   // participant token, so we can't hand back the original.
@@ -89,17 +127,32 @@ async function reattachToExistingSeat(
 
   const competitionId = String(existingRoom._id);
   cancelPendingRemoval(competitionId, participant.participantId);
-  await joinRoomAtomic(competitionId, existingRoom.maxParticipants, participant.participantId, participant.displayName);
+  await joinRoomAtomic(
+    competitionId,
+    existingRoom.maxParticipants,
+    participant.participantId,
+    participant.displayName,
+  );
 
   const snapshot = await getRoomSnapshot(competitionId);
-  if (!snapshot) throw new AppError("INTERNAL", "Failed to build room snapshot after rejoin", 500);
+  if (!snapshot)
+    throw new AppError(
+      "INTERNAL",
+      "Failed to build room snapshot after rejoin",
+      500,
+    );
 
   logger.info(
     { competitionId, participantId: participant.participantId },
     "device reattached to its existing room seat",
   );
 
-  return { competitionId, participantId: participant.participantId, participantToken, room: snapshot };
+  return {
+    competitionId,
+    participantId: participant.participantId,
+    participantToken,
+    room: snapshot,
+  };
 }
 
 async function seatNewParticipant(
@@ -114,9 +167,17 @@ async function seatNewParticipant(
   const participantId = nanoid(12);
   const participantToken = generateParticipantToken();
 
-  const outcome = await joinRoomAtomic(competitionId, maxParticipants, participantId, displayName, avatarUrl);
+  const outcome = await joinRoomAtomic(
+    competitionId,
+    maxParticipants,
+    participantId,
+    displayName,
+    avatarUrl,
+  );
   if (outcome === "full") {
-    throw AppError.conflict("This room just filled up, please pick another one.");
+    throw AppError.conflict(
+      "This room just filled up, please pick another one.",
+    );
   }
 
   await CompetitionModel.updateOne(
@@ -139,7 +200,12 @@ async function seatNewParticipant(
   );
 
   const snapshot = await getRoomSnapshot(competitionId);
-  if (!snapshot) throw new AppError("INTERNAL", "Failed to build room snapshot after join", 500);
+  if (!snapshot)
+    throw new AppError(
+      "INTERNAL",
+      "Failed to build room snapshot after join",
+      500,
+    );
 
   // If this join filled the room, kick off the countdown -> round lifecycle.
   await competitionEngine.onParticipantCountChanged(competitionId);
@@ -154,7 +220,9 @@ async function seatNewParticipant(
  * a headcount here - their participant list is revealed by `revealRoom`
  * once the correct password is supplied.
  */
-export async function listRoomsForEvent(eventId: string): Promise<RoomListEntry[]> {
+export async function listRoomsForEvent(
+  eventId: string,
+): Promise<RoomListEntry[]> {
   const rooms = await CompetitionModel.find({
     eventId,
     status: { $in: ["WAITING", "FULL"] },
@@ -172,7 +240,9 @@ export async function listRoomsForEvent(eventId: string): Promise<RoomListEntry[
         status: room.status as RoomListEntry["status"],
         participantCount: participants.length,
         maxParticipants: room.maxParticipants,
-        createdAt: (room as unknown as { createdAt: Date }).createdAt.toISOString(),
+        createdAt: (
+          room as unknown as { createdAt: Date }
+        ).createdAt.toISOString(),
       };
       if (room.visibility === "public") {
         entry.participantNames = participants.map((p) => p.displayName);
@@ -189,13 +259,28 @@ export async function listRoomsForEvent(eventId: string): Promise<RoomListEntry[
  * frontend checks a password is correct before showing the "enter your
  * name" step.
  */
-export async function revealRoom(competitionId: string, password: string | undefined): Promise<{ roomName: string; visibility: RoomVisibility; participantNames: string[]; participantAvatars: (string | null)[]; maxParticipants: number }> {
-  const room = await CompetitionModel.findById(competitionId).lean<CompetitionDoc | null>();
+export async function revealRoom(
+  competitionId: string,
+  password: string | undefined,
+): Promise<{
+  roomName: string;
+  visibility: RoomVisibility;
+  participantNames: string[];
+  participantAvatars: (string | null)[];
+  maxParticipants: number;
+}> {
+  const room = await CompetitionModel.findById(
+    competitionId,
+  ).lean<CompetitionDoc | null>();
   if (!room || !["WAITING", "FULL"].includes(room.status)) {
     throw AppError.notFound("Room not found or no longer open");
   }
   if (room.visibility === "private") {
-    if (!password || !room.passwordHash || !(await verifyPassword(password, room.passwordHash))) {
+    if (
+      !password ||
+      !room.passwordHash ||
+      !(await verifyPassword(password, room.passwordHash))
+    ) {
       throw AppError.forbidden("Incorrect room password");
     }
   }
@@ -222,7 +307,9 @@ export interface CreateRoomInput {
 
 /** A participant creates a brand-new room and is immediately seated in it. */
 export async function createRoom(input: CreateRoomInput): Promise<JoinResult> {
-  const event = await EventModel.findById(input.eventId).lean().catch(() => null);
+  const event = await EventModel.findById(input.eventId)
+    .lean()
+    .catch(() => null);
   if (!event) throw AppError.notFound("Event not found");
   assertEventAcceptingParticipants(event);
 
@@ -235,7 +322,10 @@ export async function createRoom(input: CreateRoomInput): Promise<JoinResult> {
       return reattachToExistingSeat(existingSeat, deviceIdHash);
     }
 
-    const passwordHash = input.visibility === "private" && input.password ? await hashPassword(input.password) : undefined;
+    const passwordHash =
+      input.visibility === "private" && input.password
+        ? await hashPassword(input.password)
+        : undefined;
 
     const doc = await CompetitionModel.create({
       eventId: event._id,
@@ -248,6 +338,7 @@ export async function createRoom(input: CreateRoomInput): Promise<JoinResult> {
       roomCode: generateRoomCode(),
       status: "WAITING",
       maxParticipants: event.maxParticipants,
+      minParticipants: event.minParticipants,
       totalRounds: event.rounds,
       roundDurationSeconds: event.roundDurationSeconds,
       breakDurationSeconds: event.breakDurationSeconds,
@@ -268,7 +359,10 @@ export async function createRoom(input: CreateRoomInput): Promise<JoinResult> {
       input.avatarUrl,
       input.avatarPublicId,
     );
-    logger.info({ competitionId, eventId: input.eventId, visibility: input.visibility }, "room created");
+    logger.info(
+      { competitionId, eventId: input.eventId, visibility: input.visibility },
+      "room created",
+    );
     return result;
   } finally {
     await redis.del(lockKey);
@@ -290,7 +384,9 @@ export async function joinRoom(input: JoinRoomInput): Promise<JoinResult> {
   if (!room) throw AppError.notFound("Room not found");
 
   const eventId = String(room.eventId);
-  const event = await EventModel.findById(eventId).lean().catch(() => null);
+  const event = await EventModel.findById(eventId)
+    .lean()
+    .catch(() => null);
   if (!event) throw AppError.notFound("Event not found");
   assertEventAcceptingParticipants(event);
 
@@ -298,7 +394,11 @@ export async function joinRoom(input: JoinRoomInput): Promise<JoinResult> {
     throw AppError.conflict("This room has already started or ended");
   }
   if (room.visibility === "private") {
-    if (!input.password || !room.passwordHash || !(await verifyPassword(input.password, room.passwordHash))) {
+    if (
+      !input.password ||
+      !room.passwordHash ||
+      !(await verifyPassword(input.password, room.passwordHash))
+    ) {
       throw AppError.forbidden("Incorrect room password");
     }
   }
