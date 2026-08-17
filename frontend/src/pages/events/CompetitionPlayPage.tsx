@@ -4,6 +4,8 @@ import { getExerciseById } from "@/config/exercises";
 import { useCamera } from "@/hooks/useCamera";
 import { useExerciseSocket } from "@/hooks/useExerciseSocket";
 import { useCompetitionRoom } from "@/hooks/useCompetitionRoom";
+import { useVoiceCoach } from "@/hooks/useVoiceCoach";
+import { voiceCoach } from "@/lib/voiceCoach";
 import { CameraPreview } from "@/components/CameraPreview";
 import { RepPanel } from "@/components/RepPanel";
 import { HoldPanel } from "@/components/HoldPanel";
@@ -18,6 +20,8 @@ import {
   Flag,
   AlertTriangle,
   LogOut,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
@@ -27,26 +31,19 @@ import { BattleIntroOverlay } from "@/components/BattleIntroOverlay";
 function useServerClockOffset(serverNow: number | undefined) {
   const offsetRef = useRef(0);
   useEffect(() => {
-    if (typeof serverNow === "number")
-      offsetRef.current = serverNow - Date.now();
+    if (typeof serverNow === "number") offsetRef.current = serverNow - Date.now();
   }, [serverNow]);
   return offsetRef;
 }
 
-function useCountdownTo(
-  targetEpochMs: number | null,
-  offsetRef: React.MutableRefObject<number>,
-) {
+function useCountdownTo(targetEpochMs: number | null, offsetRef: React.MutableRefObject<number>) {
   const [remainingMs, setRemainingMs] = useState<number | null>(null);
   useEffect(() => {
     if (targetEpochMs === null) {
       setRemainingMs(null);
       return;
     }
-    const tick = () =>
-      setRemainingMs(
-        Math.max(0, targetEpochMs - (Date.now() + offsetRef.current)),
-      );
+    const tick = () => setRemainingMs(Math.max(0, targetEpochMs - (Date.now() + offsetRef.current)));
     tick();
     const id = window.setInterval(tick, 200);
     return () => window.clearInterval(id);
@@ -59,21 +56,19 @@ export function CompetitionPlayPage() {
   const [, setLocation] = useLocation();
   const competitionId = params?.competitionId;
 
-  const { room, identity, error, closed, connected, submitScore, leave } =
-    useCompetitionRoom(competitionId);
+  const { room, identity, error, closed, connected, submitScore, leave } = useCompetitionRoom(competitionId);
   const offsetRef = useServerClockOffset(room?.serverNow);
   const [confirmingExit, setConfirmingExit] = useState(false);
+  const [voiceEnabled, setVoiceEnabled] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    return window.localStorage.getItem("voice_coach_enabled") !== "0";
+  });
 
   const exercise = room ? getExerciseById(room.exerciseId) : undefined;
 
-  const {
-    videoRef,
-    canvasRef,
-    permission,
-    startCamera,
-    stopCamera,
-    captureFrame,
-  } = useCamera(exercise?.cameraMirror ?? true);
+  const { videoRef, canvasRef, permission, startCamera, stopCamera, captureFrame } = useCamera(
+    exercise?.cameraMirror ?? true,
+  );
   const {
     connected: exerciseConnected,
     socketError: exerciseSocketError,
@@ -84,12 +79,20 @@ export function CompetitionPlayPage() {
     sendFrame,
   } = useExerciseSocket(exercise ?? getExerciseById("pushup")!);
 
+  // Persist the mute toggle and keep the shared coach's own enabled flag
+  // (cancelAll on mute below) in sync with it.
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("voice_coach_enabled", voiceEnabled ? "1" : "0");
+    }
+    voiceCoach.setEnabled(voiceEnabled);
+  }, [voiceEnabled]);
+
+  useVoiceCoach(room, identity, exercise, data, voiceEnabled);
+
   const frameIntervalRef = useRef<number | null>(null);
   const prevStatusRef = useRef<string | null>(null);
-  const lastSentRef = useRef<{ value: number; time: number }>({
-    value: -1,
-    time: 0,
-  });
+  const lastSentRef = useRef<{ value: number; time: number }>({ value: -1, time: 0 });
 
   const startSendingFrames = useCallback(() => {
     if (frameIntervalRef.current) return;
@@ -157,6 +160,7 @@ export function CompetitionPlayPage() {
     stop();
     stopCamera();
     stopSendingFrames();
+    voiceCoach.cancelAll();
     const t = setTimeout(() => setLocation("/events"), 2500);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -167,10 +171,7 @@ export function CompetitionPlayPage() {
     if (!room || !exercise) return;
     const status = room.status;
 
-    if (
-      status === "ROUND_RUNNING" &&
-      prevStatusRef.current !== "ROUND_RUNNING"
-    ) {
+    if (status === "ROUND_RUNNING" && prevStatusRef.current !== "ROUND_RUNNING") {
       let cancelled = false;
       (async () => {
         const ready = await startCamera();
@@ -178,11 +179,7 @@ export function CompetitionPlayPage() {
         start(
           exercise.mode === "reps"
             ? { targetReps: 999, targetSets: 1, setNumber: room.currentRound }
-            : {
-                targetSeconds: room.roundDurationSeconds + 5,
-                targetSets: 1,
-                setNumber: room.currentRound,
-              },
+            : { targetSeconds: room.roundDurationSeconds + 5, targetSets: 1, setNumber: room.currentRound },
         );
       })();
       prevStatusRef.current = status;
@@ -191,10 +188,7 @@ export function CompetitionPlayPage() {
       };
     }
 
-    if (
-      status !== "ROUND_RUNNING" &&
-      prevStatusRef.current === "ROUND_RUNNING"
-    ) {
+    if (status !== "ROUND_RUNNING" && prevStatusRef.current === "ROUND_RUNNING") {
       stop();
       stopCamera();
       stopSendingFrames();
@@ -205,32 +199,20 @@ export function CompetitionPlayPage() {
   }, [room?.status, room?.currentRound, exercise?.id]);
 
   useEffect(() => {
-    if (
-      exerciseConnected &&
-      permission === "granted" &&
-      room?.status === "ROUND_RUNNING"
-    ) {
+    if (exerciseConnected && permission === "granted" && room?.status === "ROUND_RUNNING") {
       startSendingFrames();
     } else {
       stopSendingFrames();
     }
     return stopSendingFrames;
-  }, [
-    exerciseConnected,
-    permission,
-    room?.status,
-    startSendingFrames,
-    stopSendingFrames,
-  ]);
+  }, [exerciseConnected, permission, room?.status, startSendingFrames, stopSendingFrames]);
 
   // Report score to the competition backend - the frontend never decides the
   // official leaderboard, it only tells the server what it is currently seeing.
   useEffect(() => {
     if (!data || !room || room.status !== "ROUND_RUNNING" || !exercise) return;
     const raw =
-      exercise.mode === "reps"
-        ? (data as any).rep_count
-        : (data as any).hold_seconds;
+      exercise.mode === "reps" ? (data as any).rep_count : (data as any).hold_seconds;
     if (typeof raw !== "number") return;
     const now = Date.now();
     if (raw === lastSentRef.current.value) return;
@@ -245,21 +227,17 @@ export function CompetitionPlayPage() {
       stop();
       stopCamera();
       stopSendingFrames();
+      voiceCoach.cancelAll();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const countdownRemaining = useCountdownTo(
-    room?.countdownEndAt ?? null,
-    offsetRef,
-  );
+  const countdownRemaining = useCountdownTo(room?.countdownEndAt ?? null, offsetRef);
   const roundRemaining = useCountdownTo(room?.roundEndAt ?? null, offsetRef);
   const breakRemaining = useCountdownTo(room?.breakEndAt ?? null, offsetRef);
 
   if (!match || !competitionId) {
-    return (
-      <div className="p-8 text-center text-destructive">Room not found.</div>
-    );
+    return <div className="p-8 text-center text-destructive">Room not found.</div>;
   }
 
   if (closed) {
@@ -288,9 +266,7 @@ export function CompetitionPlayPage() {
     );
   }
 
-  const myScore = room.leaderboard.find(
-    (e) => e.participantId === identity?.participantId,
-  );
+  const myScore = room.leaderboard.find((e) => e.participantId === identity?.participantId);
   const repData = exercise.mode === "reps" && data ? (data as any) : null;
   const holdData = exercise.mode === "hold" && data ? (data as any) : null;
   const poseDetected = Boolean((data as any)?.pose_detected);
@@ -312,6 +288,7 @@ export function CompetitionPlayPage() {
     stop();
     stopCamera();
     stopSendingFrames();
+    voiceCoach.cancelAll();
     setLocation("/events");
   };
 
@@ -343,12 +320,16 @@ export function CompetitionPlayPage() {
             connected ? "text-primary" : "text-destructive",
           )}
         >
-          {connected ? (
-            <Wifi className="w-3.5 h-3.5" />
-          ) : (
-            <WifiOff className="w-3.5 h-3.5" />
-          )}
+          {connected ? <Wifi className="w-3.5 h-3.5" /> : <WifiOff className="w-3.5 h-3.5" />}
         </span>
+        <button
+          onClick={() => setVoiceEnabled((v) => !v)}
+          data-testid="button-toggle-voice-coach"
+          aria-label={voiceEnabled ? "Mute voice coach" : "Unmute voice coach"}
+          className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-md text-slate-400 hover:text-white transition-colors"
+        >
+          {voiceEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+        </button>
       </header>
 
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden min-h-0">
@@ -369,9 +350,7 @@ export function CompetitionPlayPage() {
             {/* Round timer overlay */}
             {room.status === "ROUND_RUNNING" && roundRemaining !== null && (
               <div className="absolute top-4 left-4 z-20 bg-black/50 backdrop-blur-md rounded-xl px-4 py-2">
-                <p className="text-[10px] uppercase tracking-widest text-slate-400">
-                  Time left
-                </p>
+                <p className="text-[10px] uppercase tracking-widest text-slate-400">Time left</p>
                 <p className="text-2xl font-mono font-black text-primary tabular-nums">
                   {Math.ceil(roundRemaining / 1000)}s
                 </p>
@@ -381,9 +360,7 @@ export function CompetitionPlayPage() {
             {/* Your live score overlay */}
             {room.status === "ROUND_RUNNING" && (
               <div className="absolute top-4 right-4 z-20 bg-black/50 backdrop-blur-md rounded-xl px-4 py-2 text-right">
-                <p className="text-[10px] uppercase tracking-widest text-slate-400">
-                  Your score
-                </p>
+                <p className="text-[10px] uppercase tracking-widest text-slate-400">Your score</p>
                 <p className="text-2xl font-mono font-black text-white tabular-nums">
                   {myScore?.score ?? 0}
                 </p>
@@ -403,10 +380,7 @@ export function CompetitionPlayPage() {
                     participants={room.participants}
                     selfParticipantId={identity?.participantId}
                     roundNumber={room.currentRound || 1}
-                    countdownSeconds={Math.max(
-                      1,
-                      Math.ceil(countdownRemaining / 1000),
-                    )}
+                    countdownSeconds={Math.max(1, Math.ceil(countdownRemaining / 1000))}
                   />
                 </motion.div>
               )}
@@ -414,8 +388,7 @@ export function CompetitionPlayPage() {
 
             {/* Round finished / break overlay */}
             <AnimatePresence>
-              {(room.status === "ROUND_FINISHED" ||
-                room.status === "BREAK") && (
+              {(room.status === "ROUND_FINISHED" || room.status === "BREAK") && (
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
@@ -430,9 +403,7 @@ export function CompetitionPlayPage() {
                     <>
                       <div className="flex items-center gap-2 text-slate-300 mb-2">
                         <Coffee className="w-4 h-4" />
-                        <span className="text-xs uppercase tracking-widest">
-                          Short break
-                        </span>
+                        <span className="text-xs uppercase tracking-widest">Short break</span>
                       </div>
                       <div className="text-6xl font-black font-mono text-primary tabular-nums mb-2">
                         {Math.ceil(breakRemaining / 1000)}s
@@ -442,9 +413,7 @@ export function CompetitionPlayPage() {
                       </p>
                     </>
                   ) : (
-                    <p className="text-sm text-slate-400">
-                      Calculating results...
-                    </p>
+                    <p className="text-sm text-slate-400">Calculating results...</p>
                   )}
                 </motion.div>
               )}
@@ -458,9 +427,7 @@ export function CompetitionPlayPage() {
           </div>
 
           {exerciseSocketError && (
-            <p className="text-xs text-destructive px-1">
-              {exerciseSocketError}
-            </p>
+            <p className="text-xs text-destructive px-1">{exerciseSocketError}</p>
           )}
         </div>
 
@@ -480,9 +447,7 @@ export function CompetitionPlayPage() {
                   const participant = room.participants.find(
                     (p) => p.participantId === entry.participantId,
                   );
-                  const isOffline = participant
-                    ? !participant.connected
-                    : false;
+                  const isOffline = participant ? !participant.connected : false;
                   return (
                     <div
                       key={entry.participantId}
@@ -491,7 +456,7 @@ export function CompetitionPlayPage() {
                         "flex items-center gap-3 rounded-xl px-3 py-2.5 border",
                         isMe
                           ? "border-primary/40 bg-primary/10"
-                          : "border-white/10 bg-white/3",
+                          : "border-white/10 bg-white/[0.03]",
                         isOffline && "opacity-60",
                       )}
                     >
@@ -553,13 +518,7 @@ export function CompetitionPlayPage() {
                           : "border-destructive/30 text-destructive",
                       )}
                     >
-                      <PlayerAvatar
-                        name={p.displayName}
-                        src={p.avatarUrl}
-                        seed={p.participantId}
-                        isSelf={isMe}
-                        size="sm"
-                      />
+                      <PlayerAvatar name={p.displayName} src={p.avatarUrl} seed={p.participantId} isSelf={isMe} size="sm" />
                       {p.displayName}
                     </span>
                   );
@@ -570,11 +529,7 @@ export function CompetitionPlayPage() {
             {room.status === "ROUND_RUNNING" && (
               <div className="pt-2">
                 {exercise.mode === "reps" && repData ? (
-                  <RepPanel
-                    data={repData}
-                    lastRep={lastRep}
-                    exerciseName={exercise.name}
-                  />
+                  <RepPanel data={repData} lastRep={lastRep} exerciseName={exercise.name} />
                 ) : exercise.mode === "hold" && holdData ? (
                   <HoldPanel data={holdData} exerciseName={exercise.name} />
                 ) : (
