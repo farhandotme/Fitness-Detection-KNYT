@@ -19,6 +19,26 @@ const ENCOURAGEMENT_LINES = [
 
 const GOOD_REP_LINES = ["Nice rep!", "Clean!", "That's the one!", "Textbook!", "Boom, got it!"];
 
+// Standings lines, rotated (not random) so consecutive cheers never repeat.
+// Split by real match context - a sole leader mid-match hears something
+// different from a leader in the final round, and a genuine tie gets its
+// own honest phrasing instead of a made-up "ahead by 1".
+const LEAD_LINES = [
+  "You're in the lead! Don't let up!",
+  "Stay out front, keep pushing!",
+  "You're leading the pack, keep it up!",
+];
+const LEAD_FINAL_ROUND_LINES = [
+  "Final round and you're leading — keep going, you're about to win!",
+  "You're ahead in the last round! Don't slow down now!",
+  "This is it — hold the lead and close it out!",
+];
+const TIE_LINES = [
+  "It's all tied up! Every rep counts now!",
+  "Dead even — time to break the tie!",
+  "Neck and neck! Push for the edge!",
+];
+
 const goRepFor = (round: number) => (round <= 1 ? ["Go go go!", "And we're live!"] : [`Round ${round}, go!`, "Go time!"]);
 
 const ENCOURAGEMENT_INTERVAL_MS = 25_000;
@@ -50,6 +70,8 @@ export function useVoiceCoach(
   const milestonesRef = useRef<Set<number>>(new Set());
   const lastPositionKeyRef = useRef<string | null>(null);
   const leadAnnouncedRef = useRef(false);
+  const leadIdxRef = useRef(0);
+  const tieIdxRef = useRef(0);
   const encouragementIdxRef = useRef(0);
   const goodRepIdxRef = useRef(0);
   const encouragementTimerRef = useRef<number | null>(null);
@@ -165,22 +187,43 @@ export function useVoiceCoach(
   }, [enabled, room?.status, exercise, data]);
 
   // Standings: who's ahead, by how much, and whether the lead just changed
-  // hands - always framed as something to close, never just "you're losing".
+  // hands - always framed as something to close, never just "you're
+  // losing". Every line here comes straight from the live leaderboard's
+  // real scores - no floors, no filler numbers. A genuine tie is announced
+  // as a tie, not as "ahead by 1".
   useEffect(() => {
     if (!enabled || !room || room.status !== "ROUND_RUNNING" || !identity) return;
 
     const board = room.leaderboard;
+    if (board.length === 0) return;
     const meIdx = board.findIndex((e) => e.participantId === identity.participantId);
     if (meIdx === -1) return;
     const me = board[meIdx];
     const unit = exercise?.mode === "hold" ? "second" : "rep";
 
-    if (me.rank === 1) {
+    const topScore = Math.round(board[0].score);
+    const myScore = Math.round(me.score);
+    const tiedForLead = board.filter((e) => Math.round(e.score) === topScore).length > 1;
+    const isFinalRound = room.totalRounds > 0 && room.currentRound >= room.totalRounds;
+
+    if (myScore === topScore) {
+      // I'm at the top of the real leaderboard right now - alone or tied.
       if (!leadAnnouncedRef.current) {
         leadAnnouncedRef.current = true;
-        voiceCoach.speak("You're in the lead! Don't let up!", {
+        let line: string;
+        if (tiedForLead) {
+          line = TIE_LINES[tieIdxRef.current % TIE_LINES.length];
+          tieIdxRef.current += 1;
+        } else if (isFinalRound) {
+          line = LEAD_FINAL_ROUND_LINES[leadIdxRef.current % LEAD_FINAL_ROUND_LINES.length];
+          leadIdxRef.current += 1;
+        } else {
+          line = LEAD_LINES[leadIdxRef.current % LEAD_LINES.length];
+          leadIdxRef.current += 1;
+        }
+        voiceCoach.speak(line, {
           profile: "announcer",
-          intensity: "peak",
+          intensity: tiedForLead ? "normal" : "peak",
           priority: "normal",
           dedupeKey: "position",
           cooldownMs: POSITION_COOLDOWN_MS,
@@ -192,24 +235,44 @@ export function useVoiceCoach(
 
     const ahead = board[meIdx - 1];
     if (!ahead) return;
-    const gap = Math.max(1, Math.round(ahead.score - me.score));
+    const gap = Math.round(ahead.score - me.score);
+
+    if (gap <= 0) {
+      // Tied with the specific rival directly ahead (not necessarily the
+      // overall leader) - say that honestly instead of inventing a gap.
+      const tieKey = `${ahead.participantId}:tie`;
+      if (lastPositionKeyRef.current === tieKey) return;
+      lastPositionKeyRef.current = tieKey;
+      voiceCoach.speak(`Tied with ${ahead.displayName}! Every ${unit} counts now!`, {
+        profile: "announcer",
+        intensity: "normal",
+        priority: "normal",
+        dedupeKey: "position",
+        cooldownMs: POSITION_COOLDOWN_MS,
+      });
+      return;
+    }
+
     // Bucket the gap so we only speak again once it's meaningfully changed
     // (or the rival ahead of us changed), not on every single point tick.
     const bucketKey = `${ahead.participantId}:${Math.ceil(gap / 2)}`;
     if (lastPositionKeyRef.current === bucketKey) return;
     lastPositionKeyRef.current = bucketKey;
 
-    voiceCoach.speak(
-      `${ahead.displayName} is ahead by ${gap} ${unit}${gap === 1 ? "" : "s"}! Time to chase!`,
-      {
-        profile: "announcer",
-        intensity: "normal",
-        priority: "normal",
-        dedupeKey: "position",
-        cooldownMs: POSITION_COOLDOWN_MS,
-      },
-    );
-  }, [enabled, room?.leaderboard, room?.status, identity, exercise?.mode]);
+    const unitPlural = `${unit}${gap === 1 ? "" : "s"}`;
+    const line =
+      gap <= 2
+        ? `${ahead.displayName} is only ${gap} ${unitPlural} ahead — you can catch up!`
+        : `${ahead.displayName} is ahead by ${gap} ${unitPlural}! Time to chase!`;
+
+    voiceCoach.speak(line, {
+      profile: "announcer",
+      intensity: "normal",
+      priority: "normal",
+      dedupeKey: "position",
+      cooldownMs: POSITION_COOLDOWN_MS,
+    });
+  }, [enabled, room?.leaderboard, room?.status, room?.currentRound, room?.totalRounds, identity, exercise?.mode]);
 
   // Ambient encouragement - low priority, spaced out, never piles up.
   useEffect(() => {
