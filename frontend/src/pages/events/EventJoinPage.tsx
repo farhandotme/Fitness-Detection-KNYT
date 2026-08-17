@@ -18,6 +18,7 @@ import {
   CalendarClock,
   Clock,
   DoorOpen,
+  Dumbbell,
 } from "lucide-react";
 
 export function EventJoinPage() {
@@ -224,6 +225,24 @@ export function EventJoinPage() {
                   value={`${event.breakDurationSeconds}s`}
                 />
               </div>
+
+              {/* Optional practice - opens just this exercise's session, not the full library */}
+              {exercise && (
+                <div className="border-t border-white/5 pt-8">
+                  <button
+                    onClick={() => setLocation(`/exercise/${exercise.id}?fromEvent=${event.id}`)}
+                    data-testid="button-practice-exercise"
+                    className="w-full bg-white/5 border border-white/10 text-foreground h-14 rounded-2xl font-bold text-base uppercase tracking-wider flex items-center justify-center gap-3 hover:bg-white/10 hover:border-primary/30 transition-all"
+                  >
+                    <Dumbbell className="w-5 h-5 text-primary" />
+                    Practice This Move First
+                  </button>
+                  <p className="text-xs text-muted-foreground/70 text-center mt-3">
+                    Optional - get spoken form coaching and a readiness check
+                    before you compete. Skip it and jump straight in if you'd rather.
+                  </p>
+                </div>
+              )}
 
               {/* Enter the lobby - rooms are created by other players, see who's inside before you join */}
               <div className="border-t border-white/5 pt-8 mt-2">
