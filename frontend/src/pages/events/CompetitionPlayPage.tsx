@@ -17,9 +17,11 @@ import {
   Coffee,
   Flag,
   AlertTriangle,
+  LogOut,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
+import { BattleIntroOverlay } from "@/components/BattleIntroOverlay";
 
 /** How the competition-server clock relates to this browser's clock. */
 function useServerClockOffset(serverNow: number | undefined) {
@@ -50,8 +52,9 @@ export function CompetitionPlayPage() {
   const [, setLocation] = useLocation();
   const competitionId = params?.competitionId;
 
-  const { room, identity, error, closed, connected, submitScore } = useCompetitionRoom(competitionId);
+  const { room, identity, error, closed, connected, submitScore, leave } = useCompetitionRoom(competitionId);
   const offsetRef = useServerClockOffset(room?.serverNow);
+  const [confirmingExit, setConfirmingExit] = useState(false);
 
   const exercise = room ? getExerciseById(room.exerciseId) : undefined;
 
@@ -101,6 +104,34 @@ export function CompetitionPlayPage() {
       setLocation(`/competitions/${room.competitionId}/results`);
     }
   }, [room?.status, room?.competitionId, setLocation]);
+
+  // Hitting the browser back button (or swipe-back) mid-match shouldn't
+  // silently drop the participant without the server (and everyone else)
+  // finding out. Intercept back navigation and ask first, same pattern as
+  // the waiting room - see pages/events/WaitingRoomPage.tsx.
+  useEffect(() => {
+    if (!identity || closed) return;
+    window.history.pushState(null, "", window.location.href);
+    const onPopState = () => {
+      setConfirmingExit(true);
+      window.history.pushState(null, "", window.location.href);
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [identity, closed]);
+
+  // Closing/refreshing the tab mid-match: the server-side disconnect grace
+  // period (see competitionService.ts) will pick this up either way, but
+  // the built-in browser prompt gives the player a chance to avoid it.
+  useEffect(() => {
+    if (!identity || closed) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [identity, closed]);
 
   // The host left/disconnected for good and the room was torn down
   // server-side (see useCompetitionRoom.ts "room:closed") - stop everything
@@ -220,7 +251,19 @@ export function CompetitionPlayPage() {
   const poseDetected = Boolean((data as any)?.pose_detected);
   const poseLandmarks = poseDetected ? ((data as any)?.landmarks ?? []) : [];
 
-  const handleExit = () => {
+  const myParticipant = room.participants.find(
+    (p) => p.participantId === identity?.participantId,
+  );
+  const isHost = myParticipant?.isHost === true;
+
+  // Actually leaving mid-match: tell the server (frees the seat / closes
+  // the room if we're the host - see useCompetitionRoom.ts `leave`) so
+  // everyone else and the admin dashboard find out immediately instead of
+  // waiting out the disconnect grace period for a socket that, since it's
+  // shared across the whole app, was never going to drop on its own.
+  const confirmExit = () => {
+    leave();
+    setConfirmingExit(false);
     stop();
     stopCamera();
     stopSendingFrames();
@@ -232,7 +275,7 @@ export function CompetitionPlayPage() {
       {/* Top bar */}
       <header className="flex items-center gap-3 px-4 py-3 border-b border-white/10 shrink-0 bg-[#171714]/95 backdrop-blur-xl">
         <button
-          onClick={handleExit}
+          onClick={() => setConfirmingExit(true)}
           data-testid="button-exit-competition"
           className="flex items-center gap-1.5 text-slate-400 hover:text-white text-xs font-bold tracking-widest uppercase transition-colors"
         >
@@ -294,31 +337,21 @@ export function CompetitionPlayPage() {
               </div>
             )}
 
-            {/* Countdown overlay */}
+            {/* Countdown / arena battle-intro overlay */}
             <AnimatePresence>
               {room.status === "COUNTDOWN" && countdownRemaining !== null && (
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
-                  className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-[#171714]/96 text-[#f2f5ed]"
+                  className="absolute inset-0 z-40"
                 >
-                  <p className="relative z-10 text-xs font-bold uppercase tracking-[.28em] text-accent mb-5">
-                    Get into position
-                  </p>
-                  <motion.div
-                    key={Math.ceil(countdownRemaining / 1000)}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -8 }}
-                    transition={{ duration: 0.25, ease: "easeOut" }}
-                    className="relative z-10 h-[clamp(8rem,18vw,12rem)] w-[clamp(8rem,18vw,12rem)] text-center font-display text-[clamp(8rem,18vw,12rem)] leading-[.9] font-extrabold tabular-nums text-primary drop-shadow-[0_0_32px_hsl(var(--primary)/.35)]"
-                  >
-                    {Math.max(1, Math.ceil(countdownRemaining / 1000))}
-                  </motion.div>
-                  <p className="relative z-10 text-sm text-slate-300 mt-3">
-                    Round {room.currentRound || 1} begins for everyone at once
-                  </p>
+                  <BattleIntroOverlay
+                    participants={room.participants}
+                    selfParticipantId={identity?.participantId}
+                    roundNumber={room.currentRound || 1}
+                    countdownSeconds={Math.max(1, Math.ceil(countdownRemaining / 1000))}
+                  />
                 </motion.div>
               )}
             </AnimatePresence>
@@ -381,6 +414,10 @@ export function CompetitionPlayPage() {
               <div className="space-y-2">
                 {room.leaderboard.map((entry) => {
                   const isMe = entry.participantId === identity?.participantId;
+                  const participant = room.participants.find(
+                    (p) => p.participantId === entry.participantId,
+                  );
+                  const isOffline = participant ? !participant.connected : false;
                   return (
                     <div
                       key={entry.participantId}
@@ -390,6 +427,7 @@ export function CompetitionPlayPage() {
                         isMe
                           ? "border-primary/40 bg-primary/10"
                           : "border-white/10 bg-white/[0.03]",
+                        isOffline && "opacity-60",
                       )}
                     >
                       <span
@@ -409,9 +447,17 @@ export function CompetitionPlayPage() {
                         isSelf={isMe}
                         size="sm"
                       />
-                      <span className="flex-1 truncate text-sm font-bold text-white">
-                        {entry.displayName}
-                        {isMe && <span className="text-primary"> (You)</span>}
+                      <span className="flex-1 min-w-0 flex items-center gap-2">
+                        <span className="truncate text-sm font-bold text-white">
+                          {entry.displayName}
+                          {isMe && <span className="text-primary"> (You)</span>}
+                        </span>
+                        {isOffline && (
+                          <span className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wide text-destructive bg-destructive/10 px-1.5 py-0.5 rounded-md shrink-0">
+                            <WifiOff className="w-2.5 h-2.5" />
+                            Offline
+                          </span>
+                        )}
                       </span>
                       <span className="font-mono text-lg font-black text-white tabular-nums">
                         {entry.score}
@@ -466,6 +512,39 @@ export function CompetitionPlayPage() {
           </div>
         </div>
       </div>
+
+      {confirmingExit && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-[#171714] border border-white/10 rounded-3xl p-6 md:p-8 max-w-sm w-full shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <div className="w-11 h-11 rounded-2xl bg-destructive/15 text-destructive flex items-center justify-center mb-4">
+              <LogOut className="w-5 h-5" />
+            </div>
+            <h2 className="text-lg font-black tracking-tight text-white mb-1.5">
+              Exit this match?
+            </h2>
+            <p className="text-sm text-slate-400 mb-6">
+              {isHost
+                ? "You created this room, so leaving will end the match for everyone still in it - not just remove you."
+                : "The other players will see you go offline right away, and your seat won't be held."}
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setConfirmingExit(false)}
+                className="flex-1 py-3 rounded-2xl text-sm font-bold uppercase tracking-wider bg-white/10 text-white hover:bg-white/15 transition-colors"
+              >
+                Stay
+              </button>
+              <button
+                onClick={confirmExit}
+                data-testid="button-confirm-exit-competition"
+                className="flex-1 py-3 rounded-2xl text-sm font-black uppercase tracking-wider bg-destructive text-destructive-foreground hover:brightness-110 transition-all"
+              >
+                Exit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
