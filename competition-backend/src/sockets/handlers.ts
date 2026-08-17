@@ -192,6 +192,17 @@ export function registerSocketHandlers(io: Server): void {
             reason: "The room was closed because the host left.",
           });
           io.in(input.competitionId).socketsLeave(input.competitionId);
+        } else if (result.everyoneLeft) {
+          // This leave was the last connected seat mid-match - nobody's
+          // left to finish it, so the room was torn down immediately
+          // rather than left "live" on the admin dashboard with no one in
+          // it. Also reaches any admin spectator, same as the disconnect
+          // grace-period version of this below.
+          io.to(input.competitionId).emit("room:closed", {
+            competitionId: input.competitionId,
+            reason: "The room was closed because everyone left.",
+          });
+          io.in(input.competitionId).socketsLeave(input.competitionId);
         } else {
           await competitionEngine.onParticipantCountChanged(
             input.competitionId,
@@ -299,6 +310,20 @@ export function registerSocketHandlers(io: Server): void {
               io.to(competitionId).emit("room:closed", {
                 competitionId,
                 reason: "The room was closed because the host disconnected.",
+              });
+              io.in(competitionId).socketsLeave(competitionId);
+            },
+            async () => {
+              // Only fires once every single participant (host included)
+              // has been disconnected past their grace period with none of
+              // them reconnecting - the room has just been destroyed since
+              // nobody is left to finish it. Also reaches any admin
+              // dashboard currently spectating this room (see
+              // hooks/useAdminSpectate.ts), which joins this same
+              // Socket.IO room, so it stops showing the match as live too.
+              io.to(competitionId).emit("room:closed", {
+                competitionId,
+                reason: "The room was closed because everyone disconnected.",
               });
               io.in(competitionId).socketsLeave(competitionId);
             },
