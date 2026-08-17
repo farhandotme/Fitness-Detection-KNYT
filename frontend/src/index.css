@@ -208,6 +208,49 @@ button,
   animation: signal-pulse 2.4s ease-out infinite;
 }
 
+@keyframes arena-sweep {
+  0% {
+    transform: translateX(-120%) skewX(-12deg);
+  }
+  100% {
+    transform: translateX(320%) skewX(-12deg);
+  }
+}
+
+.arena-sweep {
+  animation: arena-sweep 2.6s ease-in-out infinite;
+}
+
+@keyframes arena-ring {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 hsl(var(--primary) / 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 10px hsl(var(--primary) / 0);
+  }
+}
+
+.arena-ring {
+  animation: arena-ring 1.6s ease-out infinite;
+}
+
+@keyframes arena-flash {
+  0% {
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.arena-flash {
+  animation: arena-flash 0.5s ease-out;
+}
+
 input[type="number"]::-webkit-inner-spin-button,
 input[type="number"]::-webkit-outer-spin-button {
   opacity: 1;
