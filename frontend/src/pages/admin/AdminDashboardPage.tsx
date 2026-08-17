@@ -517,59 +517,83 @@ function EventCard({
     : null;
 
   return (
-    <div className="bg-card border border-card-border rounded-3xl overflow-hidden flex flex-col">
-      <Link
-        href={`/admin/events/${event._id}`}
-        className="h-28 relative bg-secondary/40 overflow-hidden block group"
-      >
-        {event.imageUrls?.[0] ? (
-          <img
-            src={event.imageUrls[0]}
-            alt=""
-            className="w-full h-full object-cover"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center bg-linear-to-br from-primary/20 via-secondary/40 to-transparent">
-            <Trophy className="w-8 h-8 text-muted-foreground opacity-40" />
-          </div>
-        )}
-        <span
-          className={cn(
-            "absolute top-3 right-3 text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-md",
-            STATUS_STYLES[event.status as keyof typeof STATUS_STYLES],
-          )}
+    <div className="bg-card border border-card-border rounded-[1.75rem] overflow-hidden shadow-sm hover:shadow-md transition-shadow p-5 flex flex-col gap-4">
+      <div className="flex items-stretch gap-5">
+        {/* Prominent, square thumbnail matching the screenshot */}
+        <Link
+          href={`/admin/events/${event._id}`}
+          className="relative w-24 h-24 shrink-0 rounded-[1rem] overflow-hidden bg-secondary/40 block group"
         >
-          {event.status}
-        </span>
-        <div className="absolute top-3 left-3 flex items-center gap-1.5">
-          <button
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onEdit();
-            }}
-            title="Edit event"
-            className="w-7 h-7 rounded-full bg-background/80 backdrop-blur flex items-center justify-center hover:bg-background transition-colors"
-          >
-            <Pencil className="w-3.5 h-3.5 text-foreground" />
-          </button>
-          <button
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onRequestDelete();
-            }}
-            title="Delete event"
-            className="w-7 h-7 rounded-full bg-background/80 backdrop-blur flex items-center justify-center hover:bg-destructive/20 transition-colors"
-          >
-            <Trash2 className="w-3.5 h-3.5 text-destructive" />
-          </button>
-        </div>
-      </Link>
+          {event.imageUrls?.[0] ? (
+            <img
+              src={event.imageUrls[0]}
+              alt=""
+              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/20 via-secondary/40 to-transparent">
+              <Trophy className="w-8 h-8 text-muted-foreground opacity-40" />
+            </div>
+          )}
+        </Link>
 
-      <div className="p-5 flex flex-col gap-3 flex-1">
+        {/* Info Area */}
+        <div className="flex flex-col flex-1 min-w-0 justify-between py-0.5">
+          <div>
+            <div className="flex items-start justify-between gap-2">
+              <h3 className="text-xl font-bold tracking-tight truncate leading-none mt-1">
+                {event.name}
+              </h3>
+              <span
+                className={cn(
+                  "shrink-0 text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full",
+                  STATUS_STYLES[event.status as keyof typeof STATUS_STYLES],
+                )}
+              >
+                {event.status}
+              </span>
+            </div>
+            {/* Monospaced, subtle layout details */}
+            <p className="text-xs text-muted-foreground mt-2 font-mono truncate">
+              {event.exerciseName} · {event.rounds}×{event.roundDurationSeconds}
+              s · max {event.maxParticipants}
+            </p>
+          </div>
+
+          <div className="flex items-center justify-between mt-auto pt-3">
+            <div className="flex items-center gap-2">
+              {/* Distinct circular Edit/Delete buttons for better understandability */}
+              <button
+                onClick={onEdit}
+                title="Edit event"
+                className="w-9 h-9 rounded-full bg-secondary border border-card-border flex items-center justify-center text-muted-foreground hover:bg-foreground hover:text-background transition-colors"
+              >
+                <Pencil className="w-4 h-4" />
+              </button>
+              <button
+                onClick={onRequestDelete}
+                title="Delete event"
+                className="w-9 h-9 rounded-full bg-secondary border border-card-border flex items-center justify-center text-destructive/80 hover:bg-destructive hover:text-destructive-foreground transition-colors"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Rooms Link aligned to the right */}
+            <Link
+              href={`/admin/events/${event._id}`}
+              className="flex items-center gap-1 text-[11px] font-black uppercase tracking-wider text-primary hover:brightness-110"
+            >
+              Rooms
+              <ArrowUpRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-3">
         {confirmingDelete ? (
-          <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-4 space-y-3 animate-in fade-in">
+          <div className="rounded-[1.25rem] border border-destructive/30 bg-destructive/10 p-4 space-y-3 animate-in fade-in">
             <p className="text-sm font-bold text-destructive">
               Delete "{event.name}"?
             </p>
@@ -581,21 +605,21 @@ function EventCard({
               <button
                 onClick={() => onDelete(event._id)}
                 disabled={deleting}
-                className="flex-1 py-2 rounded-xl text-[11px] font-black uppercase tracking-wider bg-destructive text-destructive-foreground hover:brightness-110 transition-all disabled:opacity-50"
+                className="flex-1 py-2.5 rounded-full text-[11px] font-black uppercase tracking-wider bg-destructive text-destructive-foreground hover:brightness-110 transition-all disabled:opacity-50"
               >
                 {deleting ? "Deleting..." : "Yes, delete"}
               </button>
               <button
                 onClick={onCancelDeleteRequest}
                 disabled={deleting}
-                className="flex-1 py-2 rounded-xl text-[11px] font-bold uppercase tracking-wider bg-secondary text-muted-foreground hover:bg-secondary/80 transition-colors disabled:opacity-50"
+                className="flex-1 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-secondary text-muted-foreground hover:bg-secondary/80 transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>
             </div>
           </div>
         ) : confirmingStatusTarget ? (
-          <div className="rounded-2xl border border-primary/30 bg-primary/10 p-4 space-y-3 animate-in fade-in">
+          <div className="rounded-[1.25rem] border border-primary/30 bg-primary/10 p-4 space-y-3 animate-in fade-in">
             <p className="text-sm font-bold text-primary">
               Change status to {confirmingStatusTarget.toUpperCase()}?
             </p>
@@ -607,20 +631,20 @@ function EventCard({
                 onClick={() =>
                   onStatusChange(event._id, confirmingStatusTarget)
                 }
-                className="flex-1 py-2 rounded-xl text-[11px] font-black uppercase tracking-wider bg-primary text-primary-foreground hover:brightness-110 transition-all"
+                className="flex-1 py-2.5 rounded-full text-[11px] font-black uppercase tracking-wider bg-primary text-primary-foreground hover:brightness-110 transition-all"
               >
                 Confirm
               </button>
               <button
                 onClick={onCancelStatusRequest}
-                className="flex-1 py-2 rounded-xl text-[11px] font-bold uppercase tracking-wider bg-secondary text-muted-foreground hover:bg-secondary/80 transition-colors"
+                className="flex-1 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-secondary text-muted-foreground hover:bg-secondary/80 transition-colors"
               >
                 Cancel
               </button>
             </div>
           </div>
         ) : confirmingScheduleCancel ? (
-          <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-4 space-y-3 animate-in fade-in">
+          <div className="rounded-[1.25rem] border border-destructive/30 bg-destructive/10 p-4 space-y-3 animate-in fade-in">
             <p className="text-sm font-bold text-destructive">
               Cancel this event's schedule?
             </p>
@@ -630,13 +654,13 @@ function EventCard({
             <div className="flex gap-2">
               <button
                 onClick={() => onCancelSchedule(event._id)}
-                className="flex-1 py-2 rounded-xl text-[11px] font-black uppercase tracking-wider bg-destructive text-destructive-foreground hover:brightness-110 transition-all"
+                className="flex-1 py-2.5 rounded-full text-[11px] font-black uppercase tracking-wider bg-destructive text-destructive-foreground hover:brightness-110 transition-all"
               >
                 Yes, cancel schedule
               </button>
               <button
                 onClick={onCancelScheduleCancelRequest}
-                className="flex-1 py-2 rounded-xl text-[11px] font-bold uppercase tracking-wider bg-secondary text-muted-foreground hover:bg-secondary/80 transition-colors"
+                className="flex-1 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-secondary text-muted-foreground hover:bg-secondary/80 transition-colors"
               >
                 Back
               </button>
@@ -644,31 +668,13 @@ function EventCard({
           </div>
         ) : (
           <>
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <h3 className="text-lg font-bold tracking-tight truncate">
-                  {event.name}
-                </h3>
-                <p className="text-xs text-muted-foreground mt-0.5 font-mono">
-                  {event.exerciseName} · {event.rounds}×
-                  {event.roundDurationSeconds}s · max {event.maxParticipants}
-                </p>
-              </div>
-              <Link
-                href={`/admin/events/${event._id}`}
-                className="shrink-0 flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-primary hover:underline whitespace-nowrap"
-              >
-                Rooms
-                <ArrowUpRight className="w-3 h-3" />
-              </Link>
-            </div>
             {event.description && (
               <p className="text-sm text-muted-foreground line-clamp-2">
                 {event.description}
               </p>
             )}
             {event.scheduling && schedule && (
-              <div className="flex items-center justify-between gap-2 bg-secondary/50 rounded-xl px-3 py-2">
+              <div className="flex items-center justify-between gap-2 bg-secondary/50 rounded-[1.25rem] px-3 py-2">
                 <div className="flex items-center gap-1.5 min-w-0">
                   <CalendarClock className="w-3.5 h-3.5 text-primary shrink-0" />
                   <span className="text-[11px] font-bold text-foreground truncate">
@@ -696,6 +702,8 @@ function EventCard({
                 )}
               </div>
             )}
+
+            {/* Pill shaped Draft/Live/Closed buttons to strictly match the UI image */}
             <div className="flex items-center gap-2 mt-auto pt-1">
               {(["draft", "live", "closed"] as const).map((status) => (
                 <button
@@ -703,10 +711,10 @@ function EventCard({
                   onClick={() => onRequestStatusChange(status)}
                   disabled={event.status === status}
                   className={cn(
-                    "flex-1 py-2 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-colors",
+                    "flex-1 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-wider transition-all border border-transparent",
                     event.status === status
-                      ? "bg-foreground text-background cursor-default"
-                      : "bg-secondary text-muted-foreground hover:bg-secondary/80",
+                      ? "bg-foreground text-background shadow-md cursor-default"
+                      : "bg-secondary/50 text-muted-foreground hover:bg-secondary hover:text-foreground hover:border-card-border",
                   )}
                 >
                   {status}
