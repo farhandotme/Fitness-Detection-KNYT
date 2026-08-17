@@ -72,7 +72,7 @@ const RANK_STYLE: Record<number, string> = {
 export function AdminLiveRoomPage() {
   const [, params] = useRoute("/admin/rooms/:competitionId");
   const competitionId = params?.competitionId;
-  const { room, error, connected } = useAdminSpectate(competitionId);
+  const { room, error, connected, closedReason } = useAdminSpectate(competitionId);
   const offsetRef = useServerClockOffset(room?.serverNow);
 
   const countdownRemaining = useCountdownTo(
@@ -92,7 +92,8 @@ export function AdminLiveRoomPage() {
           : null;
 
   const isLive =
-    room?.status === "ROUND_RUNNING" || room?.status === "COUNTDOWN";
+    !closedReason &&
+    (room?.status === "ROUND_RUNNING" || room?.status === "COUNTDOWN");
 
   return (
     <AdminShell>
@@ -115,6 +116,16 @@ export function AdminLiveRoomPage() {
         </div>
       </div>
 
+      {closedReason && (
+        <div className="bg-destructive/10 border border-destructive/30 rounded-2xl p-4 flex gap-3 items-start mb-6">
+          <AlertTriangle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+          <div>
+            <h3 className="text-sm font-bold text-destructive">Room closed</h3>
+            <p className="text-xs text-destructive/80 mt-1">{closedReason}</p>
+          </div>
+        </div>
+      )}
+
       {error && (
         <div className="bg-destructive/10 border border-destructive/30 rounded-2xl p-4 flex gap-3 items-start mb-6">
           <AlertTriangle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
@@ -131,24 +142,30 @@ export function AdminLiveRoomPage() {
 
       {room && (
         <>
-          <div className="flex items-start justify-between flex-wrap gap-4 mb-8">
+          <div className={cn("flex items-start justify-between flex-wrap gap-4 mb-8", closedReason && "opacity-60")}>
             <div>
               <div className="flex items-center gap-2 mb-1.5">
                 <span
                   className={cn(
-                    "w-2 h-2 rounded-full bg-destructive",
+                    "w-2 h-2 rounded-full",
+                    closedReason ? "bg-muted-foreground/50" : "bg-destructive",
                     isLive && "live-pulse",
                   )}
                 />
-                <span className="text-[10px] font-mono uppercase tracking-[0.25em] text-destructive font-bold">
-                  Live spectate
+                <span
+                  className={cn(
+                    "text-[10px] font-mono uppercase tracking-[0.25em] font-bold",
+                    closedReason ? "text-muted-foreground" : "text-destructive",
+                  )}
+                >
+                  {closedReason ? "Spectate ended" : "Live spectate"}
                 </span>
               </div>
               <h1 className="font-display text-2xl md:text-3xl font-extrabold tracking-tight">
                 {room.eventName}
               </h1>
               <p className="text-sm text-muted-foreground mt-1">
-                {STATUS_LABEL[room.status] ?? room.status}
+                {closedReason ? "Room closed" : (STATUS_LABEL[room.status] ?? room.status)}
               </p>
             </div>
 
@@ -167,7 +184,7 @@ export function AdminLiveRoomPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3 mb-8">
+          <div className={cn("grid grid-cols-3 gap-3 mb-8", closedReason && "opacity-60")}>
             <div className="bg-card border border-card-border rounded-3xl p-5">
               <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
                 Round
@@ -181,14 +198,16 @@ export function AdminLiveRoomPage() {
             </div>
             <div className="bg-card border border-card-border rounded-3xl p-5">
               <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
-                {room.status === "BREAK"
-                  ? "Break ends in"
-                  : room.status === "COUNTDOWN"
-                    ? "Starts in"
-                    : "Time left"}
+                {closedReason
+                  ? "Time left"
+                  : room.status === "BREAK"
+                    ? "Break ends in"
+                    : room.status === "COUNTDOWN"
+                      ? "Starts in"
+                      : "Time left"}
               </p>
               <p className="font-mono text-3xl font-bold tabular-nums">
-                {formatClock(clock)}
+                {closedReason ? "--:--" : formatClock(clock)}
               </p>
             </div>
             <div className="bg-card border border-card-border rounded-3xl p-5">
@@ -204,11 +223,11 @@ export function AdminLiveRoomPage() {
             </div>
           </div>
 
-          <section>
+          <section className={cn(closedReason && "opacity-60")}>
             <div className="flex items-center gap-2 mb-4">
               <Trophy className="w-4 h-4 text-primary" />
               <h2 className="font-display text-lg font-extrabold tracking-tight">
-                Live leaderboard
+                {closedReason ? "Final leaderboard" : "Live leaderboard"}
               </h2>
             </div>
 
@@ -240,20 +259,15 @@ export function AdminLiveRoomPage() {
                     >
                       {entry.rank}
                     </span>
-                    <span className="flex-1 font-bold truncate">
-                      {entry.displayName}
-                    </span>
-                    <span
-                      className={cn(
-                        "w-1.5 h-1.5 rounded-full shrink-0",
-                        participant?.connected
-                          ? "bg-primary"
-                          : "bg-muted-foreground/40",
+                    <span className="flex-1 min-w-0 flex items-center gap-2">
+                      <span className="font-bold truncate">{entry.displayName}</span>
+                      {!closedReason && participant && !participant.connected && (
+                        <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-destructive bg-destructive/10 px-1.5 py-0.5 rounded-md shrink-0">
+                          <WifiOff className="w-3 h-3" />
+                          Offline
+                        </span>
                       )}
-                      title={
-                        participant?.connected ? "Connected" : "Disconnected"
-                      }
-                    />
+                    </span>
                     <span className="font-mono text-xl font-bold tabular-nums w-16 text-right">
                       {entry.score}
                     </span>
