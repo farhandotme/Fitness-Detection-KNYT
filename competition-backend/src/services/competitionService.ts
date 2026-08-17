@@ -98,16 +98,13 @@ export function cancelPendingRemoval(
 }
 
 /**
- * The room's host (whoever created it - see models/Competition.ts) is gone
- * for good, so the room itself is torn down rather than just freeing their
- * seat: mark it ABANDONED, stop any pending lifecycle timer
- * (countdown/round/break), and drop its live Redis state. Safe to call more
- * than once - a room that's already finished or already torn down is left
- * alone.
+ * Shared teardown for a room nobody is left to finish: mark it ABANDONED,
+ * stop any pending lifecycle timer (countdown/round/break), and drop its
+ * live Redis state. Safe to call more than once - a room that's already
+ * finished or already torn down is left alone. `reason` is just for the
+ * server log; callers below expose their own named wrappers.
  */
-export async function destroyRoomAsHostLeft(
-  competitionId: string,
-): Promise<boolean> {
+async function destroyRoom(competitionId: string, reason: string): Promise<boolean> {
   const room = await CompetitionModel.findById(competitionId);
   if (!room) return false;
   if (room.status === "COMPLETED" || room.status === "ABANDONED") return false;
@@ -124,8 +121,32 @@ export async function destroyRoomAsHostLeft(
     deleteAvatarBestEffort(participant.avatarPublicId);
   }
 
-  logger.info({ competitionId }, "room destroyed - host left");
+  logger.info({ competitionId, reason }, "room destroyed");
   return true;
+}
+
+/**
+ * The room's host (whoever created it - see models/Competition.ts) is gone
+ * for good, so the room itself is torn down rather than just freeing their
+ * seat.
+ */
+export async function destroyRoomAsHostLeft(
+  competitionId: string,
+): Promise<boolean> {
+  return destroyRoom(competitionId, "host left and never reconnected");
+}
+
+/**
+ * Every single seat - host included - is now disconnected and none of them
+ * came back within the grace period. Nobody is left to actually finish the
+ * match, so instead of letting it run unattended to completion (and
+ * lingering as "live" on the admin dashboard with no one in it), tear the
+ * room down the same way a host-leave does.
+ */
+export async function destroyRoomAsAbandoned(
+  competitionId: string,
+): Promise<boolean> {
+  return destroyRoom(competitionId, "every participant disconnected");
 }
 
 /**
@@ -137,8 +158,12 @@ export async function destroyRoomAsHostLeft(
  * scheduled event's minimum-participant check. So: mark them disconnected
  * immediately (existing "Reconnecting..." UI for everyone else), then
  * actually free the seat if they haven't come back within
- * DISCONNECT_GRACE_MS. Once the room is live, the old "just mark
- * disconnected, keep the seat for scoring" behavior is unchanged.
+ * DISCONNECT_GRACE_MS. Once the room is live, their seat is kept instead
+ * (so scoring/leaderboard stay consistent for a round already in
+ * progress) - but we still check, once their own grace period has passed,
+ * whether *every* remaining seat is now also disconnected. If so nobody is
+ * actually present to finish the match, so the room is torn down
+ * (onEveryoneLeft) rather than left running unattended.
  *
  * For the room's host (see models/Competition.ts): the same grace period
  * applies, but at *any* room status short of COMPLETED - if they don't
@@ -150,6 +175,7 @@ export async function handleParticipantDisconnect(
   participantId: string,
   onRemoved: () => void | Promise<void>,
   onHostLeft: () => void | Promise<void>,
+  onEveryoneLeft: () => void | Promise<void>,
 ): Promise<void> {
   await setParticipantConnected(competitionId, participantId, false);
 
@@ -164,8 +190,11 @@ export async function handleParticipantDisconnect(
   );
   const isHost = participant?.isHost === true;
 
-  // Non-host seats are only ever freed pre-start, same as before.
-  if (!isHost && room.status !== "WAITING" && room.status !== "FULL") return;
+  // Non-host seats are only ever freed pre-start, same as before - but a
+  // mid-match disconnect still needs its own grace-period timer scheduled
+  // below so we can check the "has everyone now left" case once it expires.
+  const midMatchNonHost =
+    !isHost && room.status !== "WAITING" && room.status !== "FULL";
 
   const key = pendingKey(competitionId, participantId);
   cancelPendingRemoval(competitionId, participantId);
@@ -196,6 +225,20 @@ export async function handleParticipantDisconnect(
       if (isHost) {
         const destroyed = await destroyRoomAsHostLeft(competitionId);
         if (destroyed) await onHostLeft();
+        return;
+      }
+
+      if (midMatchNonHost) {
+        // Seat stays (scoring stays consistent) - but if literally every
+        // other seat is also disconnected right now, nobody is left
+        // watching or playing this match, so tear it down instead of
+        // letting it run to completion unattended.
+        const live = await getParticipants(competitionId);
+        const anyoneStillConnected = live.some((p) => p.connected);
+        if (!anyoneStillConnected) {
+          const destroyed = await destroyRoomAsAbandoned(competitionId);
+          if (destroyed) await onEveryoneLeft();
+        }
         return;
       }
 
@@ -232,6 +275,13 @@ export interface LeaveResult {
   // use this to tell everyone else the room is gone instead of just
   // broadcasting an updated room:state.
   hostLeft: boolean;
+  // True when a mid-match non-host leave turned out to be the very last
+  // connected seat - nobody is left to finish the match, so the room was
+  // torn down the same way an unattended disconnect grace-period expiry
+  // would (see destroyRoomAsAbandoned). Distinct from hostLeft since the
+  // reason shown to anyone still watching (e.g. an admin spectator) is
+  // different.
+  everyoneLeft: boolean;
 }
 
 export async function leaveCompetition(
@@ -242,7 +292,7 @@ export async function leaveCompetition(
   const room = await CompetitionModel.findById(
     competitionId,
   ).lean<CompetitionDoc | null>();
-  if (!room) return { hostLeft: false };
+  if (!room) return { hostLeft: false, everyoneLeft: false };
   const participant = room.participants.find(
     (p) => p.participantId === participantId,
   );
@@ -255,7 +305,7 @@ export async function leaveCompetition(
   // rather than just freeing their seat, regardless of what phase it's in.
   if (participant.isHost) {
     const destroyed = await destroyRoomAsHostLeft(competitionId);
-    return { hostLeft: destroyed };
+    return { hostLeft: destroyed, everyoneLeft: false };
   }
 
   // Only allow leaving outright before the competition has started; once
@@ -270,10 +320,27 @@ export async function leaveCompetition(
     // Seat's actually gone (not just marked disconnected), so the photo
     // that went with it can go too.
     deleteAvatarBestEffort(participant.avatarPublicId);
-  } else {
-    await setParticipantConnected(competitionId, participantId, false);
+    return { hostLeft: false, everyoneLeft: false };
   }
-  return { hostLeft: false };
+
+  await setParticipantConnected(competitionId, participantId, false);
+
+  // This leave might have been the last connected seat in the room (e.g.
+  // every other participant already left/dropped and only this one was
+  // still here). An explicit leave doesn't go through the socket
+  // "disconnect" event on this app's shared connection (see
+  // lib/competitionSocket.ts), so it wouldn't otherwise trigger the
+  // grace-period "everyone's gone" check handleParticipantDisconnect does -
+  // check it here instead so the room doesn't linger as "live" with nobody
+  // actually in it.
+  const live = await getParticipants(competitionId);
+  const anyoneStillConnected = live.some((p) => p.connected);
+  if (!anyoneStillConnected) {
+    const destroyed = await destroyRoomAsAbandoned(competitionId);
+    return { hostLeft: false, everyoneLeft: destroyed };
+  }
+
+  return { hostLeft: false, everyoneLeft: false };
 }
 
 /**
