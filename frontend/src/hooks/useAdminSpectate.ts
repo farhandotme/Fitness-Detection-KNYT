@@ -15,6 +15,7 @@ export function useAdminSpectate(competitionId: string | undefined) {
   const [room, setRoom] = useState<RoomStateSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
+  const [closedReason, setClosedReason] = useState<string | null>(null);
   const roomRef = useRef<RoomStateSnapshot | null>(null);
 
   useEffect(() => {
@@ -40,6 +41,17 @@ export function useAdminSpectate(competitionId: string | undefined) {
     const onError = (payload: { code: string; message: string }) => {
       setError(payload.message);
     };
+    // The room was torn down server-side - either its host never
+    // reconnected, or (see competition-backend/src/services/
+    // competitionService.ts destroyRoomAsAbandoned) every single
+    // participant disconnected and none of them came back. Without this,
+    // this view would just keep showing whatever the last "room:state"
+    // broadcast was forever, looking like the match is still live.
+    const onClosed = (payload: { competitionId: string; reason: string }) => {
+      if (payload.competitionId === competitionId) {
+        setClosedReason(payload.reason);
+      }
+    };
     const onDisconnect = () => setConnected(false);
     const onReconnect = () => {
       socket.emit("admin:spectate", { competitionId, adminToken });
@@ -47,6 +59,7 @@ export function useAdminSpectate(competitionId: string | undefined) {
 
     socket.on("admin:spectating", onSpectating);
     socket.on("room:state", onRoomState);
+    socket.on("room:closed", onClosed);
     socket.on("error", onError);
     socket.on("disconnect", onDisconnect);
     socket.io.on("reconnect", onReconnect);
@@ -56,11 +69,12 @@ export function useAdminSpectate(competitionId: string | undefined) {
     return () => {
       socket.off("admin:spectating", onSpectating);
       socket.off("room:state", onRoomState);
+      socket.off("room:closed", onClosed);
       socket.off("error", onError);
       socket.off("disconnect", onDisconnect);
       socket.io.off("reconnect", onReconnect);
     };
   }, [competitionId]);
 
-  return { room, error, connected };
+  return { room, error, connected, closedReason };
 }
