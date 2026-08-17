@@ -52,7 +52,7 @@ export function BattleIntroOverlay({
         }}
       />
       {/* Diagonal light sweep for a "spotlight" arena feel */}
-      <div className="pointer-events-none absolute inset-y-0 left-0 w-1/3 bg-linear-to-r from-transparent via-white/5 to-transparent arena-sweep" />
+      <div className="pointer-events-none absolute inset-y-0 left-0 w-1/3 bg-gradient-to-r from-transparent via-white/5 to-transparent arena-sweep" />
 
       <motion.p
         initial={{ opacity: 0, y: -10 }}
@@ -73,12 +73,7 @@ export function BattleIntroOverlay({
               <motion.div
                 initial={{ opacity: 0, x: fromLeft ? -60 : 60, scale: 0.7 }}
                 animate={{ opacity: 1, x: 0, scale: 1 }}
-                transition={{
-                  delay: 0.12 * i,
-                  type: "spring",
-                  stiffness: 260,
-                  damping: 20,
-                }}
+                transition={{ delay: 0.12 * i, type: "spring", stiffness: 260, damping: 20 }}
                 className="flex flex-col items-center gap-2"
               >
                 <div
@@ -97,7 +92,7 @@ export function BattleIntroOverlay({
                 </div>
                 <span
                   className={
-                    "text-[11px] md:text-sm font-black uppercase tracking-wide max-w-22 md:max-w-28 truncate text-center " +
+                    "text-[11px] md:text-sm font-black uppercase tracking-wide max-w-[5.5rem] md:max-w-[7rem] truncate text-center " +
                     (isSelf ? "text-primary" : "text-white")
                   }
                 >
@@ -137,9 +132,7 @@ export function BattleIntroOverlay({
             <div className="h-16 w-16 md:h-20 md:w-20 rounded-full bg-white/5 border-2 border-white/15 flex items-center justify-center text-sm font-black text-slate-300">
               +{overflowCount}
             </div>
-            <span className="text-[11px] font-bold text-slate-400 tracking-wide">
-              more
-            </span>
+            <span className="text-[11px] font-bold text-slate-400 tracking-wide">more</span>
           </motion.div>
         )}
       </div>
@@ -148,12 +141,7 @@ export function BattleIntroOverlay({
         <motion.div
           initial={{ opacity: 0, scale: 0.6 }}
           animate={{ opacity: 1, scale: 1 }}
-          transition={{
-            delay: 0.28,
-            type: "spring",
-            stiffness: 240,
-            damping: 18,
-          }}
+          transition={{ delay: 0.28, type: "spring", stiffness: 240, damping: 18 }}
           className="relative z-10 flex items-center gap-2 mt-4 text-accent"
         >
           <Zap className="w-3.5 h-3.5" />
