@@ -1,8 +1,11 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
-import { useRoute, useLocation, useSearch } from "wouter";
+import { useRoute, useLocation, useSearch, Link } from "wouter";
 import { getExerciseById } from "@/config/exercises";
 import { useCamera } from "@/hooks/useCamera";
 import { useExerciseSocket } from "@/hooks/useExerciseSocket";
+import { usePracticeVoice, speakReadinessVerdict } from "@/hooks/usePracticeVoice";
+import { computeReadinessVerdict } from "@/utils/readinessVerdict";
+import { voiceCoach } from "@/lib/voiceCoach";
 import { CameraPreview } from "@/components/CameraPreview";
 import { RepPanel } from "@/components/RepPanel";
 import { HoldPanel } from "@/components/HoldPanel";
@@ -18,6 +21,10 @@ import {
   Eye,
   EyeOff,
   Gauge,
+  Volume2,
+  VolumeX,
+  Swords,
+  RotateCcw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
@@ -30,6 +37,11 @@ export function SessionPage() {
   const targetStr = searchParams.get("target");
   const setsStr = searchParams.get("sets");
   const restStr = searchParams.get("rest");
+  // Present only when practice was opened from an event's join page (see
+  // EventJoinPage's "Practice this move" button) - lets this screen offer
+  // "Enter the Arena" straight back into that event once practice ends,
+  // instead of just dropping the player at the home dashboard.
+  const fromEvent = searchParams.get("fromEvent");
 
   const id = params?.id;
   const exercise = id ? getExerciseById(id) : undefined;
@@ -51,6 +63,15 @@ export function SessionPage() {
   const [countdown, setCountdown] = useState<number | null>(3);
   const [sessionStarted, setSessionStarted] = useState(false);
   const [landmarksVisible, setLandmarksVisible] = useState(false);
+  const [voiceEnabled, setVoiceEnabled] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    return window.localStorage.getItem("voice_coach_enabled") !== "0";
+  });
+  // Captured the instant exercise_complete fires, since the live `data`
+  // stream is cleared a couple seconds later (see useExerciseSocket's
+  // dataExpiryRef) - the completion screen needs a stable snapshot to
+  // compute the readiness verdict from.
+  const [finalStats, setFinalStats] = useState<{ good: number; flawed: number } | null>(null);
 
   const {
     videoRef,
@@ -144,6 +165,12 @@ export function SessionPage() {
   useEffect(() => {
     if (!data) return;
     if (data.exercise_complete) {
+      // Snapshot the good/flawed counts right now - `data` gets cleared a
+      // couple seconds after the last message, well before this completion
+      // screen would otherwise get a chance to read it.
+      const good = "good_reps" in data ? (data as any).good_reps : (data as any).good_seconds;
+      const flawed = "flawed_reps" in data ? (data as any).flawed_reps : (data as any).flawed_seconds;
+      setFinalStats({ good: good ?? 0, flawed: flawed ?? 0 });
       setIsSessionComplete(true);
       stop();
       stopCamera();
@@ -158,6 +185,35 @@ export function SessionPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data?.session_complete, data?.exercise_complete, stopCamera]);
+
+  // Practice-only spoken coaching: setup tip + live form/position guidance.
+  // Never active in the arena - see hooks/useVoiceCoach.ts for that.
+  // Shares the same mute preference/localStorage key as the arena's voice
+  // coach (CompetitionPlayPage) since it's the same underlying engine.
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("voice_coach_enabled", voiceEnabled ? "1" : "0");
+    }
+    voiceCoach.setEnabled(voiceEnabled);
+  }, [voiceEnabled]);
+
+  usePracticeVoice(
+    defaultExercise,
+    sessionStarted,
+    sessionStarted && countdown === 0,
+    isPaused || isResting,
+    data,
+    voiceEnabled,
+  );
+
+  // Speaks the readiness verdict once, right as the completion screen appears.
+  const verdictSpokenRef = useRef(false);
+  useEffect(() => {
+    if (!isSessionComplete || !finalStats || verdictSpokenRef.current) return;
+    verdictSpokenRef.current = true;
+    const verdict = computeReadinessVerdict(finalStats.good, finalStats.flawed);
+    speakReadinessVerdict(verdict, voiceEnabled);
+  }, [isSessionComplete, finalStats, voiceEnabled]);
 
   // Rest countdown
   useEffect(() => {
@@ -188,14 +244,27 @@ export function SessionPage() {
     stop();
     stopCamera();
     stopSendingFrames();
-    setLocation(`/exercise/${defaultExercise.id}`);
+    voiceCoach.cancelAll();
+    setLocation(fromEvent ? `/events/${fromEvent}` : `/exercise/${defaultExercise.id}`);
   };
 
   const finishToHome = () => {
     stop();
     stopCamera();
     stopSendingFrames();
-    setLocation("/");
+    voiceCoach.cancelAll();
+    setLocation(fromEvent ? `/events/${fromEvent}` : "/");
+  };
+
+  const practiceAgain = () => {
+    voiceCoach.cancelAll();
+    setLocation(
+      `/exercise/${defaultExercise.id}/session?target=${target}&sets=${targetSets}&rest=${restSeconds}${fromEvent ? `&fromEvent=${fromEvent}` : ""}`,
+    );
+    // Full reload of session state - simplest correct way to restart every
+    // ref/effect below rather than trying to hand-reset a dozen pieces of
+    // state that assume a fresh mount.
+    window.location.reload();
   };
 
   const togglePause = () => setIsPaused((p) => !p);
@@ -213,6 +282,7 @@ export function SessionPage() {
 
   // ── Completion Screen ────────────────────────────────────────────────────────
   if (isSessionComplete) {
+    const verdict = finalStats ? computeReadinessVerdict(finalStats.good, finalStats.flawed) : null;
     return (
       <div className="min-h-dvh bg-[#11110f] text-foreground flex items-center justify-center p-6">
         <motion.div
@@ -226,21 +296,69 @@ export function SessionPage() {
           <h1 className="text-3xl font-black uppercase tracking-tight mb-2 text-foreground">
             Workout Complete
           </h1>
-          <p className="text-muted-foreground mb-2 text-sm">
+          <p className="text-muted-foreground mb-6 text-sm">
             {targetSets} sets of {exercise.name} done.
           </p>
-          {data && "rep_count" in data && (
-            <p className="text-primary font-bold text-lg font-mono mb-6">
-              {(data as any).good_reps} / {(data as any).rep_count} good reps
-            </p>
+
+          {verdict && (
+            <div
+              className={cn(
+                "rounded-2xl p-5 mb-6 text-left border",
+                verdict.level === "ready"
+                  ? "bg-primary/10 border-primary/30"
+                  : verdict.level === "almost"
+                    ? "bg-accent/10 border-accent/30"
+                    : "bg-white/5 border-white/10",
+              )}
+            >
+              <p
+                className={cn(
+                  "text-xs font-black uppercase tracking-widest mb-1.5",
+                  verdict.level === "ready"
+                    ? "text-primary"
+                    : verdict.level === "almost"
+                      ? "text-accent"
+                      : "text-muted-foreground",
+                )}
+              >
+                {verdict.headline}
+              </p>
+              <p className="text-sm text-muted-foreground">{verdict.detail}</p>
+            </div>
           )}
-          <button
-            onClick={finishToHome}
-            data-testid="button-back-dashboard"
-            className="w-full bg-primary text-primary-foreground py-3.5 rounded-xl font-black uppercase tracking-wider hover:brightness-110 transition-all"
-          >
-            Back to Dashboard
-          </button>
+
+          <div className="flex flex-col gap-3">
+            {fromEvent && (
+              <button
+                onClick={() => setLocation(`/events/${fromEvent}/rooms`)}
+                data-testid="button-enter-arena"
+                className="w-full bg-primary text-primary-foreground py-3.5 rounded-xl font-black uppercase tracking-wider hover:brightness-110 transition-all flex items-center justify-center gap-2"
+              >
+                <Swords className="w-4 h-4" />
+                Enter the Arena
+              </button>
+            )}
+            <button
+              onClick={practiceAgain}
+              data-testid="button-practice-again"
+              className={cn(
+                "w-full py-3.5 rounded-xl font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2",
+                fromEvent
+                  ? "bg-white/5 border border-white/10 text-foreground hover:bg-white/10"
+                  : "bg-primary text-primary-foreground hover:brightness-110",
+              )}
+            >
+              <RotateCcw className="w-4 h-4" />
+              Practice Again
+            </button>
+            <button
+              onClick={finishToHome}
+              data-testid="button-back-dashboard"
+              className="w-full py-3 rounded-xl font-bold uppercase tracking-wider text-sm text-muted-foreground hover:text-foreground transition-all"
+            >
+              {fromEvent ? "Back to Event" : "Back to Dashboard"}
+            </button>
+          </div>
         </motion.div>
       </div>
     );
@@ -304,6 +422,22 @@ export function SessionPage() {
         <h1 className="text-sm font-black uppercase tracking-widest text-foreground flex-1">
           {exercise.name}
         </h1>
+
+        <button
+          type="button"
+          onClick={() => setVoiceEnabled((v) => !v)}
+          aria-pressed={voiceEnabled}
+          data-testid="button-toggle-voice-coach"
+          className={cn(
+            "flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-widest transition-all",
+            voiceEnabled
+              ? "border-primary/35 bg-primary/10 text-primary"
+              : "border-white/15 bg-white/5 text-slate-400 hover:border-primary/30 hover:text-primary",
+          )}
+        >
+          {voiceEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+          Coach {voiceEnabled ? "on" : "off"}
+        </button>
 
         {/* Set counter */}
         <div className="flex items-center gap-2 text-xs">
