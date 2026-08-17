@@ -51,10 +51,21 @@ export function usePracticeVoice(
   // backend is already sending (position_message, posture_messages,
   // framing_message), just read aloud so the player doesn't have to keep
   // glancing at the screen to know what to fix.
+  //
+  // Freshness matters more than completeness here: if a line is still
+  // waiting in the queue (behind the opening instruction, or another
+  // correction) when the underlying problem it describes stops being true,
+  // we drop it via clearPending rather than let it play late and say
+  // something that's no longer accurate. voiceCoach.speak() itself also
+  // overwrites an already-queued line for the same topic in place, so at
+  // most one line per topic is ever waiting, and it's always the current
+  // one by the time it's spoken.
   useEffect(() => {
     if (!enabled || !sessionStarted || !countdownDone || isPaused || !data) return;
 
     if (data.framing_ok === false && data.framing_message) {
+      voiceCoach.clearPending("practice-position");
+      voiceCoach.clearPending("practice-good-form");
       voiceCoach.speak(data.framing_message, {
         profile: "coach",
         priority: "normal",
@@ -63,6 +74,9 @@ export function usePracticeVoice(
       });
       return; // fix framing before anything else matters
     }
+    // Framing's fine now - don't let a stale "step back into frame" line
+    // that's still queued from a moment ago fire late.
+    voiceCoach.clearPending("practice-framing");
 
     if (exercise.mode === "reps") {
       const d = data as RepData;
@@ -77,20 +91,52 @@ export function usePracticeVoice(
         });
       }
 
-      if (d.position_message && !d.position_ok) {
-        voiceCoach.speak(d.position_message, {
-          profile: "coach",
-          priority: "normal",
-          dedupeKey: "practice-position",
-          cooldownMs: POSITION_COOLDOWN_MS,
-        });
-      } else if (d.rep_completed && d.rep_form_quality === "good") {
-        voiceCoach.speak("That's good form, keep it there.", {
-          profile: "coach",
-          priority: "low",
-          dedupeKey: "practice-good-form",
-          cooldownMs: GOOD_FORM_COOLDOWN_MS,
-        });
+      const correction = d.position_message && !d.position_ok ? d.position_message : null;
+      // `feedback` is a separate, general-purpose coaching line the pose
+      // backend sends alongside (not instead of) position_message - e.g.
+      // two-sided exercises reporting "your left arm is falling behind"
+      // have nowhere else to put that. It's exactly what's shown in the
+      // on-screen "Coach Feedback" panel, so it needs the same voice
+      // treatment as everything else here.
+      const feedback = d.feedback && d.feedback.trim().length > 0 ? d.feedback : null;
+
+      if (correction || feedback) {
+        voiceCoach.clearPending("practice-good-form");
+        if (correction) {
+          voiceCoach.speak(correction, {
+            profile: "coach",
+            priority: "normal",
+            dedupeKey: "practice-position",
+            cooldownMs: POSITION_COOLDOWN_MS,
+          });
+        } else {
+          voiceCoach.clearPending("practice-position");
+        }
+        // Skip if it's just repeating the correction verbatim.
+        if (feedback && feedback !== correction) {
+          voiceCoach.speak(feedback, {
+            profile: "coach",
+            priority: "normal",
+            dedupeKey: "practice-feedback",
+            cooldownMs: POSITION_COOLDOWN_MS,
+          });
+        } else {
+          voiceCoach.clearPending("practice-feedback");
+        }
+      } else {
+        // Nothing to correct right now - drop any stale correction/feedback
+        // line still waiting so it can't play late and say something no
+        // longer true.
+        voiceCoach.clearPending("practice-position");
+        voiceCoach.clearPending("practice-feedback");
+        if (d.rep_completed && d.rep_form_quality === "good") {
+          voiceCoach.speak("That's good form, keep it there.", {
+            profile: "coach",
+            priority: "low",
+            dedupeKey: "practice-good-form",
+            cooldownMs: GOOD_FORM_COOLDOWN_MS,
+          });
+        }
       }
     } else {
       const d = data as HoldData;
@@ -105,20 +151,42 @@ export function usePracticeVoice(
         });
       }
 
-      if (d.posture_messages?.[0] && !d.posture_ok) {
-        voiceCoach.speak(d.posture_messages[0], {
-          profile: "coach",
-          priority: "normal",
-          dedupeKey: "practice-position",
-          cooldownMs: POSITION_COOLDOWN_MS,
-        });
-      } else if (d.is_holding && d.hold_quality === "good") {
-        voiceCoach.speak("Good position, hold it right there.", {
-          profile: "coach",
-          priority: "low",
-          dedupeKey: "practice-good-form",
-          cooldownMs: GOOD_FORM_COOLDOWN_MS,
-        });
+      const correction = d.posture_messages?.[0] && !d.posture_ok ? d.posture_messages[0] : null;
+      const feedback = d.feedback && d.feedback.trim().length > 0 ? d.feedback : null;
+
+      if (correction || feedback) {
+        voiceCoach.clearPending("practice-good-form");
+        if (correction) {
+          voiceCoach.speak(correction, {
+            profile: "coach",
+            priority: "normal",
+            dedupeKey: "practice-position",
+            cooldownMs: POSITION_COOLDOWN_MS,
+          });
+        } else {
+          voiceCoach.clearPending("practice-position");
+        }
+        if (feedback && feedback !== correction) {
+          voiceCoach.speak(feedback, {
+            profile: "coach",
+            priority: "normal",
+            dedupeKey: "practice-feedback",
+            cooldownMs: POSITION_COOLDOWN_MS,
+          });
+        } else {
+          voiceCoach.clearPending("practice-feedback");
+        }
+      } else {
+        voiceCoach.clearPending("practice-position");
+        voiceCoach.clearPending("practice-feedback");
+        if (d.is_holding && d.hold_quality === "good") {
+          voiceCoach.speak("Good position, hold it right there.", {
+            profile: "coach",
+            priority: "low",
+            dedupeKey: "practice-good-form",
+            cooldownMs: GOOD_FORM_COOLDOWN_MS,
+          });
+        }
       }
     }
   }, [enabled, sessionStarted, countdownDone, isPaused, data, exercise.mode]);
