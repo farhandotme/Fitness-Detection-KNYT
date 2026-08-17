@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useRoute, useLocation } from "wouter";
+import { useRoute, useLocation, useSearch } from "wouter";
 import { getExerciseById } from "@/config/exercises";
 import {
   ArrowLeft,
@@ -17,6 +17,12 @@ import { Link } from "wouter";
 export function ExercisePage() {
   const [match, params] = useRoute("/exercise/:id");
   const [, setLocation] = useLocation();
+  const searchParams = new URLSearchParams(useSearch());
+  // Present only when this exercise was opened from an event's join page
+  // (see EventJoinPage's "Practice this move" button) - carried through to
+  // the session URL so SessionPage can offer "Enter the Arena" back into
+  // that same event once practice wraps up.
+  const fromEvent = searchParams.get("fromEvent");
 
   const id = params?.id;
   const exercise = id ? getExerciseById(id) : undefined;
@@ -37,7 +43,7 @@ export function ExercisePage() {
     // Navigate to session passing params in URL state or query
     // Simple way with Wouter: use URL search params
     setLocation(
-      `/exercise/${exercise.id}/session?target=${target}&sets=${sets}&rest=${rest}`,
+      `/exercise/${exercise.id}/session?target=${target}&sets=${sets}&rest=${rest}${fromEvent ? `&fromEvent=${fromEvent}` : ""}`,
     );
   };
 
@@ -120,14 +126,14 @@ export function ExercisePage() {
       <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-xl border-b border-border p-4">
         <div className="max-w-3xl mx-auto flex items-center gap-4">
           <Link
-            href="/"
+            href={fromEvent ? `/events/${fromEvent}` : "/"}
             data-testid="link-back-home"
             className="p-2.5 bg-secondary/70 hover:bg-secondary rounded-full transition-colors"
           >
             <ArrowLeft className="w-5 h-5 text-foreground" />
           </Link>
           <h1 className="text-sm font-bold uppercase tracking-[.2em] text-muted-foreground">
-            Session setup
+            {fromEvent ? "Practice before you compete" : "Session setup"}
           </h1>
         </div>
       </header>
@@ -247,8 +253,14 @@ export function ExercisePage() {
             className="w-full bg-primary text-primary-foreground py-5 rounded-2xl font-black text-xl uppercase tracking-wider flex items-center justify-center gap-3 hover:brightness-110 active:scale-[0.98] transition-all shadow-xl shadow-primary/20"
           >
             <Play className="fill-current w-6 h-6" />
-            Start Session
+            {fromEvent ? "Start Practice" : "Start Session"}
           </button>
+          {fromEvent && (
+            <p className="text-center text-xs text-muted-foreground mt-4">
+              Totally optional - you can skip straight to the arena from the
+              event page whenever you're ready.
+            </p>
+          )}
         </div>
       </main>
     </div>
