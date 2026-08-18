@@ -142,7 +142,11 @@ competitionSchema.index({
 // Powers the "near you" radius search in the Events page.
 competitionSchema.index({ "location.geo": "2dsphere" });
 // Powers the "choose a region" (country/city) discovery flow.
-competitionSchema.index({ status: 1, "location.country": 1, "location.city": 1 });
+competitionSchema.index({
+  status: 1,
+  "location.country": 1,
+  "location.city": 1,
+});
 
 export type CompetitionDoc = InferSchemaType<typeof competitionSchema> & {
   _id: Types.ObjectId;

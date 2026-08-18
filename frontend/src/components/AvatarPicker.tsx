@@ -1,7 +1,12 @@
 import React, { useRef, useState } from "react";
 import { Camera, X, AlertTriangle, Loader2 } from "lucide-react";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
-import { uploadAvatarPhoto, discardAvatar, AvatarUploadsDisabledError, type StoredAvatar } from "@/lib/avatarStore";
+import {
+  uploadAvatarPhoto,
+  discardAvatar,
+  AvatarUploadsDisabledError,
+  type StoredAvatar,
+} from "@/lib/avatarStore";
 
 interface AvatarPickerProps {
   name: string;
@@ -34,7 +39,9 @@ export function AvatarPicker({ name, value, onChange }: AvatarPickerProps) {
       if (err instanceof AvatarUploadsDisabledError) {
         setUploadsDisabled(true);
       } else {
-        setError(err instanceof Error ? err.message : "Couldn't use that image");
+        setError(
+          err instanceof Error ? err.message : "Couldn't use that image",
+        );
       }
     } finally {
       setUploading(false);
@@ -56,7 +63,11 @@ export function AvatarPicker({ name, value, onChange }: AvatarPickerProps) {
           aria-label="Upload a profile photo"
           className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-md hover:brightness-110 transition-all disabled:opacity-60"
         >
-          {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Camera className="w-3.5 h-3.5" />}
+          {uploading ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <Camera className="w-3.5 h-3.5" />
+          )}
         </button>
         <input
           ref={inputRef}
