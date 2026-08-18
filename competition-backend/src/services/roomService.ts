@@ -20,6 +20,8 @@ import { logger } from "../config/logger.js";
 import type { RoomListEntry, RoomVisibility } from "../types/index.js";
 import { nanoid } from "nanoid";
 import { competitionEngine } from "./competitionEngine.js";
+import { haversineKm, escapeRegex } from "../utils/geo.js";
+import type { DiscoverRoomsQuery } from "../schemas/discoverSchemas.js";
 import {
   cancelPendingRemoval,
   getRoomSnapshot,
@@ -303,6 +305,29 @@ export interface CreateRoomInput {
   deviceId: string;
   avatarUrl?: string;
   avatarPublicId?: string;
+  // Optional - set when the host opts in to tagging this room's location,
+  // so it can be found from the "near you" / "choose a region" discovery
+  // in the Events page (see discoverRooms below). Either lat+lng, country,
+  // or both.
+  location?: {
+    lat?: number;
+    lng?: number;
+    country?: string;
+    city?: string;
+  };
+}
+
+function buildLocationDoc(location: CreateRoomInput["location"]) {
+  if (!location) return undefined;
+  const hasCoords = location.lat !== undefined && location.lng !== undefined;
+  if (!hasCoords && !location.country) return undefined;
+  return {
+    country: location.country,
+    city: location.city,
+    geo: hasCoords
+      ? { type: "Point" as const, coordinates: [location.lng!, location.lat!] }
+      : undefined,
+  };
 }
 
 /** A participant creates a brand-new room and is immediately seated in it. */
@@ -345,6 +370,7 @@ export async function createRoom(input: CreateRoomInput): Promise<JoinResult> {
       currentRound: 0,
       participants: [],
       rounds: [],
+      location: buildLocationDoc(input.location),
     });
     const competitionId = String(doc._id);
 
@@ -429,4 +455,126 @@ export async function joinRoom(input: JoinRoomInput): Promise<JoinResult> {
   } finally {
     await redis.del(lockKey);
   }
+}
+
+// A room in the "near you" discovery list - everything RoomListEntry has,
+// plus the event/exercise it belongs to (so the Events page can group it
+// back under its parent event card without a second round-trip) and where
+// it's located relative to the search.
+export interface DiscoveredRoomEntry extends RoomListEntry {
+  eventId: string;
+  eventName: string;
+  exerciseId: string;
+  exerciseMode: string;
+  country?: string;
+  city?: string;
+  // Only present for a "Nearby" (lat/lng) search.
+  distanceKm?: number;
+}
+
+const DISCOVER_RESULT_LIMIT = 60;
+
+/**
+ * Every currently-open room anywhere that was tagged with a location on
+ * creation, filtered by either a radius around a point ("near you") or a
+ * country/city ("choose a region") - see schemas/discoverSchemas.ts for the
+ * two accepted shapes - and optionally scoped to a single event via
+ * `eventId`. Powers both the "Live near you" section embedded in the
+ * Events page (frontend src/components/NearbyRoomsPanel.tsx) and the
+ * "Near you" filter inside a single event's rooms lobby
+ * (frontend src/pages/events/RoomsLobbyPage.tsx) - results are always
+ * grouped back onto their parent event, never shown as a separate flow.
+ */
+export async function discoverRooms(
+  query: DiscoverRoomsQuery,
+): Promise<DiscoveredRoomEntry[]> {
+  const baseFilter: Record<string, unknown> = {
+    status: { $in: ["WAITING", "FULL"] },
+  };
+  // Scopes results to a single event (see discoverSchemas.ts) - used by the
+  // per-event rooms lobby's "Near you" filter so a location search there
+  // can never surface (or leak the existence of) rooms from other events.
+  if (query.eventId) {
+    baseFilter.eventId = query.eventId;
+  }
+  let rooms: CompetitionDoc[];
+
+  if (query.lat !== undefined && query.lng !== undefined) {
+    const radiusMeters = (query.radiusKm ?? 25) * 1000;
+    rooms = await CompetitionModel.find({
+      ...baseFilter,
+      "location.geo": {
+        $near: {
+          $geometry: { type: "Point", coordinates: [query.lng, query.lat] },
+          $maxDistance: radiusMeters,
+        },
+      },
+    })
+      .limit(DISCOVER_RESULT_LIMIT)
+      .lean<CompetitionDoc[]>();
+  } else {
+    const filter: Record<string, unknown> = {
+      ...baseFilter,
+      "location.country": new RegExp(`^${escapeRegex(query.country!)}$`, "i"),
+    };
+    if (query.city) {
+      filter["location.city"] = new RegExp(`^${escapeRegex(query.city)}$`, "i");
+    }
+    rooms = await CompetitionModel.find(filter)
+      .sort({ createdAt: -1 })
+      .limit(DISCOVER_RESULT_LIMIT)
+      .lean<CompetitionDoc[]>();
+  }
+
+  return Promise.all(
+    rooms.map(async (room) => {
+      const participants = await getParticipants(String(room._id));
+      const coords = room.location?.geo?.coordinates;
+      // GeoJSON coordinates are always exactly [lng, lat] once present -
+      // safe to destructure directly. Guarded by the `coords` truthiness
+      // check above; noUncheckedIndexedAccess would otherwise widen a
+      // plain coords[1]/coords[0] index to `number | undefined`.
+      const distanceKm =
+        query.lat !== undefined && query.lng !== undefined && coords
+          ? (() => {
+              const [lng, lat] = coords;
+              return lat !== undefined && lng !== undefined
+                ? haversineKm(query.lat!, query.lng!, lat, lng)
+                : undefined;
+            })()
+          : undefined;
+
+      const entry: DiscoveredRoomEntry = {
+        competitionId: String(room._id),
+        eventId: String(room.eventId),
+        eventName: room.eventName,
+        exerciseId: room.exerciseId,
+        exerciseMode: room.exerciseMode,
+        roomName: room.roomName,
+        visibility: room.visibility as RoomVisibility,
+        status: room.status as DiscoveredRoomEntry["status"],
+        participantCount: participants.length,
+        maxParticipants: room.maxParticipants,
+        // Mongoose's lean() types an unset optional string field as
+        // `string | null`, but DiscoveredRoomEntry (and the frontend) only
+        // expects `string | undefined` - normalize null away here so
+        // callers never have to special-case it.
+        country: room.location?.country ?? undefined,
+        city: room.location?.city ?? undefined,
+        distanceKm,
+        createdAt: (room as unknown as { createdAt: Date }).createdAt.toISOString(),
+      };
+      if (room.visibility === "public") {
+        entry.participantNames = participants.map((p) => p.displayName);
+        entry.participantAvatars = participants.map((p) => p.avatarUrl);
+      }
+      return entry;
+    }),
+  ).then((entries) =>
+    // Nearest-first for radius search; country/city search is already
+    // newest-first from the query above.
+    query.lat !== undefined
+      ? entries.sort((a, b) => (a.distanceKm ?? 0) - (b.distanceKm ?? 0))
+      : entries,
+  );
 }
