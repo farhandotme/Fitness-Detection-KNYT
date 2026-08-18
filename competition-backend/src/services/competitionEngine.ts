@@ -55,10 +55,7 @@ class CompetitionEngine {
   }
 
   private setTimings(competitionId: string, patch: Partial<RoomTimings>) {
-    this.timings.set(competitionId, {
-      ...this.getTimings(competitionId),
-      ...patch,
-    });
+    this.timings.set(competitionId, { ...this.getTimings(competitionId), ...patch });
   }
 
   private clearTimer(competitionId: string) {
@@ -108,9 +105,7 @@ class CompetitionEngine {
 
       const event = await EventModel.findById(room.eventId).lean();
       const isPendingScheduledEvent = Boolean(
-        event?.scheduling &&
-        event.scheduling.phase !== "LIVE" &&
-        event.scheduling.phase !== "COMPLETED",
+        event?.scheduling && event.scheduling.phase !== "LIVE" && event.scheduling.phase !== "COMPLETED",
       );
       if (!isPendingScheduledEvent) {
         this.startCountdown(competitionId);
@@ -139,18 +134,10 @@ class CompetitionEngine {
 
   private startCountdown(competitionId: string) {
     const countdownEndAt = Date.now() + COUNTDOWN_MS;
-    this.setTimings(competitionId, {
-      countdownEndAt,
-      roundStartAt: null,
-      roundEndAt: null,
-      breakEndAt: null,
-    });
+    this.setTimings(competitionId, { countdownEndAt, roundStartAt: null, roundEndAt: null, breakEndAt: null });
 
     void (async () => {
-      await CompetitionModel.updateOne(
-        { _id: competitionId },
-        { status: "COUNTDOWN" },
-      );
+      await CompetitionModel.updateOne({ _id: competitionId }, { status: "COUNTDOWN" });
       await this.emitRoomState(competitionId);
     })();
 
@@ -159,10 +146,7 @@ class CompetitionEngine {
     });
   }
 
-  private async startRound(
-    competitionId: string,
-    roundNumber: number,
-  ): Promise<void> {
+  private async startRound(competitionId: string, roundNumber: number): Promise<void> {
     const room = await CompetitionModel.findById(competitionId);
     if (!room) return;
 
@@ -171,19 +155,10 @@ class CompetitionEngine {
 
     room.status = "ROUND_RUNNING";
     room.currentRound = roundNumber;
-    room.rounds.push({
-      roundNumber,
-      startedAt: new Date(roundStartAt),
-      scores: [],
-    });
+    room.rounds.push({ roundNumber, startedAt: new Date(roundStartAt), scores: [] });
     await room.save();
 
-    this.setTimings(competitionId, {
-      countdownEndAt: null,
-      roundStartAt,
-      roundEndAt,
-      breakEndAt: null,
-    });
+    this.setTimings(competitionId, { countdownEndAt: null, roundStartAt, roundEndAt, breakEndAt: null });
     await this.emitRoomState(competitionId);
     logger.info({ competitionId, roundNumber }, "round started");
 
@@ -192,10 +167,7 @@ class CompetitionEngine {
     });
   }
 
-  private async finishRound(
-    competitionId: string,
-    roundNumber: number,
-  ): Promise<void> {
+  private async finishRound(competitionId: string, roundNumber: number): Promise<void> {
     const room = await CompetitionModel.findById(competitionId);
     if (!room) return;
 
@@ -222,15 +194,8 @@ class CompetitionEngine {
     }
 
     const breakEndAt = Date.now() + room.breakDurationSeconds * 1000;
-    this.setTimings(competitionId, {
-      roundStartAt: null,
-      roundEndAt: null,
-      breakEndAt,
-    });
-    await CompetitionModel.updateOne(
-      { _id: competitionId },
-      { status: "BREAK" },
-    );
+    this.setTimings(competitionId, { roundStartAt: null, roundEndAt: null, breakEndAt });
+    await CompetitionModel.updateOne({ _id: competitionId }, { status: "BREAK" });
     await this.emitRoomState(competitionId);
 
     this.schedule(competitionId, room.breakDurationSeconds * 1000, () => {
@@ -243,10 +208,7 @@ class CompetitionEngine {
     if (!room) return;
 
     const participants = await getParticipants(competitionId);
-    const cumulative = await getCumulativeScores(
-      competitionId,
-      room.totalRounds,
-    );
+    const cumulative = await getCumulativeScores(competitionId, room.totalRounds);
     const leaderboard = buildLeaderboard(
       room.participants.map((p) => ({
         participantId: p.participantId,
@@ -263,11 +225,7 @@ class CompetitionEngine {
         totalScore: entry.score,
         rank: entry.rank,
         avatarUrl: entry.avatarUrl,
-        perRound: await this.perRoundScores(
-          competitionId,
-          entry.participantId,
-          room.totalRounds,
-        ),
+        perRound: await this.perRoundScores(competitionId, entry.participantId, room.totalRounds),
       })),
     );
 
@@ -284,22 +242,12 @@ class CompetitionEngine {
     room.completedAt = new Date();
     await room.save();
 
-    this.setTimings(competitionId, {
-      countdownEndAt: null,
-      roundStartAt: null,
-      roundEndAt: null,
-      breakEndAt: null,
-    });
+    this.setTimings(competitionId, { countdownEndAt: null, roundStartAt: null, roundEndAt: null, breakEndAt: null });
     this.clearTimer(competitionId);
 
     await this.emitRoomState(competitionId);
-    this.io
-      ?.to(competitionId)
-      .emit("competition:completed", { competitionId, finalResults });
-    logger.info(
-      { competitionId, winner: finalResults[0]?.displayName },
-      "competition completed",
-    );
+    this.io?.to(competitionId).emit("competition:completed", { competitionId, finalResults });
+    logger.info({ competitionId, winner: finalResults[0]?.displayName }, "competition completed");
 
     // Free the redis participant/score keys, we no longer need live state.
     void clearRoomState(competitionId);
@@ -326,8 +274,7 @@ class CompetitionEngine {
   private async emitRoomState(competitionId: string): Promise<void> {
     if (!this.io) return;
     const { getRoomSnapshot } = await import("./competitionService.js");
-    const snapshot: RoomStateSnapshot | null =
-      await getRoomSnapshot(competitionId);
+    const snapshot: RoomStateSnapshot | null = await getRoomSnapshot(competitionId);
     if (!snapshot) return;
     this.io.to(competitionId).emit("room:state", snapshot);
   }

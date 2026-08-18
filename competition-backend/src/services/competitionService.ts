@@ -104,10 +104,7 @@ export function cancelPendingRemoval(
  * finished or already torn down is left alone. `reason` is just for the
  * server log; callers below expose their own named wrappers.
  */
-async function destroyRoom(
-  competitionId: string,
-  reason: string,
-): Promise<boolean> {
+async function destroyRoom(competitionId: string, reason: string): Promise<boolean> {
   const room = await CompetitionModel.findById(competitionId);
   if (!room) return false;
   if (room.status === "COMPLETED" || room.status === "ABANDONED") return false;
