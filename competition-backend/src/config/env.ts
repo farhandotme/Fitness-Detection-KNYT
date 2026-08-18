@@ -72,6 +72,14 @@ const envSchema = z.object({
   CLOUDINARY_AVATAR_FOLDER: z.string().default("fitness-competition/avatars"),
   AVATAR_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(20),
   AVATAR_RATE_LIMIT_WINDOW_MINUTES: z.coerce.number().int().min(1).default(10),
+  // Discover/"near you" search (GET /api/discover/rooms) is public and takes
+  // a raw lat/lng, so it's the one read endpoint worth capping - otherwise
+  // it's an easy, cheap way to hammer the geo index or scrape room data
+  // across every event. A real user only ever fires this a handful of
+  // times a minute (radius changes, retries), so this stays generous for
+  // them and only bites scripted abuse.
+  DISCOVER_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(30),
+  DISCOVER_RATE_LIMIT_WINDOW_MINUTES: z.coerce.number().int().min(1).default(1),
   // Event cover/advertising images (see services/eventImageService.ts) live in
   // their own Cloudinary folder, separate from avatars, so deletion requests
   // for one can never be aimed at the other.
