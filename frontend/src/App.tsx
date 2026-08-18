@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
-import { Route, Switch, Router as WouterRouter } from "wouter";
+import { Redirect, Route, Switch, Router as WouterRouter } from "wouter";
 
 import { HomePage } from "@/pages/HomePage";
 import { ExercisePage } from "@/pages/ExercisePage";
@@ -34,6 +34,12 @@ function Router() {
       <Route path="/competitions/:competitionId/waiting" component={WaitingRoomPage} />
       <Route path="/competitions/:competitionId/play" component={CompetitionPlayPage} />
       <Route path="/competitions/:competitionId/results" component={CompetitionResultsPage} />
+
+      {/* "Nearby" now lives inline inside Events (see NearbyRoomsPanel) rather
+          than as its own page - redirect old links/bookmarks instead of 404ing. */}
+      <Route path="/nearby">
+        <Redirect to="/events" />
+      </Route>
 
       {/* Admin - create/manage events. No relation to the anonymous participant flow above. */}
       <Route path="/admin/login" component={AdminLoginPage} />
