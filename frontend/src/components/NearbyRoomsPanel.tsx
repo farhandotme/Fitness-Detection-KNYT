@@ -10,7 +10,10 @@ import {
   SearchableSelect,
   type SearchableSelectOption,
 } from "@/components/ui/searchable-select";
-import { LocationPicker, type PickedLocation } from "@/components/LocationPicker";
+import {
+  LocationPicker,
+  type PickedLocation,
+} from "@/components/LocationPicker";
 import {
   MapPin,
   Navigation,
