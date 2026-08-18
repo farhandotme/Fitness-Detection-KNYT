@@ -69,6 +69,28 @@ export interface RoomPreview {
   maxParticipants: number;
 }
 
+// A room found via the "Live near you" search embedded in the Events page
+// (see components/NearbyRoomsPanel.tsx) - everything RoomListEntry has,
+// plus which event/exercise it's under and where it sits relative to the
+// search (distance for a "near you" search, or the tagged country/city for
+// a "choose a region" search).
+export interface DiscoveredRoomEntry extends RoomListEntry {
+  eventId: string;
+  eventName: string;
+  exerciseId: string;
+  exerciseMode: ExerciseMode;
+  country?: string;
+  city?: string;
+  distanceKm?: number;
+}
+
+export interface RoomLocationInput {
+  lat?: number;
+  lng?: number;
+  country?: string;
+  city?: string;
+}
+
 export interface LiveEventSummary {
   id: string;
   name: string;
