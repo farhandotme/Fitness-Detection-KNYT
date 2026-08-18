@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useRoute, useLocation, Link } from "wouter";
 import { Navbar } from "@/components/Navbar";
 import {
@@ -65,7 +71,9 @@ export function RoomsLobbyPage() {
   // player off to a separate location page.
   const [nearbyEnabled, setNearbyEnabled] = useState(false);
   const [nearbyRadiusKm, setNearbyRadiusKm] = useState(25);
-  const [nearbyRooms, setNearbyRooms] = useState<DiscoveredRoomEntry[] | null>(null);
+  const [nearbyRooms, setNearbyRooms] = useState<DiscoveredRoomEntry[] | null>(
+    null,
+  );
   const [nearbySearching, setNearbySearching] = useState(false);
   const [nearbyError, setNearbyError] = useState<string | null>(null);
   const geoNearby = useGeolocation();
@@ -134,10 +142,13 @@ export function RoomsLobbyPage() {
       } catch (err: any) {
         if (err?.name === "AbortError") return;
         if (!mountedRef.current) return;
-        setNearbyError(err.message || "Could not search nearby rooms right now");
+        setNearbyError(
+          err.message || "Could not search nearby rooms right now",
+        );
         setNearbyRooms(null);
       } finally {
-        if (mountedRef.current && !controller.signal.aborted) setNearbySearching(false);
+        if (mountedRef.current && !controller.signal.aborted)
+          setNearbySearching(false);
       }
     },
     [eventId, geoNearby.coords],
@@ -150,7 +161,12 @@ export function RoomsLobbyPage() {
       void runNearbySearch(nearbyRadiusKm);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nearbyEnabled, geoNearby.status, geoNearby.coords?.lat, geoNearby.coords?.lng]);
+  }, [
+    nearbyEnabled,
+    geoNearby.status,
+    geoNearby.coords?.lat,
+    geoNearby.coords?.lng,
+  ]);
 
   const handleToggleNearby = () => {
     if (nearbyEnabled) {
@@ -171,11 +187,15 @@ export function RoomsLobbyPage() {
   };
 
   const isNearbyActive =
-    nearbyEnabled && geoNearby.status === "granted" && geoNearby.coords !== null;
+    nearbyEnabled &&
+    geoNearby.status === "granted" &&
+    geoNearby.coords !== null;
   // Source list for the grid below - nearby-tagged rooms for this event
   // (sorted nearest-first by the backend) once active, otherwise the
   // regular full room list. Search/visibility filters apply to either.
-  const roomSource: RoomListEntry[] | null = isNearbyActive ? nearbyRooms : rooms;
+  const roomSource: RoomListEntry[] | null = isNearbyActive
+    ? nearbyRooms
+    : rooms;
 
   const filteredRooms = useMemo(() => {
     if (!roomSource) return null;
@@ -270,7 +290,7 @@ export function RoomsLobbyPage() {
                 key={type}
                 onClick={() => setFilterVisibility(type)}
                 className={cn(
-                  "px-5 py-2.5 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all capitalize cursor-pointer",
+                  "px-5 py-2.5 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all cursor-pointer",
                   filterVisibility === type
                     ? "bg-primary/10 text-primary border border-primary/20 shadow-sm"
                     : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground border border-transparent",
@@ -401,7 +421,7 @@ export function RoomsLobbyPage() {
           )}
 
         {roomSource !== null && filteredRooms && filteredRooms.length === 0 && (
-          <div className="rounded-[2rem] border border-dashed border-border/60 bg-card/30 p-16 text-center backdrop-blur-sm flex flex-col items-center justify-center">
+          <div className="rounded-4xl border border-dashed border-border/60 bg-card/30 p-16 text-center backdrop-blur-sm flex flex-col items-center justify-center">
             <div className="w-16 h-16 bg-secondary/50 rounded-2xl flex items-center justify-center mb-4 border border-border/50 shadow-inner">
               {isNearbyActive ? (
                 <MapPin className="w-8 h-8 text-muted-foreground opacity-80" />
@@ -520,10 +540,10 @@ function RoomCard({
     <button
       onClick={onSelect}
       data-testid={`room-row-${room.competitionId}`}
-      className="w-full text-left rounded-[2rem] border border-border/60 bg-card/60 backdrop-blur-md p-6 flex flex-col justify-between gap-5 hover:border-primary/50 hover:bg-card/90 hover:shadow-[0_8px_30px_rgb(0,0,0,0.12)] hover:-translate-y-1 transition-all duration-300 group cursor-pointer relative overflow-hidden"
+      className="w-full text-left rounded-4xl border border-border/60 bg-card/60 backdrop-blur-md p-6 flex flex-col justify-between gap-5 hover:border-primary/50 hover:bg-card/90 hover:shadow-[0_8px_30px_rgb(0,0,0,0.12)] hover:-translate-y-1 transition-all duration-300 group cursor-pointer relative overflow-hidden"
     >
       {/* Subtle hover gradient inside card */}
-      <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+      <div className="absolute inset-0 bg-linear-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
 
       <div className="flex items-start justify-between gap-3 relative z-10">
         <div className="flex items-center gap-4 min-w-0">
@@ -1047,7 +1067,7 @@ function ModalShell({
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-      <div className="bg-card border border-border/60 rounded-[24px] p-6 md:p-8 max-w-md w-full shadow-[0_0_50px_rgba(0,0,0,0.5)] animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto relative">
+      <div className="bg-card border border-border/60 rounded-3xl p-6 md:p-8 max-w-md w-full shadow-[0_0_50px_rgba(0,0,0,0.5)] animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto relative">
         <div className="flex items-center justify-between mb-8">
           <h2 className="text-xl font-black tracking-tight truncate pr-4 text-foreground drop-shadow-sm">
             {title}
