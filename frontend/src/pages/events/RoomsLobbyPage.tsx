@@ -1,18 +1,22 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRoute, useLocation, Link } from "wouter";
 import { Navbar } from "@/components/Navbar";
 import {
   fetchEventDetail,
   fetchEventRooms,
+  discoverRooms,
   revealRoom,
 } from "@/lib/competitionApi";
 import { useJoinCompetition } from "@/hooks/useCompetitionRoom";
+import { useGeolocation } from "@/hooks/useGeolocation";
 import { AvatarPicker } from "@/components/AvatarPicker";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { getMyAvatar, type StoredAvatar } from "@/lib/avatarStore";
 import type {
+  DiscoveredRoomEntry,
   EventDetail,
   RoomListEntry,
+  RoomLocationInput,
   RoomVisibility,
 } from "@/types/competition";
 import {
@@ -29,10 +33,14 @@ import {
   Search,
   Crown,
   ArrowRight,
+  MapPin,
+  Navigation,
+  Locate,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const ROOM_LIST_POLL_MS = 4000;
+const NEARBY_RADIUS_OPTIONS_KM = [10, 25, 40, 100];
 
 export function RoomsLobbyPage() {
   const [match, params] = useRoute("/events/:eventId/rooms");
@@ -51,6 +59,30 @@ export function RoomsLobbyPage() {
 
   const [showCreate, setShowCreate] = useState(false);
   const [activeRoom, setActiveRoom] = useState<RoomListEntry | null>(null);
+
+  // "Near you" filter - scoped to this event only (see discoverRooms'
+  // eventId param), shown inline in the same lobby rather than sending the
+  // player off to a separate location page.
+  const [nearbyEnabled, setNearbyEnabled] = useState(false);
+  const [nearbyRadiusKm, setNearbyRadiusKm] = useState(25);
+  const [nearbyRooms, setNearbyRooms] = useState<DiscoveredRoomEntry[] | null>(null);
+  const [nearbySearching, setNearbySearching] = useState(false);
+  const [nearbyError, setNearbyError] = useState<string | null>(null);
+  const geoNearby = useGeolocation();
+
+  // Cancels a still-in-flight nearby search when a newer one supersedes it
+  // (radius change, event switch, toggling off then on again) so a slow
+  // earlier response can never land after a faster later one and flash
+  // stale results.
+  const nearbyAbortRef = useRef<AbortController | null>(null);
+  const mountedRef = useRef(true);
+  useEffect(
+    () => () => {
+      mountedRef.current = false;
+      nearbyAbortRef.current?.abort();
+    },
+    [],
+  );
 
   const {
     createRoom,
@@ -80,9 +112,74 @@ export function RoomsLobbyPage() {
     return () => window.clearInterval(interval);
   }, [refreshRooms]);
 
+  const runNearbySearch = useCallback(
+    async (radiusKm: number) => {
+      if (!eventId || !geoNearby.coords) return;
+      nearbyAbortRef.current?.abort();
+      const controller = new AbortController();
+      nearbyAbortRef.current = controller;
+
+      setNearbySearching(true);
+      setNearbyError(null);
+      try {
+        const result = await discoverRooms({
+          eventId,
+          lat: geoNearby.coords.lat,
+          lng: geoNearby.coords.lng,
+          radiusKm,
+          signal: controller.signal,
+        });
+        if (!mountedRef.current || controller.signal.aborted) return;
+        setNearbyRooms(result);
+      } catch (err: any) {
+        if (err?.name === "AbortError") return;
+        if (!mountedRef.current) return;
+        setNearbyError(err.message || "Could not search nearby rooms right now");
+        setNearbyRooms(null);
+      } finally {
+        if (mountedRef.current && !controller.signal.aborted) setNearbySearching(false);
+      }
+    },
+    [eventId, geoNearby.coords],
+  );
+
+  // Fires the search as soon as we have a coordinate fix - no extra click
+  // needed once permission is granted.
+  useEffect(() => {
+    if (nearbyEnabled && geoNearby.status === "granted" && geoNearby.coords) {
+      void runNearbySearch(nearbyRadiusKm);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nearbyEnabled, geoNearby.status, geoNearby.coords?.lat, geoNearby.coords?.lng]);
+
+  const handleToggleNearby = () => {
+    if (nearbyEnabled) {
+      setNearbyEnabled(false);
+      return;
+    }
+    setNearbyEnabled(true);
+    if (geoNearby.status === "idle") {
+      geoNearby.request();
+    } else if (geoNearby.status === "granted" && geoNearby.coords) {
+      void runNearbySearch(nearbyRadiusKm);
+    }
+  };
+
+  const handleNearbyRadiusChange = (km: number) => {
+    setNearbyRadiusKm(km);
+    void runNearbySearch(km);
+  };
+
+  const isNearbyActive =
+    nearbyEnabled && geoNearby.status === "granted" && geoNearby.coords !== null;
+  // Source list for the grid below - nearby-tagged rooms for this event
+  // (sorted nearest-first by the backend) once active, otherwise the
+  // regular full room list. Search/visibility filters apply to either.
+  const roomSource: RoomListEntry[] | null = isNearbyActive ? nearbyRooms : rooms;
+
   const filteredRooms = useMemo(() => {
-    if (!rooms) return null;
-    return rooms.filter((room) => {
+    if (!roomSource) return null;
+    return roomSource.filter((room) => {
       const matchesSearch = room.roomName
         .toLowerCase()
         .includes(searchQuery.toLowerCase().trim());
@@ -90,7 +187,7 @@ export function RoomsLobbyPage() {
         filterVisibility === "all" || room.visibility === filterVisibility;
       return matchesSearch && matchesVisibility;
     });
-  }, [rooms, searchQuery, filterVisibility]);
+  }, [roomSource, searchQuery, filterVisibility]);
 
   if (!match || !eventId) {
     return (
@@ -145,7 +242,7 @@ export function RoomsLobbyPage() {
         </div>
 
         {/* Search Bar & Visibility Filters */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-8 bg-card/50 p-2 rounded-3xl border border-border/50 backdrop-blur-sm">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-4 bg-card/50 p-2 rounded-3xl border border-border/50 backdrop-blur-sm">
           <div className="relative flex-1">
             <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input
@@ -183,9 +280,96 @@ export function RoomsLobbyPage() {
               </button>
             ))}
           </div>
+
+          <div className="w-px h-8 bg-border/50 hidden sm:block mx-1"></div>
+
+          <button
+            onClick={handleToggleNearby}
+            data-testid="button-toggle-nearby"
+            className={cn(
+              "flex items-center gap-2 px-5 py-2.5 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all shrink-0 self-start sm:self-auto cursor-pointer border",
+              nearbyEnabled
+                ? "bg-primary/10 text-primary border-primary/20 shadow-sm"
+                : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground border-transparent",
+            )}
+          >
+            <MapPin className="w-3.5 h-3.5" />
+            Near You
+          </button>
         </div>
 
-        {loadError && (
+        {/* "Near you" status row - radius chips once granted, or a compact
+            inline state for every other phase. Sits right under the search
+            bar so location stays part of this event's room list rather
+            than a separate destination. */}
+        {nearbyEnabled && (
+          <div className="mb-6">
+            {geoNearby.status === "requesting" && (
+              <div className="flex items-center gap-3 bg-card/50 border border-border/50 rounded-2xl px-5 py-3.5">
+                <RefreshCw className="w-4 h-4 animate-spin text-primary" />
+                <p className="text-sm font-semibold text-muted-foreground">
+                  Requesting location access...
+                </p>
+              </div>
+            )}
+
+            {(geoNearby.status === "denied" ||
+              geoNearby.status === "error" ||
+              geoNearby.status === "unsupported") && (
+              <div className="flex items-center justify-between gap-3 bg-destructive/10 border border-destructive/30 rounded-2xl px-5 py-3.5 flex-wrap">
+                <p className="text-xs font-semibold text-destructive flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  {geoNearby.status === "unsupported"
+                    ? "Your browser doesn't support location access."
+                    : geoNearby.errorMessage}
+                </p>
+                <button
+                  onClick={() => setNearbyEnabled(false)}
+                  className="text-xs font-black uppercase tracking-wider text-destructive underline underline-offset-2 shrink-0"
+                >
+                  Show all rooms instead
+                </button>
+              </div>
+            )}
+
+            {geoNearby.status === "idle" && (
+              <div className="flex items-center gap-3 bg-card/50 border border-border/50 rounded-2xl px-5 py-3.5">
+                <Locate className="w-4 h-4 text-primary" />
+                <p className="text-sm font-semibold text-muted-foreground">
+                  Enable location to see rooms tagged near you for this event.
+                </p>
+              </div>
+            )}
+
+            {isNearbyActive && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[11px] font-extrabold uppercase tracking-[.12em] text-muted-foreground mr-1">
+                  Radius
+                </span>
+                {NEARBY_RADIUS_OPTIONS_KM.map((km) => (
+                  <button
+                    key={km}
+                    onClick={() => handleNearbyRadiusChange(km)}
+                    data-testid={`button-nearby-radius-${km}`}
+                    className={cn(
+                      "px-3.5 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-wider transition-colors border",
+                      nearbyRadiusKm === km
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-secondary/60 text-muted-foreground border-border hover:bg-secondary",
+                    )}
+                  >
+                    {km} km
+                  </button>
+                ))}
+                {nearbySearching && (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-primary ml-1" />
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {loadError && !isNearbyActive && (
           <div className="bg-destructive/10 border border-destructive/20 rounded-3xl p-5 mb-8 flex gap-3 items-center shadow-sm">
             <div className="bg-destructive/20 p-2 rounded-xl">
               <AlertTriangle className="w-5 h-5 text-destructive shrink-0" />
@@ -194,31 +378,54 @@ export function RoomsLobbyPage() {
           </div>
         )}
 
-        {rooms === null && !loadError && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div
-                key={i}
-                className="h-44 rounded-3xl bg-secondary/30 border border-border/30 animate-pulse"
-              />
-            ))}
+        {nearbyError && isNearbyActive && (
+          <div className="bg-destructive/10 border border-destructive/20 rounded-3xl p-5 mb-8 flex gap-3 items-center shadow-sm">
+            <div className="bg-destructive/20 p-2 rounded-xl">
+              <AlertTriangle className="w-5 h-5 text-destructive shrink-0" />
+            </div>
+            <p className="text-sm text-destructive font-bold">{nearbyError}</p>
           </div>
         )}
 
-        {rooms !== null && filteredRooms && filteredRooms.length === 0 && (
+        {roomSource === null &&
+          !loadError &&
+          !(isNearbyActive && nearbyError) && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="h-44 rounded-3xl bg-secondary/30 border border-border/30 animate-pulse"
+                />
+              ))}
+            </div>
+          )}
+
+        {roomSource !== null && filteredRooms && filteredRooms.length === 0 && (
           <div className="rounded-[2rem] border border-dashed border-border/60 bg-card/30 p-16 text-center backdrop-blur-sm flex flex-col items-center justify-center">
             <div className="w-16 h-16 bg-secondary/50 rounded-2xl flex items-center justify-center mb-4 border border-border/50 shadow-inner">
-              <DoorOpen className="w-8 h-8 text-muted-foreground opacity-80" />
+              {isNearbyActive ? (
+                <MapPin className="w-8 h-8 text-muted-foreground opacity-80" />
+              ) : (
+                <DoorOpen className="w-8 h-8 text-muted-foreground opacity-80" />
+              )}
             </div>
             <p className="font-extrabold text-foreground text-lg tracking-tight">
-              {rooms.length === 0
-                ? "No rooms open yet"
-                : "No matching rooms found"}
+              {isNearbyActive
+                ? roomSource.length === 0
+                  ? "No rooms tagged near you yet"
+                  : "No matching rooms found"
+                : rooms && rooms.length === 0
+                  ? "No rooms open yet"
+                  : "No matching rooms found"}
             </p>
             <p className="text-sm text-muted-foreground mt-2 max-w-sm">
-              {rooms.length === 0
-                ? "Be the first to create one for this event and invite others to play."
-                : "Try adjusting your search query or switching your filter settings."}
+              {isNearbyActive
+                ? roomSource.length === 0
+                  ? `Try a wider radius, or create a room and tag your location so others within ${nearbyRadiusKm} km can find it.`
+                  : "Try adjusting your search query or switching your filter settings."
+                : rooms && rooms.length === 0
+                  ? "Be the first to create one for this event and invite others to play."
+                  : "Try adjusting your search query or switching your filter settings."}
             </p>
           </div>
         )}
@@ -232,6 +439,7 @@ export function RoomsLobbyPage() {
                 <RoomCard
                   key={room.competitionId}
                   room={room}
+                  distanceKm={(room as DiscoveredRoomEntry).distanceKm}
                   onSelect={() => setActiveRoom(room)}
                 />
               ))}
@@ -251,6 +459,7 @@ export function RoomsLobbyPage() {
             displayName,
             password,
             avatar,
+            location,
           ) => {
             const ack = await createRoom(
               eventId,
@@ -260,6 +469,7 @@ export function RoomsLobbyPage() {
               password,
               avatar?.url,
               avatar?.publicId,
+              location,
             );
             handleCreated(ack.competitionId);
           }}
@@ -296,9 +506,11 @@ export function RoomsLobbyPage() {
 
 function RoomCard({
   room,
+  distanceKm,
   onSelect,
 }: {
   room: RoomListEntry;
+  distanceKm?: number;
   onSelect: () => void;
 }) {
   const isFull = room.participantCount >= room.maxParticipants;
@@ -364,6 +576,13 @@ function RoomCard({
           {room.visibility}
         </span>
       </div>
+
+      {distanceKm !== undefined && (
+        <span className="inline-flex items-center gap-1.5 self-start text-[10px] font-black uppercase tracking-wider text-primary bg-primary/10 border border-primary/20 px-2.5 py-1 rounded-full relative z-10 -mt-2">
+          <Navigation className="w-3 h-3" />
+          {distanceKm < 1 ? "< 1 km away" : `${Math.round(distanceKm)} km away`}
+        </span>
+      )}
 
       {/* Players Preview Section */}
       <div className="bg-background/60 border border-border/30 rounded-2xl p-3.5 flex items-center justify-between gap-3 relative z-10">
@@ -439,6 +658,7 @@ function CreateRoomModal({
     displayName: string,
     password: string | undefined,
     avatar: StoredAvatar | null,
+    location: RoomLocationInput | undefined,
   ) => Promise<void>;
   joining: boolean;
   error: string | null;
@@ -450,11 +670,22 @@ function CreateRoomModal({
   const [avatar, setAvatar] = useState<StoredAvatar | null>(() =>
     getMyAvatar(),
   );
+  // Opt-in - lets others find this room from the "Live near you" search
+  // embedded in the Events page (see components/NearbyRoomsPanel.tsx).
+  const [tagLocation, setTagLocation] = useState(false);
+  const geo = useGeolocation();
 
   const canSubmit =
     roomName.trim().length > 0 &&
     displayName.trim().length > 0 &&
-    (visibility === "public" || password.trim().length >= 4);
+    (visibility === "public" || password.trim().length >= 4) &&
+    (!tagLocation || geo.status === "granted");
+
+  const handleToggleTagLocation = () => {
+    const next = !tagLocation;
+    setTagLocation(next);
+    if (next && geo.status === "idle") geo.request();
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -466,6 +697,9 @@ function CreateRoomModal({
         displayName.trim(),
         visibility === "private" ? password.trim() : undefined,
         avatar,
+        tagLocation && geo.coords
+          ? { lat: geo.coords.lat, lng: geo.coords.lng }
+          : undefined,
       );
     } catch {
       // error surfaced via `error` prop
@@ -539,6 +773,55 @@ function CreateRoomModal({
             className="w-full h-12 rounded-2xl border border-border/50 bg-background/50 px-4 font-semibold text-sm text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 transition-all placeholder:text-muted-foreground/70 shadow-sm"
           />
         </Field>
+
+        <button
+          type="button"
+          onClick={handleToggleTagLocation}
+          data-testid="button-tag-location"
+          className={cn(
+            "w-full flex items-center gap-3 rounded-2xl border p-4 text-left transition-all",
+            tagLocation
+              ? "border-primary bg-primary/10"
+              : "border-border/50 bg-background/50 hover:border-border",
+          )}
+        >
+          <div
+            className={cn(
+              "w-9 h-9 rounded-xl flex items-center justify-center shrink-0",
+              tagLocation
+                ? "bg-primary text-primary-foreground"
+                : "bg-secondary text-muted-foreground",
+            )}
+          >
+            <MapPin className="w-4 h-4" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold">Tag my location</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {tagLocation && geo.status === "requesting"
+                ? "Requesting location access..."
+                : tagLocation && geo.status === "granted"
+                  ? "Nearby players will be able to find this room."
+                  : tagLocation &&
+                      (geo.status === "denied" || geo.status === "error")
+                    ? (geo.errorMessage ?? "Couldn't get your location.")
+                    : "Let players nearby find this room from the Events page."}
+            </p>
+          </div>
+          <div
+            className={cn(
+              "w-10 h-6 rounded-full shrink-0 relative transition-colors",
+              tagLocation ? "bg-primary" : "bg-secondary",
+            )}
+          >
+            <span
+              className={cn(
+                "absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform",
+                tagLocation ? "translate-x-4.5" : "translate-x-0.5",
+              )}
+            />
+          </div>
+        </button>
 
         {error && (
           <div className="p-3 rounded-2xl bg-destructive/10 border border-destructive/20 text-sm text-destructive font-bold flex items-center gap-2 shadow-sm">
