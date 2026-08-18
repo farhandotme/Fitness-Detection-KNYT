@@ -8,7 +8,12 @@ interface NavbarProps {
 
 export function Navbar({ onSettingsClick }: NavbarProps) {
   const [location] = useLocation();
-  const isEvents = location.startsWith("/events") || location.startsWith("/competitions");
+  // "Nearby" now lives inline inside the Events page (see
+  // components/NearbyRoomsPanel.tsx) rather than as its own nav destination.
+  const isEvents =
+    location.startsWith("/events") ||
+    location.startsWith("/competitions") ||
+    location.startsWith("/nearby");
 
   return (
     <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-xl border-b border-border p-4">
