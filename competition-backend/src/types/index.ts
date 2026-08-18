@@ -134,6 +134,14 @@ export interface CreateRoomPayload {
   // uploading and get a generated avatar instead.
   avatarUrl?: string;
   avatarPublicId?: string;
+  // Optional - set when the host opts in to tagging this room's location
+  // (see services/roomService.ts discoverRooms).
+  location?: {
+    lat?: number;
+    lng?: number;
+    country?: string;
+    city?: string;
+  };
 }
 
 export interface JoinRoomPayload {
