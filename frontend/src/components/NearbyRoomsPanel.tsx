@@ -1,10 +1,16 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
+import { Country, City } from "country-state-city";
 import { useGeolocation } from "@/hooks/useGeolocation";
+import { useReverseGeocode } from "@/hooks/useReverseGeocode";
 import { discoverRooms } from "@/lib/competitionApi";
-import { COUNTRIES } from "@/config/countries";
 import type { DiscoveredRoomEntry } from "@/types/competition";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
+import {
+  SearchableSelect,
+  type SearchableSelectOption,
+} from "@/components/ui/searchable-select";
+import { LocationPicker, type PickedLocation } from "@/components/LocationPicker";
 import {
   MapPin,
   Navigation,
@@ -14,11 +20,18 @@ import {
   AlertTriangle,
   ArrowRight,
   Locate,
-  ChevronDown,
   Globe2,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+// Every ISO country, sorted alphabetically - not a curated shortlist.
+const ALL_COUNTRIES = Country.getAllCountries().sort((a, b) =>
+  a.name.localeCompare(b.name),
+);
+const DEFAULT_COUNTRY_CODE =
+  ALL_COUNTRIES.find((c) => c.isoCode === "IN")?.isoCode ??
+  ALL_COUNTRIES[0].isoCode;
 
 const RADIUS_OPTIONS_KM = [10, 25, 40, 100];
 
@@ -39,13 +52,22 @@ export interface NearbyRoomsPanelProps {
 export function NearbyRoomsPanel({ onResults }: NearbyRoomsPanelProps) {
   const [, setLocation] = useLocation();
   const geo = useGeolocation();
+  // A manually-picked location (via LocationPicker) always wins over GPS -
+  // lets the user override "near you" with any place they choose.
+  const [manualLocation, setManualLocation] = useState<PickedLocation | null>(
+    null,
+  );
+  const { place: resolvedPlace } = useReverseGeocode(
+    manualLocation ? undefined : geo.coords?.lat,
+    manualLocation ? undefined : geo.coords?.lng,
+  );
 
   const [radiusKm, setRadiusKm] = useState(25);
   const [rooms, setRooms] = useState<DiscoveredRoomEntry[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [regionFallbackOpen, setRegionFallbackOpen] = useState(false);
-  const [countryCode, setCountryCode] = useState(COUNTRIES[0].code);
+  const [countryCode, setCountryCode] = useState(DEFAULT_COUNTRY_CODE);
   const [city, setCity] = useState("");
   const [dismissedPrompt, setDismissedPrompt] = useState(false);
 
@@ -62,7 +84,34 @@ export function NearbyRoomsPanel({ onResults }: NearbyRoomsPanelProps) {
     [],
   );
 
-  const selectedCountry = COUNTRIES.find((c) => c.code === countryCode)!;
+  const selectedCountry =
+    ALL_COUNTRIES.find((c) => c.isoCode === countryCode) ?? ALL_COUNTRIES[0];
+
+  const countryOptions: SearchableSelectOption[] = useMemo(
+    () =>
+      ALL_COUNTRIES.map((c) => ({
+        value: c.isoCode,
+        label: `${c.flag} ${c.name}`,
+      })),
+    [],
+  );
+
+  // Cities are looked up per selected country - the field only ever offers
+  // real cities of that country, never arbitrary free text.
+  const cityOptions: SearchableSelectOption[] = useMemo(() => {
+    const cities = City.getCitiesOfCountry(countryCode) ?? [];
+    const seen = new Set<string>();
+    const options: SearchableSelectOption[] = [];
+    for (const c of cities) {
+      if (seen.has(c.name)) continue;
+      seen.add(c.name);
+      options.push({ value: c.name, label: c.name });
+    }
+    options.sort((a, b) => a.label.localeCompare(b.label));
+    // Lets the user explicitly clear back to "search the whole country" without
+    // needing to reopen the country field.
+    return [{ value: "", label: "Any city" }, ...options];
+  }, [countryCode]);
 
   const runSearch = async (params: {
     lat?: number;
@@ -95,24 +144,45 @@ export function NearbyRoomsPanel({ onResults }: NearbyRoomsPanelProps) {
     }
   };
 
-  // As soon as we have a coordinate fix, search automatically - no extra
-  // click needed once permission is granted.
+  // As soon as we have a coordinate fix (GPS or a manual pick), search
+  // automatically - no extra click needed.
   useEffect(() => {
-    if (geo.status === "granted" && geo.coords) {
+    if (manualLocation) {
+      void runSearch({
+        lat: manualLocation.lat,
+        lng: manualLocation.lng,
+        radiusKm,
+      });
+    } else if (geo.status === "granted" && geo.coords) {
       void runSearch({ lat: geo.coords.lat, lng: geo.coords.lng, radiusKm });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [geo.status, geo.coords?.lat, geo.coords?.lng]);
+  }, [manualLocation, geo.status, geo.coords?.lat, geo.coords?.lng]);
 
   const handleRadiusChange = (km: number) => {
     setRadiusKm(km);
-    if (geo.coords) {
+    const coords = manualLocation ?? geo.coords;
+    if (coords) {
       void runSearch({
-        lat: geo.coords.lat,
-        lng: geo.coords.lng,
+        lat: coords.lat,
+        lng: coords.lng,
         radiusKm: km,
       });
     }
+  };
+
+  const handleUseCurrentLocation = () => {
+    setManualLocation(null);
+    if (geo.status === "granted" && geo.coords) {
+      void runSearch({ lat: geo.coords.lat, lng: geo.coords.lng, radiusKm });
+    } else {
+      geo.request();
+    }
+  };
+
+  const handleSelectLocation = (loc: PickedLocation) => {
+    setManualLocation(loc);
+    void runSearch({ lat: loc.lat, lng: loc.lng, radiusKm });
   };
 
   const handleRegionSearch = () => {
@@ -129,23 +199,45 @@ export function NearbyRoomsPanel({ onResults }: NearbyRoomsPanelProps) {
   const showEnablePrompt =
     !dismissedPrompt &&
     !regionFallbackOpen &&
+    !manualLocation &&
     geo.status !== "granted" &&
     geo.status !== "requesting";
+
+  const isLocationActive =
+    manualLocation !== null || (geo.status === "granted" && !!geo.coords);
+  const pickerLabel = manualLocation?.label ?? resolvedPlace?.label ?? null;
+  const pickerLoading =
+    !manualLocation &&
+    (geo.status === "requesting" ||
+      (geo.status === "granted" && !!geo.coords && !resolvedPlace));
 
   return (
     <section className="flex flex-col gap-4" data-testid="section-nearby">
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-2.5">
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
-          </span>
-          <h2 className="font-display text-lg font-extrabold tracking-tight">
-            Live near you
-          </h2>
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2.5">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
+            </span>
+            <h2 className="font-display text-lg font-extrabold tracking-tight">
+              Live near you
+            </h2>
+          </div>
+          {isLocationActive && (
+            <div className="pl-4">
+              <LocationPicker
+                label={pickerLabel}
+                loading={pickerLoading}
+                isCurrentLocation={!manualLocation}
+                onUseCurrentLocation={handleUseCurrentLocation}
+                onSelectLocation={handleSelectLocation}
+              />
+            </div>
+          )}
         </div>
 
-        {geo.status === "granted" && geo.coords && (
+        {isLocationActive && (
           <div className="flex items-center gap-1.5">
             {RADIUS_OPTIONS_KM.map((km) => (
               <button
@@ -256,28 +348,30 @@ export function NearbyRoomsPanel({ onResults }: NearbyRoomsPanelProps) {
             </button>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-3">
-            <div className="relative">
-              <select
-                value={countryCode}
-                onChange={(e) => {
-                  setCountryCode(e.target.value);
-                  setCity("");
-                }}
-                className="w-full h-11 rounded-xl border border-input bg-background px-3.5 pr-9 font-semibold text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15 transition-all cursor-pointer appearance-none"
-              >
-                {COUNTRIES.map((c) => (
-                  <option key={c.code} value={c.code}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="w-4 h-4 text-muted-foreground absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-            </div>
-            <input
+            <SearchableSelect
+              options={countryOptions}
+              value={countryCode}
+              onChange={(next) => {
+                setCountryCode(next);
+                // Selecting a new country invalidates whatever city was picked.
+                setCity("");
+              }}
+              placeholder="Select country"
+              searchPlaceholder="Search countries..."
+              emptyText="No country found."
+            />
+            <SearchableSelect
+              options={cityOptions}
               value={city}
-              onChange={(e) => setCity(e.target.value)}
+              onChange={setCity}
               placeholder="Any city (optional)"
-              className="w-full h-11 rounded-xl border border-input bg-background px-3.5 font-semibold text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15 transition-all"
+              searchPlaceholder="Search cities..."
+              emptyText={
+                cityOptions.length <= 1
+                  ? "No cities available for this country."
+                  : "No city found."
+              }
+              disabled={cityOptions.length <= 1}
             />
             <button
               onClick={handleRegionSearch}

@@ -22,8 +22,7 @@ roomRoutes.post(
   "/:competitionId/reveal",
   asyncHandler(async (req, res) => {
     const competitionId = requireParam(req, "competitionId");
-    const password =
-      typeof req.body?.password === "string" ? req.body.password : undefined;
+    const password = typeof req.body?.password === "string" ? req.body.password : undefined;
     const room = await revealRoom(competitionId, password);
     res.json({ room });
   }),

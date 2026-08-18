@@ -562,9 +562,7 @@ export async function discoverRooms(
         country: room.location?.country ?? undefined,
         city: room.location?.city ?? undefined,
         distanceKm,
-        createdAt: (
-          room as unknown as { createdAt: Date }
-        ).createdAt.toISOString(),
+        createdAt: (room as unknown as { createdAt: Date }).createdAt.toISOString(),
       };
       if (room.visibility === "public") {
         entry.participantNames = participants.map((p) => p.displayName);

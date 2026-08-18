@@ -15,6 +15,8 @@ import {
 } from "@/lib/competitionApi";
 import { useJoinCompetition } from "@/hooks/useCompetitionRoom";
 import { useGeolocation } from "@/hooks/useGeolocation";
+import { useReverseGeocode } from "@/hooks/useReverseGeocode";
+import { LocationPicker, type PickedLocation } from "@/components/LocationPicker";
 import { AvatarPicker } from "@/components/AvatarPicker";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { getMyAvatar, type StoredAvatar } from "@/lib/avatarStore";
@@ -77,6 +79,16 @@ export function RoomsLobbyPage() {
   const [nearbySearching, setNearbySearching] = useState(false);
   const [nearbyError, setNearbyError] = useState<string | null>(null);
   const geoNearby = useGeolocation();
+  // A manually-picked location (via LocationPicker) always wins over GPS -
+  // lets the user override "near you" with any place they choose.
+  const [manualLocation, setManualLocation] = useState<PickedLocation | null>(
+    null,
+  );
+  const effectiveCoords = manualLocation ?? geoNearby.coords;
+  const { place: nearbyPlace } = useReverseGeocode(
+    manualLocation ? undefined : geoNearby.coords?.lat,
+    manualLocation ? undefined : geoNearby.coords?.lng,
+  );
 
   // Cancels a still-in-flight nearby search when a newer one supersedes it
   // (radius change, event switch, toggling off then on again) so a slow
@@ -122,7 +134,7 @@ export function RoomsLobbyPage() {
 
   const runNearbySearch = useCallback(
     async (radiusKm: number) => {
-      if (!eventId || !geoNearby.coords) return;
+      if (!eventId || !effectiveCoords) return;
       nearbyAbortRef.current?.abort();
       const controller = new AbortController();
       nearbyAbortRef.current = controller;
@@ -132,8 +144,8 @@ export function RoomsLobbyPage() {
       try {
         const result = await discoverRooms({
           eventId,
-          lat: geoNearby.coords.lat,
-          lng: geoNearby.coords.lng,
+          lat: effectiveCoords.lat,
+          lng: effectiveCoords.lng,
           radiusKm,
           signal: controller.signal,
         });
@@ -151,22 +163,17 @@ export function RoomsLobbyPage() {
           setNearbySearching(false);
       }
     },
-    [eventId, geoNearby.coords],
+    [eventId, effectiveCoords],
   );
 
-  // Fires the search as soon as we have a coordinate fix - no extra click
-  // needed once permission is granted.
+  // Fires the search as soon as we have a coordinate fix (GPS or a manual
+  // pick) - no extra click needed once permission is granted.
   useEffect(() => {
-    if (nearbyEnabled && geoNearby.status === "granted" && geoNearby.coords) {
+    if (nearbyEnabled && effectiveCoords) {
       void runNearbySearch(nearbyRadiusKm);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    nearbyEnabled,
-    geoNearby.status,
-    geoNearby.coords?.lat,
-    geoNearby.coords?.lng,
-  ]);
+  }, [nearbyEnabled, effectiveCoords]);
 
   const handleToggleNearby = () => {
     if (nearbyEnabled) {
@@ -174,10 +181,10 @@ export function RoomsLobbyPage() {
       return;
     }
     setNearbyEnabled(true);
-    if (geoNearby.status === "idle") {
-      geoNearby.request();
-    } else if (geoNearby.status === "granted" && geoNearby.coords) {
+    if (effectiveCoords) {
       void runNearbySearch(nearbyRadiusKm);
+    } else if (geoNearby.status === "idle") {
+      geoNearby.request();
     }
   };
 
@@ -186,10 +193,23 @@ export function RoomsLobbyPage() {
     void runNearbySearch(km);
   };
 
-  const isNearbyActive =
-    nearbyEnabled &&
-    geoNearby.status === "granted" &&
-    geoNearby.coords !== null;
+  const handleUseCurrentLocation = () => {
+    setManualLocation(null);
+    setNearbyEnabled(true);
+    if (geoNearby.status === "granted" && geoNearby.coords) {
+      void runNearbySearch(nearbyRadiusKm);
+    } else {
+      geoNearby.request();
+    }
+  };
+
+  const handleSelectLocation = (loc: PickedLocation) => {
+    setManualLocation(loc);
+    setNearbyEnabled(true);
+    void runNearbySearch(nearbyRadiusKm);
+  };
+
+  const isNearbyActive = nearbyEnabled && effectiveCoords !== null;
   // Source list for the grid below - nearby-tagged rooms for this event
   // (sorted nearest-first by the backend) once active, otherwise the
   // regular full room list. Search/visibility filters apply to either.
@@ -363,6 +383,14 @@ export function RoomsLobbyPage() {
 
             {isNearbyActive && (
               <div className="flex items-center gap-2 flex-wrap">
+                <LocationPicker
+                  label={manualLocation?.label ?? nearbyPlace?.label ?? null}
+                  loading={!manualLocation && !nearbyPlace}
+                  isCurrentLocation={!manualLocation}
+                  onUseCurrentLocation={handleUseCurrentLocation}
+                  onSelectLocation={handleSelectLocation}
+                  className="mr-1"
+                />
                 <span className="text-[11px] font-extrabold uppercase tracking-[.12em] text-muted-foreground mr-1">
                   Radius
                 </span>
