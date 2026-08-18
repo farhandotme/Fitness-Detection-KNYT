@@ -29,3 +29,19 @@ export const avatarRateLimiter = rateLimit({
     message: "Too many avatar requests, please try again later.",
   },
 });
+
+// Applied to /api/discover/rooms - the "near you" search inside the Events
+// page. Public, unauthenticated, and takes raw lat/lng, so without a limit
+// it's a cheap way to hammer the geo index or scrape every open room's
+// location across the whole app. Kept generous enough that a real person
+// switching radius/region a few times a minute never notices it.
+export const discoverRateLimiter = rateLimit({
+  windowMs: env.DISCOVER_RATE_LIMIT_WINDOW_MINUTES * 60 * 1000,
+  max: env.DISCOVER_RATE_LIMIT_MAX,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    code: "RATE_LIMITED",
+    message: "Too many location searches, please slow down and try again.",
+  },
+});
