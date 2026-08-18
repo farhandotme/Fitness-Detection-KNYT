@@ -22,9 +22,12 @@ export const discoverRoomsQuerySchema = z
       .regex(/^[a-f\d]{24}$/i, "Invalid eventId")
       .optional(),
   })
-  .refine((q) => (q.lat !== undefined && q.lng !== undefined) || !!q.country, {
-    message:
-      "Provide either lat & lng (nearby search) or a country (region search)",
-  });
+  .refine(
+    (q) => (q.lat !== undefined && q.lng !== undefined) || !!q.country,
+    {
+      message:
+        "Provide either lat & lng (nearby search) or a country (region search)",
+    },
+  );
 
 export type DiscoverRoomsQuery = z.infer<typeof discoverRoomsQuerySchema>;
