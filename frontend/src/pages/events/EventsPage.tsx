@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import { Navbar } from "@/components/Navbar";
 import { CoverImageCarousel } from "@/components/CoverImageCarousel";
+import { NearbyRoomsPanel } from "@/components/NearbyRoomsPanel";
 import { fetchLiveEvents } from "@/lib/competitionApi";
-import type { LiveEventSummary } from "@/types/competition";
+import type { DiscoveredRoomEntry, LiveEventSummary } from "@/types/competition";
 import { getExerciseById } from "@/config/exercises";
 import { getScheduleStatus } from "@/utils/eventSchedule";
 import {
@@ -17,6 +18,7 @@ import {
   Radio,
   Zap,
   Clock,
+  MapPin,
 } from "lucide-react";
 
 export function EventsPage() {
@@ -24,6 +26,19 @@ export function EventsPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(Date.now());
+  // Latest "Live near you" search results, keyed by event so each event
+  // card can show how many nearby rooms it currently has - this is what
+  // ties the location search into Events itself instead of it being a
+  // separate destination.
+  const [nearbyRooms, setNearbyRooms] = useState<DiscoveredRoomEntry[]>([]);
+
+  const nearbyCountByEvent = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const room of nearbyRooms) {
+      counts.set(room.eventId, (counts.get(room.eventId) ?? 0) + 1);
+    }
+    return counts;
+  }, [nearbyRooms]);
 
   const load = async () => {
     setLoading(true);
@@ -74,6 +89,9 @@ export function EventsPage() {
             </p>
           </div>
         </section>
+
+        {/* Live near you - embedded directly in Events, not a separate page */}
+        <NearbyRoomsPanel onResults={setNearbyRooms} />
 
         {/* Header and Refresh */}
         <div className="flex items-end justify-between border-b border-border/60 pb-5">
@@ -206,13 +224,24 @@ export function EventsPage() {
                         </div>
                       )}
 
-                      {event.activeRooms > 0 && (
-                        <div className="absolute bottom-4 left-5 z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-black/60 backdrop-blur-md text-xs font-black text-primary border border-primary/20">
-                          <Zap className="w-4 h-4 fill-primary animate-pulse" />
-                          {event.activeRooms} Active Room
-                          {event.activeRooms === 1 ? "" : "s"}
-                        </div>
-                      )}
+                      <div className="absolute bottom-4 left-5 z-10 flex items-center gap-2 flex-wrap">
+                        {event.activeRooms > 0 && (
+                          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-black/60 backdrop-blur-md text-xs font-black text-primary border border-primary/20">
+                            <Zap className="w-4 h-4 fill-primary animate-pulse" />
+                            {event.activeRooms} Active Room
+                            {event.activeRooms === 1 ? "" : "s"}
+                          </div>
+                        )}
+                        {(nearbyCountByEvent.get(event.id) ?? 0) > 0 && (
+                          <div
+                            data-testid={`badge-near-you-${event.id}`}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/90 backdrop-blur-md text-xs font-black text-primary-foreground border border-primary shadow-[0_0_15px_rgba(var(--primary),0.35)]"
+                          >
+                            <MapPin className="w-3.5 h-3.5" />
+                            {nearbyCountByEvent.get(event.id)} Near You
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     {/* Card Body Content */}
