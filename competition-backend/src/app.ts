@@ -7,12 +7,17 @@ import { env } from "./config/env.js";
 import { logger } from "./config/logger.js";
 import { eventRoutes } from "./routes/eventRoutes.js";
 import { roomRoutes } from "./routes/roomRoutes.js";
+import { discoverRoutes } from "./routes/discoverRoutes.js";
 import { adminRoutes } from "./routes/adminRoutes.js";
 import { authRoutes } from "./routes/authRoutes.js";
 import { healthRoutes } from "./routes/healthRoutes.js";
 import { avatarRoutes } from "./routes/avatarRoutes.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
-import { authRateLimiter, avatarRateLimiter } from "./middleware/rateLimit.js";
+import {
+  authRateLimiter,
+  avatarRateLimiter,
+  discoverRateLimiter,
+} from "./middleware/rateLimit.js";
 
 export function createApp() {
   const app = express();
@@ -44,6 +49,11 @@ export function createApp() {
   // Nested under the same /api/events/:eventId prefix as eventRoutes -
   // browsing/creating/joining rooms for a specific event.
   app.use("/api/events/:eventId/rooms", roomRoutes);
+  // Location-based room discovery ("near you" radius search, or "choose a
+  // region" by country/city) - surfaced inline inside the Events page, see
+  // frontend src/components/NearbyRoomsPanel.tsx. Rate-limited since it's a
+  // public, unauthenticated endpoint that accepts a raw lat/lng.
+  app.use("/api/discover", discoverRateLimiter, discoverRoutes);
   // Mounted before the protected /api/admin routes so register/login never
   // hit the admin-session middleware defined in adminRoutes. Rate-limited
   // since this is the endpoint most worth brute-forcing.
