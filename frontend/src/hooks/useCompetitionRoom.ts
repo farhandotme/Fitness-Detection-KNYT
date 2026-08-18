@@ -10,6 +10,7 @@ import { deleteMyAvatar } from "@/lib/avatarStore";
 import type {
   JoinedAckPayload,
   ParticipantIdentity,
+  RoomLocationInput,
   RoomStateSnapshot,
   RoomVisibility,
   SocketErrorPayload,
@@ -217,6 +218,11 @@ export function useJoinCompetition() {
       password?: string,
       avatarUrl?: string,
       avatarPublicId?: string,
+      // Optional - set when the host opts in to tagging this room's
+      // location, so it's findable from the "Live near you" / "choose a
+      // region" search embedded in the Events page. See
+      // config/countries.ts and hooks/useGeolocation.ts.
+      location?: RoomLocationInput,
     ) =>
       runJoin("room:create", {
         eventId,
@@ -227,6 +233,7 @@ export function useJoinCompetition() {
         deviceId: getDeviceId(),
         avatarUrl,
         avatarPublicId,
+        location,
       }),
     [runJoin],
   );
