@@ -29,6 +29,25 @@ const avatarUrlField = z
   .optional();
 const avatarPublicIdField = z.string().trim().min(1).max(300).optional();
 
+// Optional - only present when the host tags their room's location on
+// creation (see frontend RoomsLobbyPage's "tag my location" toggle, and
+// the "Live near you" search embedded in the Events page). Either lat+lng,
+// or country (+ optional city), or both.
+const locationField = z
+  .object({
+    lat: z.number().min(-90).max(90).optional(),
+    lng: z.number().min(-180).max(180).optional(),
+    country: z.string().trim().min(1).max(60).optional(),
+    city: z.string().trim().min(1).max(80).optional(),
+  })
+  .refine(
+    (loc) =>
+      (loc.lat !== undefined && loc.lng !== undefined) ||
+      loc.country !== undefined,
+    { message: "location needs either lat+lng or a country" },
+  )
+  .optional();
+
 export const createRoomSchema = z
   .object({
     eventId: z.string().trim().min(1),
@@ -44,6 +63,7 @@ export const createRoomSchema = z
     deviceId: deviceIdField,
     avatarUrl: avatarUrlField,
     avatarPublicId: avatarPublicIdField,
+    location: locationField,
   })
   .superRefine((input, ctx) => {
     if (input.visibility === "private" && !input.password) {
