@@ -106,6 +106,27 @@ const competitionSchema = new Schema(
     rounds: { type: [roundSchema], default: [] },
     finalResults: { type: [finalResultSchema], default: [] },
     completedAt: { type: Date },
+    // Optional - set only when the host chose to tag their room's location
+    // on creation (see services/roomService.ts createRoom). Powers the
+    // "near you" / "choose a region" discovery inside the Events page (see
+    // frontend src/components/NearbyRoomsPanel.tsx). geo.coordinates is
+    // GeoJSON order: [lng, lat].
+    location: {
+      type: {
+        country: { type: String, required: false, trim: true, maxlength: 60 },
+        city: { type: String, required: false, trim: true, maxlength: 80 },
+        geo: {
+          type: {
+            type: String,
+            enum: ["Point"],
+            default: "Point",
+          },
+          coordinates: { type: [Number], default: undefined },
+        },
+      },
+      required: false,
+      default: undefined,
+    },
   },
   { timestamps: true },
 );
@@ -118,6 +139,10 @@ competitionSchema.index({
   status: 1,
   "participants.deviceIdHash": 1,
 });
+// Powers the "near you" radius search in the Events page.
+competitionSchema.index({ "location.geo": "2dsphere" });
+// Powers the "choose a region" (country/city) discovery flow.
+competitionSchema.index({ status: 1, "location.country": 1, "location.city": 1 });
 
 export type CompetitionDoc = InferSchemaType<typeof competitionSchema> & {
   _id: Types.ObjectId;
