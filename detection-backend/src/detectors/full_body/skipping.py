@@ -79,7 +79,7 @@ from src.engines.poseEngine import (  # type: ignore
 # Tunable constants
 # -------------------------------------------------------------------------
 
-MIN_LANDMARK_VISIBILITY = 0.3
+MIN_LANDMARK_VISIBILITY = 0.4
 
 # ---- smoothing (light — enough to knock down single-frame jitter without lagging fast motion) ----
 SMOOTH_ALPHA = 0.6
@@ -89,9 +89,15 @@ SMOOTH_ALPHA = 0.6
 # peak/trough is confirmed. Small enough to catch genuinely small jumps,
 # large enough to reject ordinary landmark jitter.
 REVERSAL_MARGIN = 0.014
-# Total peak-to-trough excursion required for "good" tier — informational
-# only, never blocks the count.
+
+# The baseline normalized height for a "100%" perfect jump.
 IDEAL_JUMP_HEIGHT = 0.05
+
+# Max lateral movement allowed per jump to prevent walking from being counted
+MAX_HORIZONTAL_DRIFT = 0.10
+
+# Minimum on-screen torso size to reject background clutter / ghost skeletons
+MIN_TORSO_LENGTH = 0.15
 
 # ---- refractory period against reversal-margin chatter ----
 MIN_REP_INTERVAL_SECONDS = 0.15
@@ -113,7 +119,8 @@ def _looks_like_a_person(landmarks) -> bool:
     visible = sum(
         1
         for i in core
-        if landmarks[i].visibility is not None and landmarks[i].visibility > 0.6
+        # Increased confidence threshold to 0.75 to filter out background objects
+        if landmarks[i].visibility is not None and landmarks[i].visibility > 0.75
     )
     return visible >= 3
 
@@ -165,10 +172,14 @@ class _PeakTroughTracker:
         self.peak_confirmed_time: Optional[float] = None
         self.trough_confirmed_time: Optional[float] = None
         self.last_jump_height = 0.0  # peak-to-trough excursion of the most recent cycle
+        self.last_jump_horizontal_drift = 0.0  # Tracks side-to-side drift
         self._pending_peak_y: Optional[float] = None
+        self._pending_peak_x: Optional[float] = None  # Stores the X pos at the peak
 
-    def update(self, raw_y: float, torso_length: float, t: float) -> float:
-        """Feed one frame's raw vertical position (hip midpoint y).
+    def update(
+        self, raw_y: float, raw_x: float, torso_length: float, t: float
+    ) -> float:
+        """Feed one frame's raw vertical and horizontal position (hip midpoint).
         Returns the current normalized displacement from the tracked
         extreme, for telemetry purposes."""
         if self.smoothed_y is None:
@@ -194,16 +205,21 @@ class _PeakTroughTracker:
             if -reversal > REVERSAL_MARGIN:
                 # Bounced back up enough to have clearly left this low
                 # point. Only counts as a genuine landing if it follows a
-                # real recorded peak — otherwise this is just the very
-                # first ascent of the session leaving the starting
-                # position, which is not a completed jump cycle and must
-                # not be confirmed as one.
+                # real recorded peak.
                 if self._pending_peak_y is not None:
                     self.trough_confirmed_time = t
                     self.last_jump_height = (
                         self.extreme_y - self._pending_peak_y
                     ) / torso_length
+
+                    if self._pending_peak_x is not None:
+                        # Calculate horizontal drift over the course of the jump cycle
+                        self.last_jump_horizontal_drift = (
+                            abs(raw_x - self._pending_peak_x) / torso_length
+                        )
+
                     self._pending_peak_y = None
+                    self._pending_peak_x = None  # Reset after landing
                 self.direction = "rising"
                 self.extreme_y = self.smoothed_y
         else:  # "rising"
@@ -219,6 +235,7 @@ class _PeakTroughTracker:
                 # tracking the descent toward landing.
                 self.peak_confirmed_time = t
                 self._pending_peak_y = self.extreme_y
+                self._pending_peak_x = raw_x  # Record X position at the top of the jump
                 self.direction = "falling"
                 self.extreme_y = self.smoothed_y
 
@@ -308,14 +325,27 @@ class SkippingAnalyzer:
             return response
 
         mid_shoulder_y = (l_shoulder.y + r_shoulder.y) / 2.0
+
         mid_hip_y = (l_hip.y + r_hip.y) / 2.0
+        mid_hip_x = (l_hip.x + r_hip.x) / 2.0
+
         mid_ankle_y = (l_ankle.y + r_ankle.y) / 2.0
-        torso_length = max(abs(mid_hip_y - mid_shoulder_y), 1e-6)
+        mid_ankle_x = (l_ankle.x + r_ankle.x) / 2.0
+
+        raw_torso_length = abs(mid_hip_y - mid_shoulder_y)
+
+        # Reject background objects/statues mapped as tiny ghost skeletons
+        if raw_torso_length < MIN_TORSO_LENGTH:
+            response["pose_detected"] = False
+            response["feedback"] = "Step closer to the camera."
+            return response
+
+        torso_length = max(raw_torso_length, 1e-6)
 
         prev_trough_time = self.hip.trough_confirmed_time
 
-        hip_signal = self.hip.update(mid_hip_y, torso_length, t)
-        ankle_signal = self.ankle.update(mid_ankle_y, torso_length, t)
+        hip_signal = self.hip.update(mid_hip_y, mid_hip_x, torso_length, t)
+        ankle_signal = self.ankle.update(mid_ankle_y, mid_ankle_x, torso_length, t)
 
         response["hip_signal"] = round(hip_signal, 3)
         response["ankle_signal"] = round(ankle_signal, 3)
@@ -331,19 +361,37 @@ class SkippingAnalyzer:
                 self._last_rep_time is None
                 or (t - self._last_rep_time) >= MIN_REP_INTERVAL_SECONDS
             )
-            if refractory_ok:
-                shallow = self.hip.last_jump_height < IDEAL_JUMP_HEIGHT
-                self.rep_count += 1
-                self._last_rep_time = t
-                if shallow:
-                    self.flawed_reps += 1
-                    quality = "needs_improvement"
-                    feedback = f"Jump {self.rep_count} counted — hop a little higher."
+
+            # Check if the user stayed in place horizontally
+            drift_ok = self.hip.last_jump_horizontal_drift < MAX_HORIZONTAL_DRIFT
+
+            if refractory_ok and drift_ok:
+
+                # Calculate jump quality as a percentage of IDEAL_JUMP_HEIGHT
+                jump_score_percent = (
+                    self.hip.last_jump_height / IDEAL_JUMP_HEIGHT
+                ) * 100
+
+                if jump_score_percent >= 80.0:
+                    self.rep_count += 1
+                    self._last_rep_time = t
+                    rep_completed = True
+
+                    if jump_score_percent >= 90.0:
+                        self.good_reps += 1
+                        quality = "good"
+                        feedback = f"Jump {self.rep_count}!"
+                    else:
+                        self.flawed_reps += 1
+                        quality = "needs_improvement"
+                        feedback = (
+                            f"Jump {self.rep_count} counted — hop a little higher."
+                        )
                 else:
-                    self.good_reps += 1
-                    quality = "good"
-                    feedback = f"Jump {self.rep_count}!"
-                rep_completed = True
+                    feedback = "Jump too shallow (under 80%) — jump higher to count!"
+
+            elif refractory_ok and not drift_ok:
+                feedback = "Stay in place! Side-stepping doesn't count."
 
         if feedback is None:
             feedback = (
