@@ -76,6 +76,9 @@ from src.routes.lower_body.frogJumpsRoutes import router as frogJumpsRouter
 from src.routes.full_body.burpeesRoutes import router as burpeesRouter
 from src.routes.full_body.squatThrustsRoutes import router as squatThrustsRouter
 from src.routes.cardio.battleRopeRoutes import router as battleRopeRouter
+from src.routes.lower_body.lungeToKneeDriveRoutes import (
+    router as lungeToKneeDriveRouter,
+)
 from src.routes.upper_body.seatedCableShrugRoutes import (
     router as seatedCableShrugRouter,
 )
@@ -117,6 +120,9 @@ from src.routes.mobility.windmillRotationStretchRoutes import (
     router as windmillRotationStretchRouter,
 )
 from src.routes.cardio.starJumpsRoutes import router as starJumpsRouter
+from src.routes.lower_body.lungeToKneeDriveRoutes import (
+    router as lungeToKneeDriveRouter,
+)
 
 app = FastAPI()
 app.add_middleware(
@@ -201,6 +207,9 @@ app.include_router(lyingChestPressRouter, prefix="/ws", tags="lying-chest-press-
 app.include_router(frogJumpsRouter, prefix="/ws", tags="frog-jumps-router")
 app.include_router(burpeesRouter, prefix="/ws", tags="burpees-router")
 app.include_router(squatThrustsRouter, prefix="/ws", tags="squat-thrusts-router")
+app.include_router(
+    lungeToKneeDriveRouter, prefix="/ws", tags="lunge-to-knee-drive-router"
+)
 app.include_router(
     seatedCableShrugRouter, prefix="/ws", tags="seated-cable-shrug-router"
 )
