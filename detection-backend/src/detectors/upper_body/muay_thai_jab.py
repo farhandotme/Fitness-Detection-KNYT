@@ -296,6 +296,9 @@ class JabAnalyzer:
         self.left = _ArmTracker("left")
         self.right = _ArmTracker("right")
 
+        self.good_reps = 0
+        self.flawed_reps = 0
+
         self._stance_streak = 0
         self._bad_streak = 0
         self.ready = False
@@ -329,6 +332,10 @@ class JabAnalyzer:
             "right_count": self.right.count,
             "rep_count": total_reps,
             "target_reps": self.target_reps,
+            "good_reps": self.good_reps,  # NEW: Universal key
+            "flawed_reps": self.flawed_reps,  # NEW: Universal key
+            "rep_completed": False,  # NEW: Universal key
+            "rep_form_quality": None,  # NEW: Universal key
             "session_complete": self._is_complete(),
             "punch_completed": False,
             "punch_hand": None,
@@ -424,33 +431,48 @@ class JabAnalyzer:
         response["right_elbow_angle"] = self.right.smoothed_angle
         response["left_stage"] = self.left.stage
         response["right_stage"] = self.right.stage
-        response["left_count"] = self.left.count
-        response["right_count"] = self.right.count
-        response["rep_count"] = self.left.count + self.right.count
-        response["session_complete"] = self._is_complete()
 
         feedback = framing_message
 
         for hand, r in (("left", left_result), ("right", right_result)):
             if r["punch_completed"]:
                 response["punch_completed"] = True
+                response["rep_completed"] = True  # NEW: Trigger standard frontend rep
                 response["punch_hand"] = hand
                 response["punch_duration"] = r["duration"]
                 response["punch_avg_speed"] = (
                     r["reach_ratio"] / r["duration"] if r["duration"] else None
                 )
                 response["punch_classification"] = r["classification"]
+
                 tempo = r["classification"] or "n/a"
+
+                # NEW: Categorize into good vs flawed reps
                 if tempo == "sharp":
+                    self.good_reps += 1
+                    response["rep_form_quality"] = "good"
                     feedback = f"Sharp {hand} jab — nice snap back to guard."
-                elif tempo == "slow":
-                    feedback = (
-                        f"{hand.capitalize()} jab counted, but snap it back faster."
-                    )
-                elif tempo == "too_slow":
-                    feedback = f"{hand.capitalize()} jab counted — try to retract quicker next time."
+                elif tempo in ("slow", "too_slow"):
+                    self.flawed_reps += 1
+                    response["rep_form_quality"] = "needs_improvement"
+                    if tempo == "slow":
+                        feedback = (
+                            f"{hand.capitalize()} jab counted, but snap it back faster."
+                        )
+                    else:
+                        feedback = f"{hand.capitalize()} jab counted — try to retract quicker next time."
                 else:
+                    self.good_reps += 1
+                    response["rep_form_quality"] = "good"
                     feedback = f"{hand.capitalize()} jab counted."
+
+        # Update the final rep counts after checking both arms
+        response["left_count"] = self.left.count
+        response["right_count"] = self.right.count
+        response["rep_count"] = self.left.count + self.right.count
+        response["good_reps"] = self.good_reps
+        response["flawed_reps"] = self.flawed_reps
+        response["session_complete"] = self._is_complete()
 
         if feedback is None and not self.ready:
             feedback = response["stance_message"] or (
