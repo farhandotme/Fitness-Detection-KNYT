@@ -1,78 +1,97 @@
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-import cv2
-import numpy as np
 import base64
 import json
+import time
 from typing import Optional
+
+import cv2
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+import numpy as np
 
 from src.detectors.upper_body.seated_cable_shrug import SeatedCableRowSession
 
 router = APIRouter()
 
 
-@router.websocket("/ws/seated_cable_shrug")
+def decode_frame(raw: str) -> Optional[np.ndarray]:
+    """Safely decode raw base64 frame without crashing on corrupt payloads."""
+    try:
+        if "," in raw:
+            raw = raw.split(",")[1]
+
+        image_bytes = base64.b64decode(raw)
+        np_array = np.frombuffer(image_bytes, dtype=np.uint8)
+        return cv2.imdecode(np_array, cv2.IMREAD_COLOR)
+    except Exception:
+        return None
+
+
+def _query_int(
+    websocket: WebSocket, name: str, default: Optional[int]
+) -> Optional[int]:
+    raw = websocket.query_params.get(name)
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return default
+
+
 @router.websocket("/seated_cable_shrug")
+@router.websocket("/seated-cable-shrug")
 async def seated_cable_row_websocket(websocket: WebSocket):
     await websocket.accept()
 
-    # Extract query parameters sent by the frontend connection URL
-    query_params = websocket.query_params
-    target_reps_param = query_params.get("target_reps")
-    target_sets_param = query_params.get("target_sets")
-    set_number_param = query_params.get("set_number")
+    target_reps = _query_int(websocket, "target_reps", default=None)
+    target_sets = _query_int(websocket, "target_sets", default=1) or 1
+    set_number = _query_int(websocket, "set_number", default=1) or 1
 
-    target_reps: Optional[int] = int(target_reps_param) if target_reps_param else None
-    target_sets: int = int(target_sets_param) if target_sets_param else 1
-    set_number: int = int(set_number_param) if set_number_param else 1
-
-    session = SeatedCableRowSession(
-        target_reps=target_reps, target_sets=target_sets, set_number=set_number
-    )
+    session: Optional[SeatedCableRowSession] = None
 
     try:
+        session = SeatedCableRowSession(
+            target_reps=target_reps, target_sets=target_sets, set_number=set_number
+        )
+
         while True:
-            raw_data = await websocket.receive_text()
-            payload = json.loads(raw_data)
+            raw = await websocket.receive_text()
 
-            if "config" in payload:
-                config = payload["config"]
-                target_reps = config.get("target_reps", target_reps)
-                target_sets = config.get("target_sets", target_sets)
-                set_number = config.get("set_number", set_number)
-                session = SeatedCableRowSession(
-                    target_reps=target_reps,
-                    target_sets=target_sets,
-                    set_number=set_number,
-                )
+            # Handle optional JSON control/reconfiguration frames gracefully
+            if raw.startswith("{") and "config" in raw:
+                try:
+                    payload = json.loads(raw)
+                    config = payload.get("config", {})
+                    target_reps = config.get("target_reps", target_reps)
+                    target_sets = config.get("target_sets", target_sets)
+                    set_number = config.get("set_number", set_number)
 
-            frame_data = payload.get("frame") or payload.get("image")
-            if not frame_data:
-                continue
+                    if session:
+                        session.close()
+                    session = SeatedCableRowSession(
+                        target_reps=target_reps,
+                        target_sets=target_sets,
+                        set_number=set_number,
+                    )
+                    continue
+                except Exception:
+                    pass
 
-            if "," in frame_data:
-                frame_data = frame_data.split(",")[1]
-
-            img_bytes = base64.b64decode(frame_data)
-            np_arr = np.frombuffer(img_bytes, np.uint8)
-            frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-
+            frame = decode_frame(raw)
             if frame is None:
                 continue
 
-            timestamp_ms = payload.get(
-                "timestamp_ms", int(cv2.getTickCount() / cv2.getTickFrequency() * 1000)
-            )
+            timestamp_ms = int(time.time() * 1000)
 
             result = session.detect(frame, timestamp_ms)
-            await websocket.send_text(json.dumps(result))
+            await websocket.send_json(result)
 
     except WebSocketDisconnect:
-        if session:
-            session.close()
+        pass
     except Exception as e:
-        if session:
-            session.close()
         try:
-            await websocket.send_text(json.dumps({"error": str(e)}))
-        except:
+            await websocket.send_json({"error": str(e)})
+        except Exception:
             pass
+    finally:
+        if session is not None:
+            session.close()
