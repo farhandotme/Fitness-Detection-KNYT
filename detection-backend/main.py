@@ -76,6 +76,9 @@ from src.routes.lower_body.frogJumpsRoutes import router as frogJumpsRouter
 from src.routes.full_body.burpeesRoutes import router as burpeesRouter
 from src.routes.full_body.squatThrustsRoutes import router as squatThrustsRouter
 from src.routes.cardio.battleRopeRoutes import router as battleRopeRouter
+from src.routes.upper_body.seatedCableShrugRoutes import (
+    router as seatedCableShrugRouter,
+)
 from src.routes.upper_body.overheadTricepsExtensionsRoutes import (
     router as overheadTricepsExtensionsRouter,
 )
@@ -106,9 +109,7 @@ from src.routes.upper_body.standingTrunkRotationRoutes import (
     router as standingTrunkRotationRouter,
 )
 from src.routes.upper_body.frontRaiseRoutes import router as frontRaiseRouter
-from src.routes.upper_body.seatedCableShrugRoutes import (
-    router as seatedCableShrugRouter,
-)
+
 from src.routes.lower_body.advancedBridgePoseRoutes import (
     router as advancedBridgePoseRouter,
 )
@@ -199,6 +200,9 @@ app.include_router(frogJumpsRouter, prefix="/ws", tags="frog-jumps-router")
 app.include_router(burpeesRouter, prefix="/ws", tags="burpees-router")
 app.include_router(squatThrustsRouter, prefix="/ws", tags="squat-thrusts-router")
 app.include_router(
+    seatedCableShrugRouter, prefix="/ws", tags="seated-cable-shrug-router"
+)
+app.include_router(
     overheadTricepsExtensionsRouter,
     prefix="/ws",
     tags="overhead-triceps-extensions-router",
@@ -233,9 +237,7 @@ app.include_router(
 app.include_router(
     standingTrunkRotationRouter, prefix="/ws", tags="standing-trunk-rotation-router"
 )
-app.include_router(
-    seatedCableShrugRouter, prefix="/ws", tags="seated-cable-shrug-router"
-)
+
 app.include_router(
     advancedBridgePoseRouter, prefix="/ws", tags="advanced-bridge-pose-router"
 )
