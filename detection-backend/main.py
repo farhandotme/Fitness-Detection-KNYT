@@ -116,6 +116,7 @@ from src.routes.lower_body.advancedBridgePoseRoutes import (
 from src.routes.mobility.windmillRotationStretchRoutes import (
     router as windmillRotationStretchRouter,
 )
+from src.routes.cardio.starJumpsRoutes import router as starJumpsRouter
 
 app = FastAPI()
 app.add_middleware(
@@ -131,6 +132,7 @@ async def home():
     return {"status": "running"}
 
 
+app.include_router(starJumpsRouter, prefix="/ws", tags=["star-jumps-router"])
 app.include_router(bicepRouter, prefix="/ws", tags="bicep")
 app.include_router(fingerRouter, prefix="/ws", tags="finger")
 app.include_router(squatRouter, prefix="/ws", tags="squat")
