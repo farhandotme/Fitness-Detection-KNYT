@@ -1380,6 +1380,23 @@ export const exercises: ExerciseConfig[] = [
     imageUrl:
       "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRY9oA08N-imXp2TaL8ppFUZTkHm0HJ4fGlKbELOhls9Q&s=10",
   },
+  {
+    id: "lunge_to_knee_drive",
+    name: "Lunge to Knee Drive",
+    wsRoute: "/ws/lunge_to_knee_drive",
+    mode: "reps",
+    defaultTarget: 10,
+    defaultSets: 3,
+    defaultRestSeconds: 45,
+    difficulty: "intermediate",
+    tagline: "Reverse lunge with single-leg knee drive",
+    category: "lower_body",
+    setupTip:
+      "Stand tall, step one leg back into a reverse lunge, and lower with control. Push through the front heel to stand while driving the back knee forward and up to hip height. Pause briefly for balance, then step back and repeat before switching sides.",
+    cameraMirror: true,
+    imageUrl:
+      "https://i.pinimg.com/originals/69/c8/70/69c8706ce2cb5bb21611cd59700bc518.gif",
+  },
 ];
 
 export function getExerciseById(id: string): ExerciseConfig | undefined {
