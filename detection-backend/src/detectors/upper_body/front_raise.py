@@ -47,7 +47,10 @@ CORE_LANDMARKS = (
 DOWN_ENTER_DEG = 34.0
 TOP_ENTER_DEG = 68.0
 MIN_REP_TRAVEL_DEG = 34.0
-MAX_TOP_DEG = 138.0
+# A proper front raise stops at shoulder height (~90°) and goes no higher.
+# This gives ~15° of tolerance for tracking noise and individual anatomy, but
+# anything past it is drifting toward an overhead press, not a front raise.
+MAX_TOP_DEG = 105.0
 MIN_ELBOW_ANGLE_DEG = 145.0
 
 ANGLE_SMOOTH_ALPHA = 0.52
@@ -80,10 +83,12 @@ class _ArmState:
     ready: bool = False
     seen_down: bool = False
     smoothed_angle: Optional[float] = None
+    smoothed_elbow_angle: Optional[float] = None
     last_angle: Optional[float] = None
     last_timestamp_s: Optional[float] = None
     rep_start_time: Optional[float] = None
     rep_max_angle: Optional[float] = None
+    rep_min_elbow_angle: Optional[float] = None
     rep_angle_acc: float = 0.0
     rep_issues: set[str] = field(default_factory=set)
     position_good_streak: int = 0
@@ -92,6 +97,7 @@ class _ArmState:
     def reset_rep(self) -> None:
         self.rep_start_time = None
         self.rep_max_angle = None
+        self.rep_min_elbow_angle = None
         self.rep_angle_acc = 0.0
         self.rep_issues = set()
 
@@ -200,6 +206,7 @@ class FrontRaiseAnalyzer:
         self.last_angle: Optional[float] = None
         self.last_timestamp_s: Optional[float] = None
         self.session_start_time: Optional[float] = None
+        self._smoothed_torso_lean: Optional[float] = None
 
     def _complete(self) -> bool:
         return self.target_reps is not None and self.rep_count >= self.target_reps
@@ -273,7 +280,6 @@ class FrontRaiseAnalyzer:
         self,
         arm: _ArmState,
         timestamp_s: float,
-        elbow_ok: bool,
         torso_ok: bool,
     ) -> Optional[dict[str, Any]]:
         if arm.rep_start_time is None or arm.rep_max_angle is None:
@@ -293,7 +299,16 @@ class FrontRaiseAnalyzer:
             arm.rep_issues.add("too_slow")
         if arm.rep_max_angle < TOP_ENTER_DEG:
             arm.rep_issues.add("insufficient_height")
-        if not elbow_ok:
+        # This was previously only a real-time text hint and never actually
+        # checked at rep completion, so raising well past shoulder height
+        # (toward an overhead press) still counted as a clean rep. Now it's
+        # judged against the peak height actually reached during the rep.
+        if arm.rep_max_angle > MAX_TOP_DEG:
+            arm.rep_issues.add("raised_too_high")
+        if (
+            arm.rep_min_elbow_angle is not None
+            and arm.rep_min_elbow_angle < MIN_ELBOW_ANGLE_DEG
+        ):
             arm.rep_issues.add("bent_elbows")
         if not torso_ok:
             arm.rep_issues.add("torso_lean")
@@ -309,6 +324,7 @@ class FrontRaiseAnalyzer:
             "avg_speed": arm.rep_angle_acc / duration if duration > 0 else None,
             "classification": self._tempo(duration),
             "quality": quality,
+            "issues": sorted(arm.rep_issues),
         }
         arm.reset_rep()
         return result
@@ -317,9 +333,9 @@ class FrontRaiseAnalyzer:
         self,
         arm: _ArmState,
         angle: float,
+        elbow_angle: float,
         timestamp_s: float,
         position_ok: bool,
-        elbow_ok: bool,
         torso_ok: bool,
     ) -> Optional[dict[str, Any]]:
         arm.smoothed_angle = (
@@ -327,6 +343,15 @@ class FrontRaiseAnalyzer:
             if arm.smoothed_angle is None
             else ANGLE_SMOOTH_ALPHA * angle
             + (1.0 - ANGLE_SMOOTH_ALPHA) * arm.smoothed_angle
+        )
+        # Elbow/wrist landmarks are noisy frame to frame. Smooth before judging
+        # "bent elbows", or a single jittery frame anywhere in the rep — even one
+        # performed with perfect form — can trip the flaw.
+        arm.smoothed_elbow_angle = (
+            elbow_angle
+            if arm.smoothed_elbow_angle is None
+            else ANGLE_SMOOTH_ALPHA * elbow_angle
+            + (1.0 - ANGLE_SMOOTH_ALPHA) * arm.smoothed_elbow_angle
         )
         current_angle = arm.smoothed_angle
         down = current_angle <= DOWN_ENTER_DEG
@@ -341,23 +366,25 @@ class FrontRaiseAnalyzer:
                 arm.stage = "raised"
                 arm.rep_start_time = timestamp_s
                 arm.rep_max_angle = current_angle
+                arm.rep_min_elbow_angle = arm.smoothed_elbow_angle
                 arm.rep_angle_acc = 0.0
                 arm.rep_issues = set()
             elif arm.rep_max_angle is None or current_angle > arm.rep_max_angle:
                 arm.rep_max_angle = current_angle
         elif down and position_ok and arm.stage == "raised":
             arm.stage = "down"
-            completed = self._finish_arm_rep(
-                arm, timestamp_s, elbow_ok=elbow_ok, torso_ok=torso_ok
-            )
+            completed = self._finish_arm_rep(arm, timestamp_s, torso_ok=torso_ok)
 
         if arm.stage == "raised":
             if arm.rep_max_angle is None or current_angle > arm.rep_max_angle:
                 arm.rep_max_angle = current_angle
             if arm.last_angle is not None:
                 arm.rep_angle_acc += abs(current_angle - arm.last_angle)
-            if not elbow_ok:
-                arm.rep_issues.add("bent_elbows")
+            if (
+                arm.rep_min_elbow_angle is None
+                or arm.smoothed_elbow_angle < arm.rep_min_elbow_angle
+            ):
+                arm.rep_min_elbow_angle = arm.smoothed_elbow_angle
 
         arm.last_angle = current_angle
         arm.last_timestamp_s = timestamp_s
@@ -437,7 +464,15 @@ class FrontRaiseAnalyzer:
         torso_dx = abs(mid_hip.x - mid_shoulder.x)
         torso_dy = abs(mid_hip.y - mid_shoulder.y)
         torso_lean_deg = math.degrees(math.atan2(torso_dx, max(torso_dy, 1e-8)))
-        torso_ok = torso_lean_deg <= 18.0
+        # Smooth before thresholding — hip/shoulder landmarks jitter a little every
+        # frame, and unsmoothed that jitter alone can flip torso_ok frame to frame.
+        self._smoothed_torso_lean = (
+            torso_lean_deg
+            if self._smoothed_torso_lean is None
+            else ANGLE_SMOOTH_ALPHA * torso_lean_deg
+            + (1.0 - ANGLE_SMOOTH_ALPHA) * self._smoothed_torso_lean
+        )
+        torso_ok = self._smoothed_torso_lean <= 18.0
 
         arm_data: dict[str, dict[str, Any]] = {}
         if left_visible:
@@ -504,9 +539,9 @@ class FrontRaiseAnalyzer:
                 event = self._process_arm(
                     arm,
                     data["angle"],
+                    data["elbow_angle"],
                     timestamp_s,
                     position_ok=True,
-                    elbow_ok=data["elbow_angle"] >= MIN_ELBOW_ANGLE_DEG,
                     torso_ok=torso_ok,
                 )
                 if event:
@@ -591,11 +626,28 @@ class FrontRaiseAnalyzer:
                     "rep_form_quality": quality,
                 }
             )
-            feedback = (
-                f"{', '.join(rep_arms).capitalize()} rep counted — "
-                f"total {self.rep_count}. "
-                "You can continue with either hand."
+            issue_messages = {
+                "rushed_rep": "that one was rushed",
+                "too_slow": "that one dragged on too long",
+                "insufficient_height": "didn't quite reach shoulder height",
+                "raised_too_high": "went above shoulder height — stop there, don't press overhead",
+                "bent_elbows": "elbows bent too much — keep them softly extended",
+                "torso_lean": "leaned the torso instead of keeping it upright",
+            }
+            all_issues = sorted(
+                {issue for item in completed for issue in item["issues"]}
             )
+            if all_issues:
+                notes = "; ".join(issue_messages.get(i, i) for i in all_issues)
+                feedback = (
+                    f"{', '.join(rep_arms).capitalize()} rep counted, but watch form: "
+                    f"{notes}."
+                )
+            else:
+                feedback = (
+                    f"Clean {', '.join(rep_arms)} rep — total {self.rep_count}. "
+                    "You can continue with either hand."
+                )
         elif not position_ok:
             feedback = position_message
         elif any(
@@ -607,7 +659,8 @@ class FrontRaiseAnalyzer:
             feedback = "Stop around shoulder height — don't shrug or press overhead."
         elif any(
             data["state"].stage == "raised"
-            and data["elbow_angle"] < MIN_ELBOW_ANGLE_DEG
+            and data["state"].smoothed_elbow_angle is not None
+            and data["state"].smoothed_elbow_angle < MIN_ELBOW_ANGLE_DEG
             for data in arm_data.values()
         ):
             feedback = "Keep the visible elbow softly extended and lower with control."
